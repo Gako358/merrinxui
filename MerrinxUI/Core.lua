@@ -19,6 +19,17 @@ function MerrinxUI:OnEnable()
 		name = "MerrinxUI",
 		childGroups = "tree",
 		args = {
+			unlock = {
+				type = "toggle",
+				name = "Unlock frames",
+				order = 1,
+				get = function()
+					return ns.Mover:IsUnlocked()
+				end,
+				set = function(_, value)
+					ns.Mover:SetUnlocked(value)
+				end,
+			},
 			profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db),
 		},
 	}
@@ -41,6 +52,13 @@ function MerrinxUI:RefreshModules()
 	end
 end
 
-function MerrinxUI.SlashCommand()
-	LibStub("AceConfigDialog-3.0"):Open("MerrinxUI")
+function MerrinxUI:SlashCommand(input)
+	local command = (input or ""):match("^%s*(.-)%s*$"):lower()
+	if command == "unlock" then
+		ns.Mover:SetUnlocked(true)
+	elseif command == "lock" then
+		ns.Mover:SetUnlocked(false)
+	else
+		LibStub("AceConfigDialog-3.0"):Open("MerrinxUI")
+	end
 end

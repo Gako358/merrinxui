@@ -1,8 +1,12 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
 Core.lua
+Util\MoverLogic.lua
+Util\Mover.lua
+Modules\RangeTextLogic.lua
+Modules\RangeText.lua

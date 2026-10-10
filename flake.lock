@@ -71,6 +71,22 @@
         "type": "github"
       }
     },
+    "librangecheck": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790634717,
+        "narHash": "sha256-U6CvmRiU/a9bI28Js2t8qhH/SyT2ajdWD9431sH/YAw=",
+        "owner": "WeakAuras",
+        "repo": "LibRangeCheck-3.0",
+        "rev": "95a6313a44f615738d216bd79cf132dc6f243284",
+        "type": "github"
+      },
+      "original": {
+        "owner": "WeakAuras",
+        "repo": "LibRangeCheck-3.0",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1791487292,
@@ -107,6 +123,7 @@
         "ace3": "ace3",
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
+        "librangecheck": "librangecheck",
         "nixpkgs": "nixpkgs"
       }
     }

@@ -14,6 +14,11 @@
       url = "github:WoWUIDev/Ace3";
       flake = false;
     };
+
+    librangecheck = {
+      url = "github:WeakAuras/LibRangeCheck-3.0";
+      flake = false;
+    };
   };
 
   outputs =
@@ -25,7 +30,7 @@
       ];
 
       perSystem =
-        { system, ... }:
+        { system, lib, ... }:
         let
           pkgs = import nixpkgs { inherit system; };
 
@@ -50,6 +55,9 @@
               cp -r ${inputs.ace3}/$d $out/$d
             done
             cp ${inputs.ace3}/LICENSE.txt $out/Ace3-LICENSE.txt
+
+            cp -r ${inputs.librangecheck}/LibRangeCheck-3.0 $out/LibRangeCheck-3.0
+            cp ${inputs.librangecheck}/LICENSE $out/LibRangeCheck-3.0-LICENSE.txt
           '';
 
           merrinxui = pkgs.runCommand "merrinxui" { } ''
@@ -87,6 +95,30 @@
             touch "$out"
           '';
 
+          busted =
+            let
+              source = lib.fileset.toSource {
+                root = ./.;
+                fileset = lib.fileset.unions [
+                  ./MerrinxUI
+                  ./spec
+                ];
+              };
+            in
+            pkgs.runCommand "merrinxui-busted"
+              {
+                nativeBuildInputs = [
+                  pkgs.lua5_1
+                  pkgs.lua51Packages.busted
+                ];
+              }
+              ''
+                export HOME="$TMPDIR"
+                cd ${source}
+                busted spec
+                touch "$out"
+              '';
+
           release = pkgs.runCommand "merrinxui-release" { nativeBuildInputs = [ pkgs.zip ]; } ''
             cp -r ${merrinxui}/MerrinxUI .
             chmod -R u+w MerrinxUI
@@ -104,7 +136,12 @@
           };
 
           checks = {
-            inherit pre-commit-check merrinxui lua-syntax;
+            inherit
+              pre-commit-check
+              merrinxui
+              lua-syntax
+              busted
+              ;
           };
 
           devShells.default = pkgs.mkShell {
