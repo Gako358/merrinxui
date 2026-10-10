@@ -9,6 +9,11 @@
       url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    ace3 = {
+      url = "github:WoWUIDev/Ace3";
+      flake = false;
+    };
   };
 
   outputs =
@@ -38,12 +43,68 @@
               stylua.enable = true;
             };
           };
+
+          addonLibs = pkgs.runCommand "merrinxui-libs" { } ''
+            mkdir -p $out
+            for d in LibStub CallbackHandler-1.0 AceAddon-3.0 AceConsole-3.0 AceEvent-3.0 AceDB-3.0 AceDBOptions-3.0 AceGUI-3.0 AceConfig-3.0; do
+              cp -r ${inputs.ace3}/$d $out/$d
+            done
+            cp ${inputs.ace3}/LICENSE.txt $out/Ace3-LICENSE.txt
+          '';
+
+          merrinxui = pkgs.runCommand "merrinxui" { } ''
+            mkdir -p "$out/MerrinxUI"
+            cp -r ${./MerrinxUI}/. "$out/MerrinxUI"/
+            cp -r ${addonLibs} "$out/MerrinxUI/Libs"
+            chmod -R u+w "$out/MerrinxUI"
+
+            toc="$out/MerrinxUI/MerrinxUI.toc"
+            while IFS= read -r raw || [ -n "$raw" ]; do
+              line=$(printf '%s' "$raw" | tr -d '\r')
+              line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+              case "$line" in
+                "" | "#"*) continue ;;
+              esac
+              rel=$(printf '%s' "$line" | tr '\\' '/')
+              if [ ! -e "$out/MerrinxUI/$rel" ]; then
+                echo "missing: $rel"
+                exit 1
+              fi
+            done < "$toc"
+
+            embeds="$out/MerrinxUI/embeds.xml"
+            while IFS= read -r ref || [ -n "$ref" ]; do
+              rel=$(printf '%s' "$ref" | tr '\\' '/')
+              if [ ! -e "$out/MerrinxUI/$rel" ]; then
+                echo "missing: $rel"
+                exit 1
+              fi
+            done < <(grep -o 'file="[^"]*"' "$embeds" | sed 's/^file="//; s/"$//')
+          '';
+
+          lua-syntax = pkgs.runCommand "merrinxui-lua-syntax" { nativeBuildInputs = [ pkgs.lua5_1 ]; } ''
+            find ${./MerrinxUI} -name '*.lua' -exec luac -p {} +
+            touch "$out"
+          '';
+
+          release = pkgs.runCommand "merrinxui-release" { nativeBuildInputs = [ pkgs.zip ]; } ''
+            cp -r ${merrinxui}/MerrinxUI .
+            chmod -R u+w MerrinxUI
+            find MerrinxUI -exec touch -h -d '1980-01-02T00:00:00Z' {} +
+            mkdir -p $out
+            find MerrinxUI -type f | LC_ALL=C sort | zip -X -D -@ $out/MerrinxUI.zip
+          '';
         in
         {
           formatter = pkgs.nixfmt;
 
+          packages = {
+            inherit merrinxui release;
+            default = merrinxui;
+          };
+
           checks = {
-            inherit pre-commit-check;
+            inherit pre-commit-check merrinxui lua-syntax;
           };
 
           devShells.default = pkgs.mkShell {

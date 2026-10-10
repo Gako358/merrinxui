@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "ace3": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790946873,
+        "narHash": "sha256-7gdklHEOMIKgFXkcDlBfn7hQn7dx0ylvR1CbgWJhFM8=",
+        "owner": "WoWUIDev",
+        "repo": "Ace3",
+        "rev": "40f4cc1356ae7fcc0cf71fc0a19dc7d50d6ae6c2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "WoWUIDev",
+        "repo": "Ace3",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -88,6 +104,7 @@
     },
     "root": {
       "inputs": {
+        "ace3": "ace3",
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs"
