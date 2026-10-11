@@ -62,8 +62,7 @@ read_globals = {
 	"ADDONS",
 	"HideUIPanel",
 	"InputUtil",
-	"RegisterGameMenuEscHandler",
-	"GameMenuEscPriority",
+	"UISpecialFrames",
 }
 
 files["spec"] = {

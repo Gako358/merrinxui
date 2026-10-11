@@ -274,7 +274,7 @@ function Debug:GetDebugChecks()
 		{
 			name = "options",
 			run = function()
-				local options = LibStub("AceConfigRegistry-3.0"):GetOptionsTable("MerrinxUI", "dialog", "MerrinxUI")
+				local options = LibStub("AceConfigRegistry-3.0"):GetOptionsTable("MerrinxUI", "dialog", "MerrinxUI-1.0")
 				if type(options) ~= "table" or type(options.args) ~= "table" then
 					return "FAIL", "no options table"
 				end

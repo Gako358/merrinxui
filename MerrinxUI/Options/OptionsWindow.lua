@@ -3,6 +3,7 @@ local addonName, ns = ...
 local L = ns.OptionsLogic
 local Theme = ns.Theme
 local appName = "MerrinxUI"
+local OPTIONS_UI_NAME = "MerrinxUI-1.0"
 
 local CONTENT_W = Theme.geometry.width - Theme.geometry.sidebar
 local CONTENT_H = Theme.geometry.height - Theme.geometry.header - Theme.geometry.footer
@@ -57,18 +58,16 @@ local function setFont(fs, size, flags)
 	end
 end
 
--- Forever (A-18) is assumed to expose the Esc-stack registry; without it
--- the window has no way to close on Esc before the game menu opens.
+-- RegisterGameMenuEscHandler from addon code taints the Esc chain.
 local function installEsc(win)
-	if type(RegisterGameMenuEscHandler) == "function" and GameMenuEscPriority and GameMenuEscPriority.AddOn then
-		RegisterGameMenuEscHandler(GameMenuEscPriority.AddOn, function()
-			if win:IsShown() then
-				W:Close()
-				return true
-			end
-			return false
-		end)
-		escVariant = "handler"
+	if type(UISpecialFrames) == "table" then
+		table.insert(UISpecialFrames, "MerrinxUIOptionsFrame")
+		escVariant = "special"
+		if win.SetDontSavePosition then
+			win:SetDontSavePosition(true)
+		end
+	else
+		escVariant = "none"
 	end
 end
 
@@ -208,6 +207,12 @@ local function clearRenderBlocks()
 		renderBlockers[widget] = nil
 	end
 	pendingRenderAfterBlock = false
+end
+
+local function closeCleanup()
+	clearRenderBlocks()
+	closeDropdown()
+	closeConfirm()
 end
 
 local function newRowBase()
@@ -989,7 +994,7 @@ function renderNow()
 	end
 
 	local okRoot, result = pcall(function()
-		return LibStub("AceConfigRegistry-3.0"):GetOptionsTable(appName, "dialog", appName)
+		return LibStub("AceConfigRegistry-3.0"):GetOptionsTable(appName, "dialog", OPTIONS_UI_NAME)
 	end)
 	if not okRoot or type(result) ~= "table" then
 		setFooterError(result)
@@ -1230,13 +1235,14 @@ local function buildConfirm(win)
 end
 
 local function build()
-	frame = CreateFrame("Frame", nil, UIParent)
+	frame = CreateFrame("Frame", "MerrinxUIOptionsFrame", UIParent)
 	frame:SetSize(Theme.geometry.width, Theme.geometry.height)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("FULLSCREEN_DIALOG")
 	frame:SetMovable(true)
 	frame:SetClampedToScreen(true)
 	frame:EnableMouse(true)
+	frame:SetScript("OnHide", closeCleanup)
 	frame:Hide()
 
 	local bg = frame:CreateTexture(nil, "BACKGROUND")
@@ -1268,12 +1274,9 @@ function W:Open()
 end
 
 function W:Close()
-	clearRenderBlocks()
 	if frame then
 		frame:Hide()
 	end
-	closeDropdown()
-	closeConfirm()
 end
 
 function W:IsShown()
@@ -1300,10 +1303,10 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 				if not frame then
 					return "SKIP", "not built"
 				end
-				if escVariant == "handler" then
+				if escVariant == "special" then
 					return "PASS"
 				end
-				return "FAIL", "esc api missing"
+				return "FAIL", "esc unavailable"
 			end,
 		},
 		{
