@@ -4,6 +4,13 @@ local RangeTextLogic = ns.RangeTextLogic
 
 local RangeText = ns.addon:NewModule("RangeText", "AceEvent-3.0")
 
+local function traceState(self, state)
+	if state ~= self.lastTraceState then
+		ns.Debug:Log("RangeText", "state", state)
+		self.lastTraceState = state
+	end
+end
+
 local defaults = {
 	profile = {
 		enabled = true,
@@ -97,6 +104,7 @@ function RangeText:Update()
 
 	if not UnitExists("target") and not ns.Mover:IsUnlocked() then
 		self.frame:Hide()
+		traceState(self, "none")
 		return
 	end
 	self.frame:Show()
@@ -113,6 +121,7 @@ function RangeText:Update()
 		self.fsMain:SetAlpha(1)
 		self.fsMain:SetText(text)
 		self.fsMain:SetTextColor(1, 1, 1, 1)
+		traceState(self, "unknown")
 		return
 	end
 
@@ -127,13 +136,16 @@ function RangeText:Update()
 		self.fsOut:SetTextColor(1, 0, 0, 1)
 		self.fsMain:SetAlphaFromBoolean(r, 1, 0)
 		self.fsOut:SetAlphaFromBoolean(r, 0, 1)
+		traceState(self, "secret")
 	else
 		self.fsOut:Hide()
 		self.fsMain:Show()
 		self.fsMain:SetAlpha(1)
 		self.fsMain:SetText(text)
-		local cr, cg, cb = RangeTextLogic.Color(RangeTextLogic.Classify(r))
+		local state = RangeTextLogic.Classify(r)
+		local cr, cg, cb = RangeTextLogic.Color(state)
 		self.fsMain:SetTextColor(cr, cg, cb, 1)
+		traceState(self, state)
 	end
 end
 
@@ -216,6 +228,106 @@ function RangeText:GetOptions()
 					self:ApplyFont()
 				end,
 			},
+		},
+	}
+end
+
+function RangeText:GetDebugChecks()
+	return {
+		{
+			name = "spell",
+			run = function()
+				local _, classFile = UnitClass("player")
+				local resolved = RangeTextLogic.ResolveSpell(self.db.profile.spell, classFile)
+				if resolved == nil then
+					return "INFO", "yards only"
+				end
+
+				local name = C_Spell.GetSpellName(resolved)
+				local ok = type(name) == "string" and not issecretvalue(name)
+				return ok and "PASS" or "FAIL", resolved, name
+			end,
+		},
+		{
+			name = "font",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local profile = self.db.profile
+				local _, size, flags = self.fsMain:GetFont()
+				flags = flags or ""
+
+				local ok = self.lastGoodFont == profile.font
+					and math.floor(size + 0.5) == profile.fontSize
+					and flags == profile.outline
+				return ok and "PASS" or "FAIL", self.lastGoodFont, size, flags
+			end,
+		},
+		{
+			name = "visibility",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local shown = self.frame:IsShown()
+				local expected = ctx.hasTarget or ns.Mover:IsUnlocked()
+				return (shown == expected) and "PASS" or "FAIL", shown, expected
+			end,
+		},
+		{
+			name = "range",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local text = self.fsMain:GetText()
+				if issecretvalue(text) then
+					return "INFO", "secret"
+				end
+
+				local min, max = LibStub("LibRangeCheck-3.0"):GetRange("target")
+				if issecretvalue(min) or issecretvalue(max) then
+					return "INFO", "secret"
+				end
+
+				local expected = RangeTextLogic.FormatRange(min, max)
+				return (text == expected) and "PASS" or "FAIL", text, expected
+			end,
+		},
+		{
+			name = "in range",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, classFile = UnitClass("player")
+				local spell = RangeTextLogic.ResolveSpell(self.db.profile.spell, classFile)
+				if spell == nil then
+					return "INFO", "no spell"
+				end
+
+				local r = C_Spell.IsSpellInRange(spell, "target")
+				if issecretvalue(r) then
+					local shown = self.fsMain:IsShown() and self.fsOut:IsShown()
+					return shown and "PASS" or "FAIL", "secret"
+				end
+
+				local cr, cg, cb = self.fsMain:GetTextColor()
+				local er, eg, eb = RangeTextLogic.Color(RangeTextLogic.Classify(r))
+				local ok = math.abs(cr - er) <= 0.01 and math.abs(cg - eg) <= 0.01 and math.abs(cb - eb) <= 0.01
+				return ok and "PASS" or "FAIL", r, cr, cg, cb
+			end,
 		},
 	}
 end

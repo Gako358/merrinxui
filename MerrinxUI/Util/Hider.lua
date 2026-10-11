@@ -64,3 +64,28 @@ function Hider:Hide(frame, unregisterEvents)
 	applyHide(frame, unregisterEvents)
 	return true
 end
+
+ns.Debug:RegisterChecks("Hider", function()
+	local checks = {
+		{
+			name = "parent",
+			run = function()
+				return (not parent:IsShown()) and "PASS" or "FAIL"
+			end,
+		},
+	}
+
+	for frame in pairs(hidden) do
+		local n = frame:GetName()
+		local label = (type(n) == "string" and not issecretvalue(n)) and n or "?"
+
+		table.insert(checks, {
+			name = "frame " .. label,
+			run = function()
+				return (frame:GetParent() == parent and not frame:IsVisible()) and "PASS" or "FAIL"
+			end,
+		})
+	end
+
+	return checks
+end)

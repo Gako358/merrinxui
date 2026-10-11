@@ -114,25 +114,61 @@ function EnemyCooldowns:HandleUnit(unit)
 	end
 
 	local plate = C_NamePlate.GetNamePlateForUnit(unit)
-	if not plate or plate:IsForbidden() then
+	if not plate then
+		return
+	end
+
+	if plate:IsForbidden() then
+		if ns.Debug:IsActive() then
+			local forbiddenIsPlayer = UnitIsPlayer(unit)
+			local forbiddenCanAttack = UnitCanAttack("player", unit)
+			if
+				not issecretvalue(forbiddenIsPlayer)
+				and not issecretvalue(forbiddenCanAttack)
+				and forbiddenIsPlayer == true
+				and forbiddenCanAttack == true
+			then
+				ns.Debug:Log("EnemyCooldowns", "skip", unit, "forbidden")
+			end
+		end
 		return
 	end
 
 	local isPlayer = UnitIsPlayer(unit)
 	local canAttack = UnitCanAttack("player", unit)
-	if issecretvalue(isPlayer) or issecretvalue(canAttack) or not (isPlayer == true and canAttack == true) then
+	if issecretvalue(isPlayer) or issecretvalue(canAttack) then
+		local wasTracked = self.units[unit] ~= nil
+		self:ClearUnit(unit)
+		if wasTracked then
+			ns.Debug:Log("EnemyCooldowns", "skip", unit, "secret flags")
+		end
+		return
+	end
+	if not (isPlayer == true and canAttack == true) then
 		self:ClearUnit(unit)
 		return
 	end
 
 	local guid = UnitGUID(unit)
-	if issecretvalue(guid) or guid == nil then
+	if issecretvalue(guid) then
+		local wasTracked = self.units[unit] ~= nil
+		self:ClearUnit(unit)
+		if wasTracked then
+			ns.Debug:Log("EnemyCooldowns", "skip", unit, "secret guid")
+		end
+		return
+	end
+	if guid == nil then
 		self:ClearUnit(unit)
 		return
 	end
 
+	local isNewTrack = self.units[unit] == nil
 	self.units[unit] = guid
 	self.unitPlate[unit] = plate
+	if isNewTrack then
+		ns.Debug:Log("EnemyCooldowns", "track", unit)
+	end
 	self:Render(unit)
 end
 
@@ -161,10 +197,12 @@ function EnemyCooldowns:OnSpellcastSucceeded(_, unit, _, spellID)
 	end
 
 	L.Record(self.state, key, entry, GetTime())
+	ns.Debug:Log("EnemyCooldowns", "hit", unit, spellID, name, entry.cd)
 	self:Render(unit)
 end
 
 function EnemyCooldowns:OnEnteringWorld()
+	ns.Debug:Log("EnemyCooldowns", "reset")
 	for key in pairs(self.state) do
 		self.state[key] = nil
 	end
@@ -351,4 +389,202 @@ function EnemyCooldowns:GetOptions()
 			},
 		},
 	}
+end
+
+function EnemyCooldowns:GetDebugChecks()
+	local function AuditBaseCooldownMs(id)
+		if type(GetSpellBaseCooldown) ~= "function" then
+			return nil
+		end
+		local ms = GetSpellBaseCooldown(id)
+		if issecretvalue(ms) then
+			return nil
+		end
+		return ms
+	end
+
+	local audit = L.Audit(L.SPELLS, ResolveSpellName, AuditBaseCooldownMs)
+
+	local checks = {
+		{
+			name = "spell table",
+			run = function()
+				if #audit.unresolved > 0 or #audit.duplicates > 0 or #audit.mismatched > 0 then
+					local parts = {}
+					if #audit.unresolved > 0 then
+						table.insert(parts, "unresolved")
+						for _, id in ipairs(audit.unresolved) do
+							table.insert(parts, id)
+						end
+					end
+					if #audit.duplicates > 0 then
+						table.insert(parts, "duplicates")
+						for _, id in ipairs(audit.duplicates) do
+							table.insert(parts, id)
+						end
+					end
+					if #audit.mismatched > 0 then
+						table.insert(parts, "mismatched")
+						for _, m in ipairs(audit.mismatched) do
+							table.insert(parts, m.id)
+							table.insert(parts, m.expected)
+							table.insert(parts, m.actual)
+						end
+					end
+					return "FAIL", unpack(parts, 1, #parts)
+				end
+				return "PASS", #L.SPELLS
+			end,
+		},
+		{
+			name = "spell cooldowns",
+			run = function()
+				if type(GetSpellBaseCooldown) ~= "function" then
+					return "SKIP", "GetSpellBaseCooldown missing"
+				end
+				if #audit.unknownCd > 0 then
+					return "INFO", "unknown", unpack(audit.unknownCd, 1, #audit.unknownCd)
+				end
+				return "PASS"
+			end,
+		},
+		{
+			name = "index",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				return (self.index ~= nil) and "PASS" or "FAIL"
+			end,
+		},
+		{
+			name = "ticker",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				return (self.ticker and not self.ticker:IsCancelled()) and "PASS" or "FAIL"
+			end,
+		},
+		{
+			name = "tracked",
+			run = function()
+				local unitCount = 0
+				for _ in pairs(self.units) do
+					unitCount = unitCount + 1
+				end
+				local stateCount = 0
+				for _ in pairs(self.state) do
+					stateCount = stateCount + 1
+				end
+				return "INFO", unitCount, stateCount
+			end,
+		},
+	}
+
+	local units = {}
+	for unit in pairs(self.units) do
+		table.insert(units, unit)
+	end
+	table.sort(units)
+
+	for _, unit in ipairs(units) do
+		table.insert(checks, {
+			name = "icons " .. unit,
+			run = function()
+				local guid = self.units[unit]
+				local plate = self.unitPlate[unit]
+				local container = plate and self.containers[plate]
+				if not container then
+					return "SKIP", "no container"
+				end
+
+				local now = GetTime()
+				local bucket = self.state[guid]
+				if bucket then
+					for _, rec in pairs(bucket) do
+						if rec.expires >= now - 2 * TICK_INTERVAL and rec.expires <= now then
+							return "SKIP", "expiring"
+						end
+					end
+				end
+
+				local profile = self.db.profile
+				local n = #L.Active(self.state, guid, now, profile.maxIcons)
+
+				local shown = 0
+				for _, icon in ipairs(container.icons) do
+					if icon:IsShown() then
+						shown = shown + 1
+					end
+				end
+
+				local ok = shown == n
+				for i = 1, n do
+					local icon = container.icons[i]
+					if not icon or not icon:IsShown() then
+						ok = false
+						break
+					end
+
+					if math.abs(icon:GetWidth() - profile.iconSize) > 0.5 then
+						ok = false
+						break
+					end
+
+					local point, relativeTo, relativePoint, x, y = icon:GetPoint(1)
+					local expPoint, expRelPoint, expX, expY =
+						L.Layout(profile.anchor, i, n, profile.iconSize, LAYOUT_SPACING, profile.x, profile.y)
+					if
+						point ~= expPoint
+						or relativeTo ~= container
+						or relativePoint ~= expRelPoint
+						or math.abs(x - expX) > 0.5
+						or math.abs(y - expY) > 0.5
+					then
+						ok = false
+						break
+					end
+				end
+
+				return ok and "PASS" or "FAIL", shown, n
+			end,
+		})
+
+		table.insert(checks, {
+			name = "container parent " .. unit,
+			run = function()
+				local plate = self.unitPlate[unit]
+				local container = plate and self.containers[plate]
+				if not container then
+					return "SKIP", "no container"
+				end
+				return (container:GetParent() == plate) and "PASS" or "FAIL"
+			end,
+		})
+	end
+
+	table.insert(checks, {
+		name = "no foreign icons",
+		run = function()
+			local plates = {}
+			for _, plate in pairs(self.unitPlate) do
+				plates[plate] = true
+			end
+
+			local foreign = 0
+			for plate, container in pairs(self.containers) do
+				if container:IsShown() and not plates[plate] then
+					foreign = foreign + 1
+				end
+			end
+
+			if foreign > 0 then
+				return "FAIL", foreign
+			end
+			return "PASS"
+		end,
+	})
+
+	return checks
 end

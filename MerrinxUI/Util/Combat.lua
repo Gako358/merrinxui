@@ -19,3 +19,18 @@ function Combat:Run(key, fn)
 	queue:Push(key, fn)
 	return false
 end
+
+ns.Debug:RegisterChecks("Combat", function()
+	return {
+		{
+			name = "queue",
+			run = function(ctx)
+				local count = #queue.order
+				if count > 0 and not ctx.inCombat then
+					return "FAIL", count
+				end
+				return "INFO", count
+			end,
+		},
+	}
+end)

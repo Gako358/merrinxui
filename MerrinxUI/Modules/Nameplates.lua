@@ -203,6 +203,7 @@ function Nameplates:StyleUnit(unit)
 		return
 	end
 
+	local isNewPlate = self.unitPlates[unit] == nil
 	self.unitPlates[unit] = plate
 
 	local frame = self.plateFrames[plate]
@@ -224,6 +225,13 @@ function Nameplates:StyleUnit(unit)
 	self:SyncCastBar(unit, frame)
 	self:UpdatePower(unit, frame)
 	self:UpdateDebuffs(unit, frame)
+
+	if isNewPlate and ns.Debug:IsActive() then
+		local isPlayer = UnitIsPlayer(unit)
+		if not issecretvalue(isPlayer) and isPlayer == true then
+			ns.Debug:Log("Nameplates", "style", unit)
+		end
+	end
 end
 
 function Nameplates:UnstyleUnit(unit)
@@ -233,6 +241,13 @@ function Nameplates:UnstyleUnit(unit)
 
 	if not plate then
 		return
+	end
+
+	if ns.Debug:IsActive() then
+		local isPlayer = UnitIsPlayer(unit)
+		if not issecretvalue(isPlayer) and isPlayer == true then
+			ns.Debug:Log("Nameplates", "unstyle", unit)
+		end
 	end
 
 	if plate.UnitFrame then
@@ -533,6 +548,8 @@ function Nameplates:SetCastEventsEnabled(enable)
 		return
 	end
 
+	ns.Debug:Log("Nameplates", "cast events", enable)
+
 	for event, handler in pairs(CAST_EVENTS) do
 		if enable then
 			self:RegisterEvent(event, handler)
@@ -608,7 +625,7 @@ function Nameplates:SyncCastBar(unit, frame)
 	self:HideCastBar(unit, frame)
 end
 
-function Nameplates:OnCastStart(_, unit)
+function Nameplates:OnCastStart(event, unit)
 	local frame = self:GetCastFrame(unit)
 	if not frame then
 		return
@@ -622,9 +639,16 @@ function Nameplates:OnCastStart(_, unit)
 	local name, _, _, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
 	frame.castText:SetText(name)
 	self:ApplyShield(frame, notInterruptible)
+
+	if event == "UNIT_SPELLCAST_START" and ns.Debug:IsActive() then
+		local isTarget = UnitIsUnit(unit, "target")
+		if not issecretvalue(isTarget) and isTarget == true then
+			ns.Debug:Log("Nameplates", "cast", unit, self.castMode[unit])
+		end
+	end
 end
 
-function Nameplates:OnChannelStart(_, unit)
+function Nameplates:OnChannelStart(event, unit)
 	local frame = self:GetCastFrame(unit)
 	if not frame then
 		return
@@ -638,6 +662,13 @@ function Nameplates:OnChannelStart(_, unit)
 	local name, _, _, _, _, _, notInterruptible = UnitChannelInfo(unit)
 	frame.castText:SetText(name)
 	self:ApplyShield(frame, notInterruptible)
+
+	if event == "UNIT_SPELLCAST_CHANNEL_START" and ns.Debug:IsActive() then
+		local isTarget = UnitIsUnit(unit, "target")
+		if not issecretvalue(isTarget) and isTarget == true then
+			ns.Debug:Log("Nameplates", "cast", unit, self.castMode[unit])
+		end
+	end
 end
 
 function Nameplates:OnCastStop(_, unit)
@@ -903,6 +934,482 @@ function Nameplates:GetOptions()
 					return not self.db.profile.debuffs
 				end,
 			},
+		},
+	}
+end
+
+function Nameplates:GetDebugChecks()
+	local function getTargetFrame()
+		local plate = C_NamePlate.GetNamePlateForUnit("target")
+		local frame = plate and self.plateFrames[plate]
+		if not frame or not frame:IsShown() then
+			return nil, nil
+		end
+		return plate, frame
+	end
+
+	return {
+		{
+			name = "apis",
+			run = function()
+				local paths = {
+					"UnitCastingDuration",
+					"UnitChannelDuration",
+					"C_UnitAuras.GetUnitAuras",
+					"C_UnitAuras.GetAuraDuration",
+					"C_UnitAuras.GetAuraApplicationDisplayCount",
+					"UnitHealthPercent",
+					"UnitPowerPercent",
+					"CurveConstants.ScaleTo100",
+					"AbbreviateNumbers",
+					"Enum.StatusBarInterpolation",
+					"Enum.StatusBarTimerDirection",
+				}
+
+				local missing = {}
+				for _, path in ipairs(paths) do
+					local obj = _G
+					for part in path:gmatch("[^.]+") do
+						if type(obj) ~= "table" then
+							obj = nil
+							break
+						end
+						obj = obj[part]
+					end
+					if obj == nil then
+						table.insert(missing, path)
+					end
+				end
+
+				if #missing > 0 then
+					return "FAIL", unpack(missing, 1, #missing)
+				end
+				return "PASS"
+			end,
+		},
+		{
+			name = "styled plates",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local mismatches = 0
+				local unknown = 0
+				local total = 0
+
+				for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+					local unit = plate.namePlateUnitToken
+					if unit then
+						total = total + 1
+						local canAttack = UnitCanAttack("player", unit)
+						local frame = self.plateFrames[plate]
+						if issecretvalue(canAttack) then
+							unknown = unknown + 1
+						elseif canAttack == true and not plate:IsForbidden() then
+							if not (frame and frame:IsShown()) then
+								mismatches = mismatches + 1
+							end
+						elseif frame and frame:IsShown() then
+							mismatches = mismatches + 1
+						end
+					end
+				end
+
+				return (mismatches == 0) and "PASS" or "FAIL", mismatches, unknown, total
+			end,
+		},
+		{
+			name = "target plate",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local width = frame:GetWidth()
+				local height = frame:GetHeight()
+				local _, nameSize = frame.nameText:GetFont()
+
+				local ok = math.abs(width - profile.width) <= 0.5
+					and math.abs(height - profile.height) <= 0.5
+					and math.abs(nameSize - profile.nameSize) <= 0.5
+
+				if not plate.UnitFrame then
+					return (ok and "PASS" or "FAIL"), width, height, nameSize, "no UnitFrame"
+				end
+
+				local alpha = plate.UnitFrame:GetAlpha()
+				if issecretvalue(alpha) then
+					return (ok and "PASS" or "FAIL"), width, height, nameSize, "alpha secret"
+				end
+
+				ok = ok and alpha == 0
+				return ok and "PASS" or "FAIL", width, height, nameSize, alpha
+			end,
+		},
+		{
+			name = "health colour",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local unit = "target"
+				local reaction = UnitReaction(unit, "player")
+				local isPlayer = UnitIsPlayer(unit)
+				local classFile = select(2, UnitClass(unit))
+				local tapDenied = UnitIsTapDenied(unit)
+
+				if issecretvalue(reaction) then
+					reaction = nil
+				end
+				if issecretvalue(isPlayer) then
+					isPlayer = nil
+				end
+				if issecretvalue(classFile) then
+					classFile = nil
+				end
+				if issecretvalue(tapDenied) then
+					tapDenied = nil
+				end
+
+				local er, eg, eb = NameplateLogic.Color(reaction, isPlayer, classFile, tapDenied, RAID_CLASS_COLORS)
+				local cr, cg, cb = frame.healthBar:GetStatusBarColor()
+
+				local ok = math.abs(cr - er) <= 0.01 and math.abs(cg - eg) <= 0.01 and math.abs(cb - eb) <= 0.01
+				return ok and "PASS" or "FAIL", cr, cg, cb, er, eg, eb
+			end,
+		},
+		{
+			name = "highlight",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local mismatches = 0
+				local secretCount = 0
+				local total = 0
+
+				for unit, plate in pairs(self.unitPlates) do
+					local frame = self.plateFrames[plate]
+					if frame then
+						total = total + 1
+						local isTarget = UnitIsUnit(unit, "target")
+						local alpha = frame.highlight:GetAlpha()
+						if issecretvalue(isTarget) or issecretvalue(alpha) then
+							secretCount = secretCount + 1
+						else
+							local expected = isTarget and 1 or 0
+							if math.abs(alpha - expected) > 0.01 then
+								mismatches = mismatches + 1
+							end
+						end
+					end
+				end
+
+				if total > 0 and secretCount == total then
+					return "INFO", mismatches, secretCount, total
+				end
+				return (mismatches == 0) and "PASS" or "FAIL", mismatches, secretCount, total
+			end,
+		},
+		{
+			name = "cast events",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local ok = self.castEventsOn == self.db.profile.castBar
+				return ok and "PASS" or "FAIL", self.castEventsOn, self.db.profile.castBar
+			end,
+		},
+		{
+			name = "cast anchor",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local expectedAnchor = profile.powerBar and frame.powerBar or frame.healthBar
+				local point, relativeTo, relativePoint, x, y = frame.castBar:GetPoint(1)
+
+				local ok = point == "TOPLEFT"
+					and relativeTo == expectedAnchor
+					and relativePoint == "BOTTOMLEFT"
+					and math.abs(x) <= 0.5
+					and math.abs(y - -CAST_BAR_GAP) <= 0.5
+
+				return ok and "PASS" or "FAIL", point, relativePoint, x, y
+			end,
+		},
+		{
+			name = "target cast",
+			run = function(ctx)
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local unit = "target"
+				local plate = C_NamePlate.GetNamePlateForUnit("target")
+				local token = plate and plate.namePlateUnitToken
+				local mode = token and self.castMode[token]
+
+				if mode == "cast" then
+					local d = UnitCastingDuration(unit)
+					local notInterruptible = select(8, UnitCastingInfo(unit))
+					return "INFO", mode, issecretvalue(d), issecretvalue(notInterruptible)
+				elseif mode == "channel" then
+					local d = UnitChannelDuration(unit)
+					local notInterruptible = select(7, UnitChannelInfo(unit))
+					return "INFO", mode, issecretvalue(d), issecretvalue(notInterruptible)
+				end
+
+				return "INFO", "none"
+			end,
+		},
+		{
+			name = "health text",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				if self.db.profile.healthText == "none" then
+					local text = frame.healthText:GetText()
+					if issecretvalue(text) then
+						return "INFO", "secret"
+					end
+					return (text == nil or text == "") and "PASS" or "FAIL", text
+				end
+
+				local shown = frame.healthText:IsShown()
+				return shown and "PASS" or "FAIL", issecretvalue(frame.healthText:GetText())
+			end,
+		},
+		{
+			name = "power bar",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local shown = frame.powerBar:IsShown()
+				local ok = shown == profile.powerBar
+				if shown then
+					ok = ok and math.abs(frame.powerBar:GetHeight() - profile.powerHeight) <= 0.5
+				end
+
+				return ok and "PASS" or "FAIL", shown, profile.powerBar
+			end,
+		},
+		{
+			name = "power text",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				if not self.db.profile.powerBar then
+					return "SKIP", "power bar off"
+				end
+
+				if self.db.profile.powerText == "none" then
+					local text = frame.powerText:GetText()
+					if issecretvalue(text) then
+						return "INFO", "secret"
+					end
+					return (text == nil or text == "") and "PASS" or "FAIL", text
+				end
+
+				local shown = frame.powerText:IsShown()
+				return shown and "PASS" or "FAIL", issecretvalue(frame.powerText:GetText())
+			end,
+		},
+		{
+			name = "debuffs",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				if not self.db.profile.debuffs then
+					return "SKIP", "debuffs off"
+				end
+
+				local profile = self.db.profile
+				local shown = 0
+				for _, icon in pairs(frame.debuffIcons) do
+					if icon:IsShown() then
+						shown = shown + 1
+					end
+				end
+
+				local anchor = profile.debuffAnchor
+				local relativeTo = frame
+				if anchor == "BOTTOM" then
+					if profile.castBar then
+						relativeTo = frame.castBar
+					elseif profile.powerBar then
+						relativeTo = frame.powerBar
+					else
+						relativeTo = frame.healthBar
+					end
+				elseif anchor ~= "LEFT" and anchor ~= "RIGHT" then
+					relativeTo = frame.nameText
+				end
+
+				local n = shown
+				local ok = shown <= profile.debuffMax
+				for i = 1, shown do
+					local icon = frame.debuffIcons[i]
+					if not icon or not icon:IsShown() then
+						ok = false
+						break
+					end
+					if math.abs(icon:GetWidth() - profile.debuffSize) > 0.5 then
+						ok = false
+						break
+					end
+
+					local point, relTo, relPoint, x, y = icon:GetPoint(1)
+					local expPoint, expRelPoint, expX, expY =
+						NameplateLogic.DebuffLayout(anchor, i, n, profile.debuffSize, DEBUFF_SPACING)
+					if
+						point ~= expPoint
+						or relTo ~= relativeTo
+						or relPoint ~= expRelPoint
+						or math.abs(x - expX) > 0.5
+						or math.abs(y - expY) > 0.5
+					then
+						ok = false
+						break
+					end
+				end
+
+				local mine = C_UnitAuras.GetUnitAuras("target", "HARMFUL|PLAYER")
+				local all = C_UnitAuras.GetUnitAuras("target", "HARMFUL")
+
+				return ok and "PASS" or "FAIL", shown, mine and #mine or 0, all and #all or 0
+			end,
+		},
+		{
+			name = "secret flags",
+			run = function(ctx)
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local unit = "target"
+				local health = UnitHealth(unit)
+				local healthMax = UnitHealthMax(unit)
+				local healthPercent = UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+				local power = UnitPower(unit)
+				local powerMax = UnitPowerMax(unit)
+				local powerPercent = UnitPowerPercent(unit, nil, false, CurveConstants.ScaleTo100)
+				local _, powerToken = UnitPowerType(unit)
+				local reaction = UnitReaction(unit, "player")
+				local isTarget = UnitIsUnit(unit, "target")
+				local canAttack = UnitCanAttack("player", unit)
+
+				local mine = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
+				local mineAura = mine and mine[1]
+				local mineIconSecret, mineDurationSecret, mineCountSecret = false, false, false
+				if mineAura then
+					mineIconSecret = issecretvalue(mineAura.icon)
+					mineDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, mineAura.auraInstanceID))
+					mineCountSecret =
+						issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, mineAura.auraInstanceID))
+				end
+
+				local all = C_UnitAuras.GetUnitAuras(unit, "HARMFUL")
+				local allAura = all and all[1]
+				local allIconSecret, allDurationSecret, allCountSecret = false, false, false
+				if allAura then
+					allIconSecret = issecretvalue(allAura.icon)
+					allDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, allAura.auraInstanceID))
+					allCountSecret =
+						issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, allAura.auraInstanceID))
+				end
+
+				return "INFO",
+					issecretvalue(health),
+					issecretvalue(healthMax),
+					issecretvalue(healthPercent),
+					issecretvalue(power),
+					issecretvalue(powerMax),
+					issecretvalue(powerPercent),
+					issecretvalue(powerToken),
+					issecretvalue(reaction),
+					issecretvalue(isTarget),
+					issecretvalue(canAttack),
+					mineAura ~= nil,
+					mineIconSecret,
+					mineDurationSecret,
+					mineCountSecret,
+					allAura ~= nil,
+					allIconSecret,
+					allDurationSecret,
+					allCountSecret
+			end,
 		},
 	}
 end

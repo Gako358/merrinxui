@@ -33,7 +33,7 @@ function MerrinxUI:OnEnable()
 			profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db),
 		},
 	}
-	root.args.profiles.order = 100
+	root.args.profiles.order = -1
 
 	for name, module in self:IterateModules() do
 		if module.GetOptions then
@@ -52,6 +52,10 @@ function MerrinxUI:RefreshModules()
 	end
 end
 
+function MerrinxUI:OpenOptions()
+	ns.OptionsWindow:Open()
+end
+
 function MerrinxUI:SlashCommand(input)
 	local command = (input or ""):match("^%s*(.-)%s*$"):lower()
 	if command == "unlock" then
@@ -59,6 +63,11 @@ function MerrinxUI:SlashCommand(input)
 	elseif command == "lock" then
 		ns.Mover:SetUnlocked(false)
 	else
-		LibStub("AceConfigDialog-3.0"):Open("MerrinxUI")
+		local verb, arg = command:match("^(%S*)%s*(.-)$")
+		if verb == "debug" or verb == "test" or verb == "log" then
+			ns.Debug:Slash(verb, arg)
+		else
+			self:OpenOptions()
+		end
 	end
 end

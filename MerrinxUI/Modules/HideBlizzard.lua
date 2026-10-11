@@ -92,10 +92,15 @@ function HideBlizzard:ApplyGroup(group)
 	for _, name in ipairs(group.frames) do
 		local frame = _G[name]
 		if frame then
-			ns.Hider:Hide(frame, group.unregisterEvents)
+			local alreadyParented = frame:GetParent() == ns.Hider.parent
+			local ok = ns.Hider:Hide(frame, group.unregisterEvents)
+			if not alreadyParented then
+				ns.Debug:Log("HideBlizzard", "hide", group.key, name, ok)
+			end
 		elseif not self.missingWarned[name] then
 			self.missingWarned[name] = true
 			ns.addon:Print("HideBlizzard: " .. name .. " not found")
+			ns.Debug:Log("HideBlizzard", "missing", name)
 		end
 	end
 end
@@ -117,6 +122,7 @@ function HideBlizzard:ApplyMeter()
 	local newValue, newOwned = HideBlizzardLogic.MeterCVar(wantHidden, current, self.db.global.meterCVarOwned)
 	if newValue then
 		C_CVar.SetCVar("damageMeterEnabled", newValue)
+		ns.Debug:Log("HideBlizzard", "meter", newValue, newOwned)
 	end
 	self.db.global.meterCVarOwned = newOwned
 end
@@ -171,4 +177,60 @@ function HideBlizzard:GetOptions()
 			damageMeter = groupToggle("damageMeter", 6),
 		},
 	}
+end
+
+function HideBlizzard:GetDebugChecks()
+	local checks = {}
+	local set = self:CurrentGroupSet()
+
+	for _, group in ipairs(HideBlizzardLogic.GROUPS) do
+		if set[group.key] then
+			for _, name in ipairs(group.frames) do
+				table.insert(checks, {
+					name = "frame " .. name,
+					run = function()
+						local frame = _G[name]
+						if frame == nil then
+							return "INFO", "missing"
+						end
+						return (frame:GetParent() == ns.Hider.parent and not frame:IsVisible()) and "PASS" or "FAIL"
+					end,
+				})
+			end
+		end
+	end
+
+	for _, group in ipairs(HideBlizzardLogic.GROUPS) do
+		if not set[group.key] then
+			local stuck = false
+			for _, name in ipairs(group.frames) do
+				local frame = _G[name]
+				if frame and frame:GetParent() == ns.Hider.parent then
+					stuck = true
+					break
+				end
+			end
+			if stuck then
+				table.insert(checks, {
+					name = "reload needed " .. group.key,
+					run = function()
+						return "INFO"
+					end,
+				})
+			end
+		end
+	end
+
+	table.insert(checks, {
+		name = "meter cvar",
+		run = function()
+			local current = C_CVar.GetCVar("damageMeterEnabled")
+			if set.damageMeter then
+				return (current == "0") and "PASS" or "FAIL"
+			end
+			return "INFO", current, self.db.global.meterCVarOwned
+		end,
+	})
+
+	return checks
 end

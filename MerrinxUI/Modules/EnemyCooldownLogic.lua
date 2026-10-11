@@ -142,3 +142,34 @@ function L.Layout(anchor, i, n, size, spacing, ox, oy)
 		return "BOTTOM", "TOP", (i - 1) * step - ((n - 1) * step) / 2 + ox, oy
 	end
 end
+
+function L.Audit(spells, getName, getBaseCooldownMs)
+	local unresolved = {}
+	local duplicates = {}
+	local mismatched = {}
+	local unknownCd = {}
+	local seenNames = {}
+
+	for _, entry in ipairs(spells) do
+		local name = getName(entry.id)
+		if name == nil then
+			table.insert(unresolved, entry.id)
+		elseif seenNames[name] then
+			table.insert(duplicates, entry.id)
+		else
+			seenNames[name] = true
+		end
+
+		local actual = getBaseCooldownMs(entry.id)
+		if actual == nil then
+			table.insert(unknownCd, entry.id)
+		else
+			local expected = entry.cd * 1000
+			if actual ~= expected then
+				table.insert(mismatched, { id = entry.id, expected = expected, actual = actual })
+			end
+		end
+	end
+
+	return { unresolved = unresolved, duplicates = duplicates, mismatched = mismatched, unknownCd = unknownCd }
+end

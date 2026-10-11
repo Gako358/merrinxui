@@ -155,4 +155,43 @@ describe("EnemyCooldownLogic", function()
 			assert.are.same({ L.Layout("TOP", 1, 3, 20, 2, 0, 4) }, { L.Layout("bogus", 1, 3, 20, 2, 0, 4) })
 		end)
 	end)
+
+	describe("Audit", function()
+		it("reports unresolved, duplicate, mismatched and unknown-cd ids", function()
+			local spells = { { id = 1, cd = 10 }, { id = 2, cd = 20 }, { id = 3, cd = 30 } }
+			local names = { [1] = "A", [2] = "A" }
+			local base = { [1] = 10000, [2] = 5000 }
+			local result = L.Audit(spells, function(id)
+				return names[id]
+			end, function(id)
+				return base[id]
+			end)
+			assert.are.same({
+				unresolved = { 3 },
+				duplicates = { 2 },
+				mismatched = { { id = 2, expected = 20000, actual = 5000 } },
+				unknownCd = { 3 },
+			}, result)
+		end)
+
+		it("returns all four lists empty for no spells", function()
+			local result = L.Audit({}, function()
+				return nil
+			end, function()
+				return nil
+			end)
+			assert.are.same({ unresolved = {}, duplicates = {}, mismatched = {}, unknownCd = {} }, result)
+		end)
+
+		it("reports every id as unknownCd when getBaseCooldownMs always returns nil", function()
+			local spells = { { id = 1, cd = 10 }, { id = 2, cd = 20 }, { id = 3, cd = 30 } }
+			local names = { [1] = "A", [2] = "B", [3] = "C" }
+			local result = L.Audit(spells, function(id)
+				return names[id]
+			end, function()
+				return nil
+			end)
+			assert.are.same({ unresolved = {}, duplicates = {}, mismatched = {}, unknownCd = { 1, 2, 3 } }, result)
+		end)
+	end)
 end)

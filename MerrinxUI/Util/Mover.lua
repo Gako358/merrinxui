@@ -116,6 +116,7 @@ function Mover:SetUnlocked(value)
 	end
 
 	isUnlocked = value
+	ns.Debug:Log("Mover", "unlocked", value)
 
 	for _, entry in pairs(entries) do
 		if isUnlocked then
@@ -138,6 +139,7 @@ end
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:SetScript("OnEvent", function()
+	local wasUnlocked = isUnlocked
 	for frame, entry in pairs(entries) do
 		if entry.dragging then
 			entry.overlay:StopMovingOrSizing()
@@ -147,4 +149,57 @@ eventFrame:SetScript("OnEvent", function()
 		end
 	end
 	Mover:SetUnlocked(false)
+	if wasUnlocked then
+		ns.Debug:Log("Mover", "relock combat")
+	end
+end)
+
+ns.Debug:RegisterChecks("Mover", function()
+	local checks = {
+		{
+			name = "unlocked",
+			run = function(ctx)
+				return (isUnlocked and ctx.inCombat) and "FAIL" or "PASS", isUnlocked
+			end,
+		},
+	}
+
+	for frame, entry in pairs(entries) do
+		local label = entry.label
+
+		table.insert(checks, {
+			name = "position " .. label,
+			run = function()
+				if entry.dragging or frame:GetNumPoints() == 0 then
+					return "SKIP"
+				end
+
+				local point, rel, relPoint, x, y = frame:GetPoint(1)
+				if issecretvalue(x) or issecretvalue(y) then
+					return "INFO", "secret"
+				end
+
+				local pos = entry.getPosition()
+				local expectedPoint = pos.point or "CENTER"
+				local expectedX = pos.x or 0
+				local expectedY = pos.y or 0
+
+				local ok = point == expectedPoint
+					and rel == UIParent
+					and relPoint == point
+					and math.abs(x - expectedX) <= 0.5
+					and math.abs(y - expectedY) <= 0.5
+				return ok and "PASS" or "FAIL", point, x, y
+			end,
+		})
+
+		table.insert(checks, {
+			name = "overlay " .. label,
+			run = function()
+				return (entry.overlay:IsShown() == isUnlocked) and "PASS" or "FAIL"
+			end,
+		})
+	end
+
+	return checks
 end)

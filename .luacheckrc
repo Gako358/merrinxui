@@ -53,6 +53,17 @@ read_globals = {
 	"UnitPowerType",
 	"AbbreviateNumbers",
 	"C_UnitAuras",
+	"date",
+	"GetLocale",
+	"C_AddOns",
+	"SlashCmdList",
+	"GetSpellBaseCooldown",
+	"GameMenuFrame",
+	"ADDONS",
+	"HideUIPanel",
+	"InputUtil",
+	"RegisterGameMenuEscHandler",
+	"GameMenuEscPriority",
 }
 
 files["spec"] = {
