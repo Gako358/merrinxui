@@ -405,6 +405,20 @@ function EnemyCooldowns:GetDebugChecks()
 
 	local audit = L.Audit(L.SPELLS, ResolveSpellName, AuditBaseCooldownMs)
 
+	local function readPoint(region)
+		if type(region.IsAnchoringRestricted) == "function" then
+			local restricted = region:IsAnchoringRestricted()
+			if issecretvalue(restricted) or restricted then
+				return false
+			end
+		end
+		local ok, p, rel, rp, x, y = pcall(region.GetPoint, region, 1)
+		if not ok then
+			return false
+		end
+		return true, p, rel, rp, x, y
+	end
+
 	local checks = {
 		{
 			name = "spell table",
@@ -520,6 +534,7 @@ function EnemyCooldowns:GetDebugChecks()
 				end
 
 				local ok = shown == n
+				local pointsRestricted = false
 				for i = 1, n do
 					local icon = container.icons[i]
 					if not icon or not icon:IsShown() then
@@ -532,21 +547,30 @@ function EnemyCooldowns:GetDebugChecks()
 						break
 					end
 
-					local point, relativeTo, relativePoint, x, y = icon:GetPoint(1)
-					local expPoint, expRelPoint, expX, expY =
-						L.Layout(profile.anchor, i, n, profile.iconSize, LAYOUT_SPACING, profile.x, profile.y)
-					if
-						point ~= expPoint
-						or relativeTo ~= container
-						or relativePoint ~= expRelPoint
-						or math.abs(x - expX) > 0.5
-						or math.abs(y - expY) > 0.5
-					then
-						ok = false
-						break
+					local ptOk, point, relativeTo, relativePoint, x, y = readPoint(icon)
+					if not ptOk then
+						pointsRestricted = true
+					else
+						local expPoint, expRelPoint, expX, expY =
+							L.Layout(profile.anchor, i, n, profile.iconSize, LAYOUT_SPACING, profile.x, profile.y)
+						if
+							point ~= expPoint
+							or relativeTo ~= container
+							or relativePoint ~= expRelPoint
+							or issecretvalue(x)
+							or issecretvalue(y)
+							or math.abs(x - expX) > 0.5
+							or math.abs(y - expY) > 0.5
+						then
+							ok = false
+							break
+						end
 					end
 				end
 
+				if pointsRestricted then
+					return ok and "PASS" or "FAIL", shown, n, "points restricted"
+				end
 				return ok and "PASS" or "FAIL", shown, n
 			end,
 		})

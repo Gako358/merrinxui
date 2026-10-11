@@ -948,6 +948,20 @@ function Nameplates:GetDebugChecks()
 		return plate, frame
 	end
 
+	local function readPoint(region)
+		if type(region.IsAnchoringRestricted) == "function" then
+			local restricted = region:IsAnchoringRestricted()
+			if issecretvalue(restricted) or restricted then
+				return false
+			end
+		end
+		local ok, p, rel, rp, x, y = pcall(region.GetPoint, region, 1)
+		if not ok then
+			return false
+		end
+		return true, p, rel, rp, x, y
+	end
+
 	return {
 		{
 			name = "apis",
@@ -1159,11 +1173,16 @@ function Nameplates:GetDebugChecks()
 
 				local profile = self.db.profile
 				local expectedAnchor = profile.powerBar and frame.powerBar or frame.healthBar
-				local point, relativeTo, relativePoint, x, y = frame.castBar:GetPoint(1)
+				local ptOk, point, relativeTo, relativePoint, x, y = readPoint(frame.castBar)
+				if not ptOk then
+					return "SKIP", "restricted geometry"
+				end
 
 				local ok = point == "TOPLEFT"
 					and relativeTo == expectedAnchor
 					and relativePoint == "BOTTOMLEFT"
+					and not issecretvalue(x)
+					and not issecretvalue(y)
 					and math.abs(x) <= 0.5
 					and math.abs(y - -CAST_BAR_GAP) <= 0.5
 
@@ -1319,6 +1338,7 @@ function Nameplates:GetDebugChecks()
 
 				local n = shown
 				local ok = shown <= profile.debuffMax
+				local pointsRestricted = false
 				for i = 1, shown do
 					local icon = frame.debuffIcons[i]
 					if not icon or not icon:IsShown() then
@@ -1330,24 +1350,33 @@ function Nameplates:GetDebugChecks()
 						break
 					end
 
-					local point, relTo, relPoint, x, y = icon:GetPoint(1)
-					local expPoint, expRelPoint, expX, expY =
-						NameplateLogic.DebuffLayout(anchor, i, n, profile.debuffSize, DEBUFF_SPACING)
-					if
-						point ~= expPoint
-						or relTo ~= relativeTo
-						or relPoint ~= expRelPoint
-						or math.abs(x - expX) > 0.5
-						or math.abs(y - expY) > 0.5
-					then
-						ok = false
-						break
+					local ptOk, point, relTo, relPoint, x, y = readPoint(icon)
+					if not ptOk then
+						pointsRestricted = true
+					else
+						local expPoint, expRelPoint, expX, expY =
+							NameplateLogic.DebuffLayout(anchor, i, n, profile.debuffSize, DEBUFF_SPACING)
+						if
+							point ~= expPoint
+							or relTo ~= relativeTo
+							or relPoint ~= expRelPoint
+							or issecretvalue(x)
+							or issecretvalue(y)
+							or math.abs(x - expX) > 0.5
+							or math.abs(y - expY) > 0.5
+						then
+							ok = false
+							break
+						end
 					end
 				end
 
 				local mine = C_UnitAuras.GetUnitAuras("target", "HARMFUL|PLAYER")
 				local all = C_UnitAuras.GetUnitAuras("target", "HARMFUL")
 
+				if pointsRestricted then
+					return ok and "PASS" or "FAIL", shown, mine and #mine or 0, all and #all or 0, "points restricted"
+				end
 				return ok and "PASS" or "FAIL", shown, mine and #mine or 0, all and #all or 0
 			end,
 		},
