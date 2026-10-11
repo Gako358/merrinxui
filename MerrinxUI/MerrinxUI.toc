@@ -1,12 +1,21 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.2.0
+## Version: 0.7.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
 Core.lua
 Util\MoverLogic.lua
 Util\Mover.lua
+Util\CombatQueue.lua
+Util\Combat.lua
+Util\Hider.lua
 Modules\RangeTextLogic.lua
 Modules\RangeText.lua
+Modules\HideBlizzardLogic.lua
+Modules\HideBlizzard.lua
+Modules\NameplateLogic.lua
+Modules\Nameplates.lua
+Modules\EnemyCooldownLogic.lua
+Modules\EnemyCooldowns.lua
