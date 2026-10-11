@@ -7,7 +7,6 @@ local L = EnemyCooldownLogic
 
 L.CATEGORIES = { interrupt = true, defensive = true, cc = true, racial = true }
 
--- D-18 curated table; every ID and cooldown UNVERIFIED pending the S11 probe paste.
 -- Shaman's Nature's Swiftness (16188) is kept; the druid's (17116) is left out (R-16: same name).
 L.SPELLS = {
 	{ id = 6552, class = "WARRIOR", category = "interrupt", cd = 10 },
@@ -25,18 +24,18 @@ L.SPELLS = {
 	{ id = 122, class = "MAGE", category = "cc", cd = 25 },
 	{ id = 8122, class = "PRIEST", category = "cc", cd = 30 },
 	{ id = 15487, class = "PRIEST", category = "interrupt", cd = 45 },
-	{ id = 6346, class = "PRIEST", category = "defensive", cd = 30 },
+	{ id = 6346, class = "PRIEST", category = "defensive", cd = 180 },
 	{ id = 853, class = "PALADIN", category = "cc", cd = 60 },
 	{ id = 642, class = "PALADIN", category = "defensive", cd = 300 },
 	{ id = 1022, class = "PALADIN", category = "defensive", cd = 300 },
-	{ id = 633, class = "PALADIN", category = "defensive", cd = 3600 },
+	{ id = 633, class = "PALADIN", category = "defensive", cd = 1200 },
 	{ id = 6789, class = "WARLOCK", category = "cc", cd = 120 },
 	{ id = 5484, class = "WARLOCK", category = "cc", cd = 40 },
 	{ id = 8042, class = "SHAMAN", category = "interrupt", cd = 6 },
 	{ id = 8177, class = "SHAMAN", category = "defensive", cd = 15 },
 	{ id = 16188, class = "SHAMAN", category = "defensive", cd = 180 },
 	{ id = 19503, class = "HUNTER", category = "cc", cd = 30 },
-	{ id = 1499, class = "HUNTER", category = "cc", cd = 15 },
+	{ id = 1499, class = "HUNTER", category = "cc", cd = 30 },
 	{ id = 19263, class = "HUNTER", category = "defensive", cd = 300 },
 	{ id = 5384, class = "HUNTER", category = "defensive", cd = 30 },
 	{ id = 5211, class = "DRUID", category = "cc", cd = 60 },
@@ -44,7 +43,7 @@ L.SPELLS = {
 	{ id = 22812, class = "DRUID", category = "defensive", cd = 60 },
 	{ id = 29166, class = "DRUID", category = "defensive", cd = 360 },
 	{ id = 7744, class = "ANY", category = "racial", cd = 120 },
-	{ id = 20589, class = "ANY", category = "racial", cd = 60 },
+	{ id = 20589, class = "ANY", category = "racial", cd = 120 },
 	{ id = 20594, class = "ANY", category = "racial", cd = 180 },
 	{ id = 20549, class = "ANY", category = "racial", cd = 120 },
 	{ id = 20554, class = "ANY", category = "racial", cd = 180 },

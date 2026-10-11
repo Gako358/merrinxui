@@ -45,6 +45,14 @@ read_globals = {
 	"UnitChannelDuration",
 	"GetTime",
 	"UnitGUID",
+	"UnitHealthPercent",
+	"CurveConstants",
+	"UnitPower",
+	"UnitPowerMax",
+	"UnitPowerPercent",
+	"UnitPowerType",
+	"AbbreviateNumbers",
+	"C_UnitAuras",
 }
 
 files["spec"] = {

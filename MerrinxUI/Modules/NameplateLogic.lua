@@ -20,3 +20,43 @@ function NameplateLogic.Color(reaction, isPlayer, classFile, tapDenied, classCol
 	end
 	return 0, 1, 0
 end
+
+function NameplateLogic.FormatValue(mode, numberText, percent)
+	if mode == "percent" then
+		return string.format("%.0f%%", percent)
+	elseif mode == "number" then
+		return numberText
+	elseif mode == "both" then
+		return string.format("%s (%.0f%%)", numberText, percent)
+	end
+	return nil
+end
+
+local POWER_COLORS = {
+	MANA = { 0, 0.55, 1 },
+	RAGE = { 0.9, 0.1, 0.1 },
+	ENERGY = { 1, 0.85, 0.1 },
+	FOCUS = { 1, 0.5, 0.25 },
+}
+
+function NameplateLogic.PowerColor(token)
+	local color = POWER_COLORS[token]
+	if color then
+		return color[1], color[2], color[3]
+	end
+	return 0.5, 0.5, 0.5
+end
+
+function NameplateLogic.DebuffLayout(anchor, i, n, size, spacing)
+	local step = size + spacing
+	local x = (i - 1) * step - ((n - 1) * step) / 2
+
+	if anchor == "BOTTOM" then
+		return "TOP", "BOTTOM", x, -spacing
+	elseif anchor == "RIGHT" then
+		return "LEFT", "RIGHT", spacing + (i - 1) * step, 0
+	elseif anchor == "LEFT" then
+		return "RIGHT", "LEFT", -spacing - (i - 1) * step, 0
+	end
+	return "BOTTOM", "TOP", x, spacing
+end
