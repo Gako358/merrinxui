@@ -304,6 +304,9 @@ end
 
 local function CreateDebuffContainer(frame, profile)
 	local debuffs = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+	-- parsing and layout run from a run-when-visible OnUpdate, which needs a rect; layout replaces this size
+	debuffs:SetPoint("CENTER", frame, "CENTER")
+	debuffs:SetSize(1, 1)
 	debuffs:Hide()
 	debuffs:AddAuraGroup(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL", {
 		maxFrameCount = profile.debuffMax,
@@ -1474,7 +1477,7 @@ function Nameplates:GetDebugChecks()
 					return "SKIP", "no target"
 				end
 
-				local _, frame = getTargetFrame()
+				local plate, frame = getTargetFrame()
 				if not frame then
 					return "SKIP", "target not styled"
 				end
@@ -1486,53 +1489,52 @@ function Nameplates:GetDebugChecks()
 				end
 
 				local debuffs = frame.debuffs
-				local size = self.db.profile.debuffSize
-				local count, mismatched, secretSize, forbidden, secretShown = 0, 0, 0, 0, 0
-				local width, height
-				for _, child in ipairs({ debuffs:GetChildren() }) do
-					if child:IsForbidden() then
-						forbidden = forbidden + 1
-					elseif child:IsObjectType("Button") then
-						local shown = child:IsShown()
-						if issecretvalue(shown) then
-							secretShown = secretShown + 1
-						elseif shown == true then
-							count = count + 1
-							local w, h = child:GetSize()
-							if issecretvalue(w) or issecretvalue(h) then
-								secretSize = secretSize + 1
-							else
-								width, height = width or w, height or h
-								if math.abs(w - size) > 0.5 or math.abs(h - size) > 0.5 then
-									mismatched = mismatched + 1
-								end
-							end
-						end
-					end
-				end
-
+				local profile = self.db.profile
+				local owned = debuffs:GetAuraGroupFrameCount(DEBUFF_GROUP)
+				local unit = debuffs:GetUnit()
+				local bound = not issecretvalue(owned)
+					and owned > 0
+					and not issecretvalue(unit)
+					and unit == plate.unitToken
 				local protected = debuffs:IsProtected()
-				if count == 0 then
-					return "INFO",
-						0,
-						debuffs:GetWidth(),
+
+				local sizeRead, width, height = pcall(debuffs.GetSize, debuffs)
+				if not sizeRead or issecretvalue(width) or issecretvalue(height) then
+					return bound and "INFO" or "FAIL",
+						sizeRead and "size secret" or "size restricted",
+						owned,
+						bound,
 						protected,
-						forbidden,
-						secretShown,
 						self.debuffContainersInCombat
 				end
 
-				local ok = count <= self.db.profile.debuffMax and mismatched == 0
-				return ok and "PASS" or "FAIL",
-					count,
-					width,
-					height,
-					debuffs:GetWidth(),
-					protected,
-					forbidden,
-					secretSize,
-					secretShown,
-					self.debuffContainersInCombat
+				local size = profile.debuffSize
+				local count = 0
+				if width > 1.5 or height > 1.5 then
+					count = math.floor((width + DEBUFF_SPACING) / (size + DEBUFF_SPACING) + 0.5)
+				end
+				local ok = bound and count <= profile.debuffMax
+				if count > 0 then
+					ok = ok
+						and math.abs(height - size) <= 0.5
+						and math.abs(width - (count * size + (count - 1) * DEBUFF_SPACING)) <= 0.5
+				end
+
+				local status = ok and "PASS" or "FAIL"
+				local expected = "auras secret"
+				if C_Secrets.ShouldAurasBeSecret() then
+					if ok then
+						status = "INFO"
+					end
+				else
+					local auras =
+						C_UnitAuras.GetUnitAuras("target", profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL")
+					expected = math.min(auras and #auras or 0, profile.debuffMax)
+					if count ~= expected then
+						status = "FAIL"
+					end
+				end
+				return status, count, width, height, expected, owned, bound, protected, self.debuffContainersInCombat
 			end,
 		},
 		{
