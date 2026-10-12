@@ -95,6 +95,7 @@ function Nameplates:OnInitialize()
 	self.alphaResets = 0
 	self.alphaBoolResets = 0
 	self.debuffContainersInCombat = 0
+	self.debuffResizePending = false
 end
 
 function Nameplates:OnEnable()
@@ -220,6 +221,9 @@ function Nameplates:OnUnitAura(_, unit)
 	if frame and frame.debuffs then
 		frame.debuffs:UpdateAllAuras()
 	end
+	if self.debuffResizePending then
+		self:ApplyPendingDebuffResize()
+	end
 end
 
 function Nameplates:StyleUnit(unit)
@@ -304,7 +308,14 @@ function Nameplates:UnstyleUnit(unit)
 end
 
 -- CustomAuraButtonTemplate has no size or regions; the container only fills in what we register here
+local initializedDebuffButtons = setmetatable({}, { __mode = "k" })
+
 local function InitializeDebuffButton(button, size)
+	if initializedDebuffButtons[button] then
+		return
+	end
+	initializedDebuffButtons[button] = true
+
 	button:SetSize(size, size)
 
 	local icon = button:CreateTexture(nil, "ARTWORK")
@@ -325,6 +336,27 @@ local function InitializeDebuffButton(button, size)
 	button:SetApplicationCount(count)
 end
 
+local function ResizeDebuffButtons(debuffs, size)
+	if C_Secrets.ShouldAurasBeSecret() then
+		return
+	end
+	for i = 1, debuffs:GetAuraGroupFrameCount(DEBUFF_GROUP) do
+		debuffs:GetAuraGroupFrame(DEBUFF_GROUP, i):SetSize(size, size)
+	end
+end
+
+function Nameplates:ApplyPendingDebuffResize()
+	if not self.debuffResizePending or C_Secrets.ShouldAurasBeSecret() then
+		return
+	end
+	for _, plateFrame in pairs(self.plateFrames) do
+		if plateFrame.debuffs then
+			ResizeDebuffButtons(plateFrame.debuffs, self.db.profile.debuffSize)
+		end
+	end
+	self.debuffResizePending = false
+end
+
 local function CreateDebuffContainer(frame, profile)
 	local debuffs = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
 	-- parsing and layout run from a run-when-visible OnUpdate, which needs a rect; layout replaces this size
@@ -334,7 +366,7 @@ local function CreateDebuffContainer(frame, profile)
 	debuffs:AddAuraGroup(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL", {
 		maxFrameCount = profile.debuffMax,
 		initializeFrame = function(button)
-			InitializeDebuffButton(button, profile.debuffSize)
+			InitializeDebuffButton(button, Nameplates.db.profile.debuffSize)
 		end,
 		layout = {
 			elementWidth = profile.debuffSize,
@@ -523,15 +555,20 @@ function Nameplates:UpdateDebuffs(unit, frame)
 		elementHeight = profile.debuffSize,
 		elementSpacing = DEBUFF_SPACING,
 	})
-	-- buttons deny tainted access while auras are secret; a size change made then applies on the next update
-	if not C_Secrets.ShouldAurasBeSecret() then
-		for i = 1, debuffs:GetAuraGroupFrameCount(DEBUFF_GROUP) do
-			debuffs:GetAuraGroupFrame(DEBUFF_GROUP, i):SetSize(profile.debuffSize, profile.debuffSize)
-		end
-	end
 	debuffs:SetUnit(unit)
 	debuffs:UpdateAllAuras()
 	debuffs:Show()
+
+	-- buttons deny tainted access while auras are secret, so the resize is retried until auras stop being secret
+	if C_Secrets.ShouldAurasBeSecret() then
+		self.debuffResizePending = true
+		ns.Combat:Run("Nameplates:debuffSize", function()
+			self:ApplyPendingDebuffResize()
+		end)
+	else
+		ResizeDebuffButtons(debuffs, profile.debuffSize)
+		self:ApplyPendingDebuffResize()
+	end
 end
 
 function Nameplates:UpdateName(unit, frame)
