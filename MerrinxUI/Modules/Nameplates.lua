@@ -31,7 +31,7 @@ local CAST_BAR_GAP = 2
 local CAST_SHIELD_SIZE = 14
 local POWER_BAR_GAP = 1
 local DEBUFF_SPACING = 2
-local DEBUFF_COUNT_SIZE = 10
+local DEBUFF_GROUP = "debuffs"
 
 local CAST_EVENTS = {
 	UNIT_SPELLCAST_START = "OnCastStart",
@@ -56,6 +56,30 @@ local AURA_EVENTS = {
 	UNIT_AURA = "OnUnitAura",
 }
 
+local reapplyingAlpha = false
+
+local function ZeroOwnedAlpha(unitFrame)
+	if reapplyingAlpha or not Nameplates.ownedUnitFrames[unitFrame] then
+		return false
+	end
+	reapplyingAlpha = true
+	unitFrame:SetAlpha(0)
+	reapplyingAlpha = false
+	return true
+end
+
+local function OnUnitFrameSetAlpha(unitFrame)
+	if ZeroOwnedAlpha(unitFrame) then
+		Nameplates.alphaResets = Nameplates.alphaResets + 1
+	end
+end
+
+local function OnUnitFrameSetAlphaFromBoolean(unitFrame)
+	if ZeroOwnedAlpha(unitFrame) then
+		Nameplates.alphaBoolResets = Nameplates.alphaBoolResets + 1
+	end
+end
+
 function Nameplates:OnInitialize()
 	self.db = ns.addon.db:RegisterNamespace("Nameplates", defaults)
 	self:SetEnabledState(self.db.profile.enabled)
@@ -65,6 +89,11 @@ function Nameplates:OnInitialize()
 	self.plateFrames = setmetatable({}, { __mode = "k" })
 	self.castMode = {}
 	self.castEventsOn = false
+	self.hookedUnitFrames = setmetatable({}, { __mode = "k" })
+	self.ownedUnitFrames = setmetatable({}, { __mode = "k" })
+	self.alphaResets = 0
+	self.alphaBoolResets = 0
+	self.debuffContainersInCombat = 0
 end
 
 function Nameplates:OnEnable()
@@ -81,7 +110,7 @@ function Nameplates:OnEnable()
 	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs)
 
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-		local unit = plate.namePlateUnitToken
+		local unit = plate.unitToken
 		if unit then
 			self.units[unit] = true
 			self:StyleUnit(unit)
@@ -97,6 +126,7 @@ function Nameplates:OnDisable()
 	end
 	for _, plate in pairs(self.unitPlates) do
 		if plate.UnitFrame then
+			self.ownedUnitFrames[plate.UnitFrame] = nil
 			plate.UnitFrame:SetAlpha(1)
 		end
 	end
@@ -186,8 +216,8 @@ end
 
 function Nameplates:OnUnitAura(_, unit)
 	local frame = self:GetCastFrame(unit)
-	if frame then
-		self:UpdateDebuffs(unit, frame)
+	if frame and frame.debuffs then
+		frame.debuffs:UpdateAllAuras()
 	end
 end
 
@@ -212,8 +242,18 @@ function Nameplates:StyleUnit(unit)
 		self.plateFrames[plate] = frame
 	end
 
-	if plate.UnitFrame then
-		plate.UnitFrame:SetAlpha(0)
+	local unitFrame = plate.UnitFrame
+	if unitFrame then
+		if not self.hookedUnitFrames[unitFrame] then
+			hooksecurefunc(unitFrame, "SetAlpha", OnUnitFrameSetAlpha)
+			if type(unitFrame.SetAlphaFromBoolean) == "function" then
+				hooksecurefunc(unitFrame, "SetAlphaFromBoolean", OnUnitFrameSetAlphaFromBoolean)
+			end
+			self.hookedUnitFrames[unitFrame] = true
+		end
+		self.ownedUnitFrames[unitFrame] = nil
+		unitFrame:SetAlpha(0)
+		self.ownedUnitFrames[unitFrame] = true
 	end
 
 	self:ApplySize(frame)
@@ -251,6 +291,7 @@ function Nameplates:UnstyleUnit(unit)
 	end
 
 	if plate.UnitFrame then
+		self.ownedUnitFrames[plate.UnitFrame] = nil
 		plate.UnitFrame:SetAlpha(1)
 	end
 
@@ -259,6 +300,20 @@ function Nameplates:UnstyleUnit(unit)
 		frame:Hide()
 		frame.castBar:Hide()
 	end
+end
+
+local function CreateDebuffContainer(frame, profile)
+	local debuffs = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+	debuffs:Hide()
+	debuffs:AddAuraGroup(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL", {
+		maxFrameCount = profile.debuffMax,
+		layout = {
+			elementWidth = profile.debuffSize,
+			elementHeight = profile.debuffSize,
+			elementSpacing = DEBUFF_SPACING,
+		},
+	})
+	return debuffs
 end
 
 function Nameplates:CreateStyledFrame(plate)
@@ -333,7 +388,16 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.castBar = castBar
 	frame.castText = castText
 	frame.castShield = castShield
-	frame.debuffIcons = {}
+
+	local ok, debuffs = pcall(CreateDebuffContainer, frame, self.db.profile)
+	if ok then
+		frame.debuffs = debuffs
+		if InCombatLockdown() then
+			self.debuffContainersInCombat = self.debuffContainersInCombat + 1
+		end
+	elseif self.debuffContainerError == nil then
+		self.debuffContainerError = debuffs
+	end
 
 	return frame
 end
@@ -395,45 +459,16 @@ function Nameplates:UpdatePower(unit, frame)
 	frame.powerBar:Show()
 end
 
-function Nameplates:GetDebuffIcon(frame, i)
-	local icon = frame.debuffIcons[i]
-	if not icon then
-		icon = CreateFrame("Frame", nil, frame)
-
-		local texture = icon:CreateTexture(nil, "ARTWORK")
-		texture:SetAllPoints(icon)
-		icon.texture = texture
-
-		local cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
-		cooldown:SetAllPoints(icon)
-		icon.cooldown = cooldown
-
-		local countOverlay = CreateFrame("Frame", nil, icon)
-		countOverlay:SetAllPoints(icon)
-		countOverlay:SetFrameLevel(cooldown:GetFrameLevel() + 1)
-
-		local count = countOverlay:CreateFontString(nil, "OVERLAY")
-		count:SetPoint("BOTTOMRIGHT", icon)
-		count:SetFont(FONT, DEBUFF_COUNT_SIZE, "OUTLINE")
-		icon.count = count
-
-		frame.debuffIcons[i] = icon
-	end
-	return icon
-end
-
 function Nameplates:UpdateDebuffs(unit, frame)
-	local profile = self.db.profile
-	if not profile.debuffs or C_Secrets.ShouldAurasBeSecret() then
-		for _, icon in pairs(frame.debuffIcons) do
-			icon:Hide()
-		end
+	local debuffs = frame.debuffs
+	if not debuffs then
 		return
 	end
-
-	local filter = profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL"
-	local auras = C_UnitAuras.GetUnitAuras(unit, filter, profile.debuffMax)
-	local n = math.min(#auras, profile.debuffMax)
+	local profile = self.db.profile
+	if not profile.debuffs then
+		debuffs:Hide()
+		return
+	end
 
 	local anchor = profile.debuffAnchor
 	local relativeTo = frame
@@ -449,31 +484,19 @@ function Nameplates:UpdateDebuffs(unit, frame)
 		relativeTo = frame.nameText
 	end
 
-	for i = 1, n do
-		local aura = auras[i]
-		local icon = self:GetDebuffIcon(frame, i)
-		icon:SetSize(profile.debuffSize, profile.debuffSize)
-
-		local point, relPoint, x, y = NameplateLogic.DebuffLayout(anchor, i, n, profile.debuffSize, DEBUFF_SPACING)
-		icon:ClearAllPoints()
-		icon:SetPoint(point, relativeTo, relPoint, x, y)
-
-		icon.texture:SetTexture(aura.icon)
-
-		local duration = C_UnitAuras.GetAuraDuration(unit, aura.auraInstanceID)
-		if issecretvalue(duration) or duration then
-			icon.cooldown:SetCooldownFromDurationObject(duration, true)
-		else
-			icon.cooldown:Clear()
-		end
-
-		icon.count:SetText(C_UnitAuras.GetAuraApplicationDisplayCount(unit, aura.auraInstanceID))
-		icon:Show()
-	end
-
-	for i = n + 1, #frame.debuffIcons do
-		frame.debuffIcons[i]:Hide()
-	end
+	local point, relPoint, x, y = NameplateLogic.DebuffLayout(anchor, 1, 1, profile.debuffSize, DEBUFF_SPACING)
+	debuffs:ClearAllPoints()
+	debuffs:SetPoint(point, relativeTo, relPoint, x, y)
+	debuffs:SetAuraGroupFilterString(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL")
+	debuffs:SetAuraGroupMaxFrameCount(DEBUFF_GROUP, profile.debuffMax)
+	debuffs:SetAuraGroupLayout(DEBUFF_GROUP, {
+		elementWidth = profile.debuffSize,
+		elementHeight = profile.debuffSize,
+		elementSpacing = DEBUFF_SPACING,
+	})
+	debuffs:SetUnit(unit)
+	debuffs:UpdateAllAuras()
+	debuffs:Show()
 end
 
 function Nameplates:UpdateName(unit, frame)
@@ -1014,7 +1037,7 @@ function Nameplates:GetDebugChecks()
 				local total = 0
 
 				for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-					local unit = plate.namePlateUnitToken
+					local unit = plate.unitToken
 					if unit then
 						total = total + 1
 						local canAttack = UnitCanAttack("player", unit)
@@ -1032,6 +1055,30 @@ function Nameplates:GetDebugChecks()
 				end
 
 				return (mismatches == 0) and "PASS" or "FAIL", mismatches, unknown, total
+			end,
+		},
+		{
+			name = "plate tokens",
+			run = function()
+				local plates, resolved, frameUnit, forbidden = 0, 0, 0, 0
+				for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+					if plate:IsForbidden() then
+						forbidden = forbidden + 1
+					else
+						plates = plates + 1
+						local unit = plate.unitToken
+						if unit and C_NamePlate.GetNamePlateForUnit(unit) == plate then
+							resolved = resolved + 1
+						end
+						if plate.UnitFrame and plate.UnitFrame.unit then
+							frameUnit = frameUnit + 1
+						end
+					end
+				end
+				if plates == 0 then
+					return "SKIP", "no plates"
+				end
+				return (resolved == plates) and "PASS" or "FAIL", plates, resolved, frameUnit, forbidden
 			end,
 		},
 		{
@@ -1064,11 +1111,57 @@ function Nameplates:GetDebugChecks()
 
 				local alpha = plate.UnitFrame:GetAlpha()
 				if issecretvalue(alpha) then
-					return (ok and "PASS" or "FAIL"), width, height, nameSize, "alpha secret"
+					return (ok and "PASS" or "FAIL"),
+						width,
+						height,
+						nameSize,
+						"alpha secret",
+						self.hookedUnitFrames[plate.UnitFrame] == true,
+						self.ownedUnitFrames[plate.UnitFrame] == true,
+						self.alphaResets,
+						self.alphaBoolResets
 				end
 
 				ok = ok and alpha == 0
-				return ok and "PASS" or "FAIL", width, height, nameSize, alpha
+				return ok and "PASS" or "FAIL",
+					width,
+					height,
+					nameSize,
+					alpha,
+					self.hookedUnitFrames[plate.UnitFrame] == true,
+					self.ownedUnitFrames[plate.UnitFrame] == true,
+					self.alphaResets,
+					self.alphaBoolResets
+			end,
+		},
+		{
+			name = "blizzard auras",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local unitFrame = plate.UnitFrame
+				local auras = unitFrame and unitFrame.AurasFrame
+				if not auras then
+					return "SKIP", "no AurasFrame"
+				end
+
+				local isChild = auras:GetParent() == unitFrame
+				local visible = auras:IsVisible()
+				local alpha = auras:GetEffectiveAlpha()
+				if issecretvalue(alpha) or issecretvalue(visible) then
+					return "INFO", isChild, "secret"
+				end
+				return (alpha == 0 or not visible) and "PASS" or "FAIL", isChild, alpha, visible
 			end,
 		},
 		{
@@ -1199,7 +1292,7 @@ function Nameplates:GetDebugChecks()
 
 				local unit = "target"
 				local plate = C_NamePlate.GetNamePlateForUnit("target")
-				local token = plate and plate.namePlateUnitToken
+				local token = plate and plate.unitToken
 				local mode = token and self.castMode[token]
 
 				if mode == "cast" then
@@ -1314,14 +1407,13 @@ function Nameplates:GetDebugChecks()
 				if not self.db.profile.debuffs then
 					return "SKIP", "debuffs off"
 				end
-
-				local profile = self.db.profile
-				local shown = 0
-				for _, icon in pairs(frame.debuffIcons) do
-					if icon:IsShown() then
-						shown = shown + 1
-					end
+				if not frame.debuffs then
+					return "FAIL", "no container", self.debuffContainerError
 				end
+
+				local debuffs = frame.debuffs
+				local profile = self.db.profile
+				local shown = debuffs:IsShown() == true
 
 				local anchor = profile.debuffAnchor
 				local relativeTo = frame
@@ -1337,38 +1429,24 @@ function Nameplates:GetDebugChecks()
 					relativeTo = frame.nameText
 				end
 
-				local n = shown
-				local ok = shown <= profile.debuffMax
+				local ok = shown
 				local pointsRestricted = false
-				for i = 1, shown do
-					local icon = frame.debuffIcons[i]
-					if not icon or not icon:IsShown() then
+				local ptOk, point, relTo, relPoint, x, y = readPoint(debuffs)
+				if not ptOk then
+					pointsRestricted = true
+				else
+					local expPoint, expRelPoint, expX, expY =
+						NameplateLogic.DebuffLayout(anchor, 1, 1, profile.debuffSize, DEBUFF_SPACING)
+					if
+						point ~= expPoint
+						or relTo ~= relativeTo
+						or relPoint ~= expRelPoint
+						or issecretvalue(x)
+						or issecretvalue(y)
+						or math.abs(x - expX) > 0.5
+						or math.abs(y - expY) > 0.5
+					then
 						ok = false
-						break
-					end
-					if math.abs(icon:GetWidth() - profile.debuffSize) > 0.5 then
-						ok = false
-						break
-					end
-
-					local ptOk, point, relTo, relPoint, x, y = readPoint(icon)
-					if not ptOk then
-						pointsRestricted = true
-					else
-						local expPoint, expRelPoint, expX, expY =
-							NameplateLogic.DebuffLayout(anchor, i, n, profile.debuffSize, DEBUFF_SPACING)
-						if
-							point ~= expPoint
-							or relTo ~= relativeTo
-							or relPoint ~= expRelPoint
-							or issecretvalue(x)
-							or issecretvalue(y)
-							or math.abs(x - expX) > 0.5
-							or math.abs(y - expY) > 0.5
-						then
-							ok = false
-							break
-						end
 					end
 				end
 
@@ -1384,6 +1462,77 @@ function Nameplates:GetDebugChecks()
 					return ok and "PASS" or "FAIL", shown, mineCount, allCount, "points restricted"
 				end
 				return ok and "PASS" or "FAIL", shown, mineCount, allCount
+			end,
+		},
+		{
+			name = "debuff icons",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				if not self.db.profile.debuffs then
+					return "SKIP", "debuffs off"
+				end
+				if not frame.debuffs then
+					return "SKIP", "no container"
+				end
+
+				local debuffs = frame.debuffs
+				local size = self.db.profile.debuffSize
+				local count, mismatched, secretSize, forbidden, secretShown = 0, 0, 0, 0, 0
+				local width, height
+				for _, child in ipairs({ debuffs:GetChildren() }) do
+					if child:IsForbidden() then
+						forbidden = forbidden + 1
+					elseif child:IsObjectType("Button") then
+						local shown = child:IsShown()
+						if issecretvalue(shown) then
+							secretShown = secretShown + 1
+						elseif shown == true then
+							count = count + 1
+							local w, h = child:GetSize()
+							if issecretvalue(w) or issecretvalue(h) then
+								secretSize = secretSize + 1
+							else
+								width, height = width or w, height or h
+								if math.abs(w - size) > 0.5 or math.abs(h - size) > 0.5 then
+									mismatched = mismatched + 1
+								end
+							end
+						end
+					end
+				end
+
+				local protected = debuffs:IsProtected()
+				if count == 0 then
+					return "INFO",
+						0,
+						debuffs:GetWidth(),
+						protected,
+						forbidden,
+						secretShown,
+						self.debuffContainersInCombat
+				end
+
+				local ok = count <= self.db.profile.debuffMax and mismatched == 0
+				return ok and "PASS" or "FAIL",
+					count,
+					width,
+					height,
+					debuffs:GetWidth(),
+					protected,
+					forbidden,
+					secretSize,
+					secretShown,
+					self.debuffContainersInCombat
 			end,
 		},
 		{

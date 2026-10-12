@@ -43,6 +43,7 @@ function RangeText:OnInitialize()
 	local fsOut = frame:CreateFontString(nil, "OVERLAY")
 	fsOut:SetPoint("CENTER")
 	self.fsOut = fsOut
+	self.fontProbe = frame:CreateFontString()
 
 	ns.Mover:Register(frame, "Range", function()
 		return self.db.profile.position
@@ -209,7 +210,9 @@ function RangeText:GetOptions()
 				order = 3,
 				dialogControl = "LSM30_Font",
 				values = function()
-					return FontLogic.Values(LSM:HashTable("font"))
+					return FontLogic.Values(LSM:HashTable("font"), function(path)
+						return self.fontProbe:SetFont(path, 12, "")
+					end, self.db.profile.font)
 				end,
 				get = function()
 					return self.db.profile.font

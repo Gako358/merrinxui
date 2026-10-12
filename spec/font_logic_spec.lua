@@ -28,6 +28,36 @@ describe("FontLogic", function()
 		assert.are.same({}, L.Values(nil))
 	end)
 
+	it("hides a font whose path the usability predicate rejects", function()
+		assert.are.same(
+			{
+				["Friz Quadrata TT"] = "Friz Quadrata TT",
+				["Arial Narrow"] = "Arial Narrow",
+			},
+			L.Values(H, function(path)
+				return path ~= "Fonts\\MORPHEUS_CYR.TTF"
+			end)
+		)
+	end)
+
+	it("keeps the stored key even when the predicate rejects every path", function()
+		assert.are.same(
+			{ Morpheus = "Morpheus" },
+			L.Values(H, function()
+				return false
+			end, "Morpheus")
+		)
+	end)
+
+	it("does not add a kept key that isn't present in the hash", function()
+		assert.are.same(
+			{},
+			L.Values(H, function()
+				return false
+			end, "Expressway")
+		)
+	end)
+
 	it("recognizes a path by a slash or backslash", function()
 		assert.is_true(L.IsPath("Fonts\\FRIZQT__.TTF"))
 		assert.is_true(L.IsPath("Interface/AddOns/X/f.ttf"))

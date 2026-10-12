@@ -12,13 +12,15 @@ function FontLogic.IsPath(value)
 	return value:find("[\\/]") ~= nil
 end
 
-function FontLogic.Values(hash)
+function FontLogic.Values(hash, isUsable, keep)
 	local values = {}
 	if hash == nil then
 		return values
 	end
-	for key in pairs(hash) do
-		values[key] = key
+	for key, path in pairs(hash) do
+		if isUsable == nil or key == keep or isUsable(path) then
+			values[key] = key
+		end
 	end
 	return values
 end

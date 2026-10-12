@@ -61,7 +61,7 @@ end
 
 function EnemyCooldowns:RescanPlates()
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-		self:HandleUnit(plate.namePlateUnitToken)
+		self:HandleUnit(plate.unitToken)
 	end
 end
 
