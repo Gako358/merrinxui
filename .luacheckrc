@@ -53,6 +53,7 @@ read_globals = {
 	"UnitPowerType",
 	"AbbreviateNumbers",
 	"C_UnitAuras",
+	"C_Secrets",
 	"date",
 	"GetLocale",
 	"C_AddOns",

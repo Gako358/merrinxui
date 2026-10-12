@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.12.0
+## Version: 0.14.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -13,6 +13,7 @@ Util\Mover.lua
 Util\CombatQueue.lua
 Util\Combat.lua
 Util\Hider.lua
+Util\FontLogic.lua
 Options\Theme.lua
 Options\OptionsLogic.lua
 Options\OptionsWindow.lua

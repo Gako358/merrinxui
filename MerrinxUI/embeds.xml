@@ -9,4 +9,5 @@
 	<Include file="Libs\AceGUI-3.0\AceGUI-3.0.xml"/>
 	<Include file="Libs\AceConfig-3.0\AceConfig-3.0.xml"/>
 	<Script file="Libs\LibRangeCheck-3.0\LibRangeCheck-3.0.lua"/>
+	<Script file="Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua"/>
 </Ui>

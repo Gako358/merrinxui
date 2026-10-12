@@ -405,4 +405,24 @@ describe("Theme", function()
 		assert.is_true(g.sidebar + 3 * g.pad + g.control < g.width)
 		assert.is_true(g.header + g.footer + 4 * g.row < g.height)
 	end)
+
+	it("uses one light-blue accent for title, active bar, switch and fill", function()
+		local accent = Theme.color.accent
+		local switchOn = Theme.color.switchOn
+		local fill = Theme.color.fill
+
+		assert.are.equal(1, accent[4])
+		assert.is_true(accent[3] >= 0.9)
+		assert.is_true(accent[3] > accent[2])
+		assert.is_true(accent[2] > accent[1])
+
+		for i = 1, 3 do
+			assert.are.equal(accent[i], switchOn[i])
+			assert.are.equal(accent[i], fill[i])
+		end
+		assert.are.equal(0.75, switchOn[4])
+		assert.are.equal(0.75, fill[4])
+
+		assert.are_not.same({ 0.047, 0.824, 0.616, 1 }, accent)
+	end)
 end)

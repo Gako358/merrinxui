@@ -424,7 +424,7 @@ end
 
 function Nameplates:UpdateDebuffs(unit, frame)
 	local profile = self.db.profile
-	if not profile.debuffs then
+	if not profile.debuffs or C_Secrets.ShouldAurasBeSecret() then
 		for _, icon in pairs(frame.debuffIcons) do
 			icon:Hide()
 		end
@@ -972,6 +972,7 @@ function Nameplates:GetDebugChecks()
 					"C_UnitAuras.GetUnitAuras",
 					"C_UnitAuras.GetAuraDuration",
 					"C_UnitAuras.GetAuraApplicationDisplayCount",
+					"C_Secrets.ShouldAurasBeSecret",
 					"UnitHealthPercent",
 					"UnitPowerPercent",
 					"CurveConstants.ScaleTo100",
@@ -1371,13 +1372,18 @@ function Nameplates:GetDebugChecks()
 					end
 				end
 
-				local mine = C_UnitAuras.GetUnitAuras("target", "HARMFUL|PLAYER")
-				local all = C_UnitAuras.GetUnitAuras("target", "HARMFUL")
+				local mineCount, allCount = "auras secret", "auras secret"
+				if not C_Secrets.ShouldAurasBeSecret() then
+					local mine = C_UnitAuras.GetUnitAuras("target", "HARMFUL|PLAYER")
+					local all = C_UnitAuras.GetUnitAuras("target", "HARMFUL")
+					mineCount = mine and #mine or 0
+					allCount = all and #all or 0
+				end
 
 				if pointsRestricted then
-					return ok and "PASS" or "FAIL", shown, mine and #mine or 0, all and #all or 0, "points restricted"
+					return ok and "PASS" or "FAIL", shown, mineCount, allCount, "points restricted"
 				end
-				return ok and "PASS" or "FAIL", shown, mine and #mine or 0, all and #all or 0
+				return ok and "PASS" or "FAIL", shown, mineCount, allCount
 			end,
 		},
 		{
@@ -1399,24 +1405,30 @@ function Nameplates:GetDebugChecks()
 				local isTarget = UnitIsUnit(unit, "target")
 				local canAttack = UnitCanAttack("player", unit)
 
-				local mine = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
-				local mineAura = mine and mine[1]
+				local aurasSecret = C_Secrets.ShouldAurasBeSecret()
+				local mineAura, allAura = nil, nil
 				local mineIconSecret, mineDurationSecret, mineCountSecret = false, false, false
-				if mineAura then
-					mineIconSecret = issecretvalue(mineAura.icon)
-					mineDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, mineAura.auraInstanceID))
-					mineCountSecret =
-						issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, mineAura.auraInstanceID))
+				local allIconSecret, allDurationSecret, allCountSecret = false, false, false
+				if not aurasSecret then
+					local mine = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
+					mineAura = mine and mine[1]
+					if mineAura then
+						mineIconSecret = issecretvalue(mineAura.icon)
+						mineDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, mineAura.auraInstanceID))
+						mineCountSecret =
+							issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, mineAura.auraInstanceID))
+					end
 				end
 
-				local all = C_UnitAuras.GetUnitAuras(unit, "HARMFUL")
-				local allAura = all and all[1]
-				local allIconSecret, allDurationSecret, allCountSecret = false, false, false
-				if allAura then
-					allIconSecret = issecretvalue(allAura.icon)
-					allDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, allAura.auraInstanceID))
-					allCountSecret =
-						issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, allAura.auraInstanceID))
+				if not aurasSecret then
+					local all = C_UnitAuras.GetUnitAuras(unit, "HARMFUL")
+					allAura = all and all[1]
+					if allAura then
+						allIconSecret = issecretvalue(allAura.icon)
+						allDurationSecret = issecretvalue(C_UnitAuras.GetAuraDuration(unit, allAura.auraInstanceID))
+						allCountSecret =
+							issecretvalue(C_UnitAuras.GetAuraApplicationDisplayCount(unit, allAura.auraInstanceID))
+					end
 				end
 
 				return "INFO",
@@ -1437,7 +1449,8 @@ function Nameplates:GetDebugChecks()
 					allAura ~= nil,
 					allIconSecret,
 					allDurationSecret,
-					allCountSecret
+					allCountSecret,
+					aurasSecret
 			end,
 		},
 	}

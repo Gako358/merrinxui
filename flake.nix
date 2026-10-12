@@ -19,6 +19,11 @@
       url = "github:WeakAuras/LibRangeCheck-3.0";
       flake = false;
     };
+
+    libsharedmedia = {
+      url = "file+https://repos.curseforge.com/wow/libsharedmedia-3-0/!svn/bc/182/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua";
+      flake = false;
+    };
   };
 
   outputs =
@@ -58,6 +63,10 @@
 
             cp -r ${inputs.librangecheck}/LibRangeCheck-3.0 $out/LibRangeCheck-3.0
             cp ${inputs.librangecheck}/LICENSE $out/LibRangeCheck-3.0-LICENSE.txt
+
+            mkdir -p $out/LibSharedMedia-3.0
+            cp ${inputs.libsharedmedia} $out/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
+            cp ${pkgs.spdx-license-list-data.text}/text/LGPL-2.1-only.txt $out/LibSharedMedia-3.0-LICENSE.txt
           '';
 
           merrinxui = pkgs.runCommand "merrinxui" { } ''

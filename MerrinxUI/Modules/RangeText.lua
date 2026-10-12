@@ -1,6 +1,8 @@
 local addonName, ns = ...
 
 local RangeTextLogic = ns.RangeTextLogic
+local FontLogic = ns.FontLogic
+local LSM = LibStub("LibSharedMedia-3.0")
 
 local RangeText = ns.addon:NewModule("RangeText", "AceEvent-3.0")
 
@@ -15,7 +17,7 @@ local defaults = {
 	profile = {
 		enabled = true,
 		spell = "",
-		font = "Fonts\\FRIZQT__.TTF",
+		font = FontLogic.DEFAULT,
 		fontSize = 18,
 		outline = "OUTLINE",
 		position = { point = "CENTER", x = 0, y = -150 },
@@ -26,6 +28,7 @@ local UPDATE_INTERVAL = 0.1
 
 function RangeText:OnInitialize()
 	self.db = ns.addon.db:RegisterNamespace("RangeText", defaults)
+	self:MigrateFont()
 	self:SetEnabledState(self.db.profile.enabled)
 
 	local frame = CreateFrame("Frame", addonName .. "RangeText", UIParent)
@@ -58,35 +61,51 @@ end
 function RangeText:OnEnable()
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "Update")
 	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "Update")
+	LSM.RegisterCallback(self, "LibSharedMedia_Registered", "OnMediaRegistered")
 	self:ApplyFont()
 	ns.Mover:Apply(self.frame)
 	self:Update()
 end
 
 function RangeText:OnDisable()
+	LSM.UnregisterCallback(self, "LibSharedMedia_Registered")
 	self.frame:Hide()
+end
+
+function RangeText:MigrateFont()
+	self.db.profile.font = FontLogic.Migrate(self.db.profile.font, LSM:HashTable("font"), FontLogic.DEFAULT)
+end
+
+function RangeText:OnMediaRegistered(_, mediatype, key)
+	if mediatype == "font" and key == self.db.profile.font then
+		self:ApplyFont()
+	end
 end
 
 function RangeText:ApplyFont()
 	local profile = self.db.profile
-	local ok = self.fsMain:SetFont(profile.font, profile.fontSize, profile.outline)
-	if ok then
-		self.fsOut:SetFont(profile.font, profile.fontSize, profile.outline)
-		self.lastGoodFont = profile.font
+	local path = LSM:Fetch("font", profile.font, true)
+	if path and self.fsMain:SetFont(path, profile.fontSize, profile.outline) then
+		self.fsOut:SetFont(path, profile.fontSize, profile.outline)
+		self.lastGoodFont = path
 		self.reportedBadFont = nil
 		return
 	end
 
-	local fallback = self.lastGoodFont or defaults.profile.font
+	local fallback = self.lastGoodFont or LSM:Fetch("font", FontLogic.DEFAULT)
 	self.fsMain:SetFont(fallback, profile.fontSize, profile.outline)
 	self.fsOut:SetFont(fallback, profile.fontSize, profile.outline)
+	self.lastGoodFont = fallback
 	if self.reportedBadFont ~= profile.font then
 		self.reportedBadFont = profile.font
-		ns.addon:Print("RangeText: invalid font path '" .. tostring(profile.font) .. "', falling back to " .. fallback)
+		ns.addon:Print(
+			"RangeText: font '" .. tostring(profile.font) .. "' is unavailable, falling back to " .. tostring(fallback)
+		)
 	end
 end
 
 function RangeText:Refresh()
+	self:MigrateFont()
 	if self.db.profile.enabled then
 		self:Enable()
 		self:ApplyFont()
@@ -185,9 +204,13 @@ function RangeText:GetOptions()
 				end,
 			},
 			font = {
-				type = "input",
+				type = "select",
 				name = "Font",
 				order = 3,
+				dialogControl = "LSM30_Font",
+				values = function()
+					return FontLogic.Values(LSM:HashTable("font"))
+				end,
 				get = function()
 					return self.db.profile.font
 				end,
@@ -256,13 +279,15 @@ function RangeText:GetDebugChecks()
 				end
 
 				local profile = self.db.profile
+				local expected = LSM:Fetch("font", profile.font, true)
 				local _, size, flags = self.fsMain:GetFont()
 				flags = flags or ""
 
-				local ok = self.lastGoodFont == profile.font
+				local ok = expected ~= nil
+					and self.lastGoodFont == expected
 					and math.floor(size + 0.5) == profile.fontSize
 					and flags == profile.outline
-				return ok and "PASS" or "FAIL", self.lastGoodFont, size, flags
+				return ok and "PASS" or "FAIL", profile.font, self.lastGoodFont, size, flags
 			end,
 		},
 		{

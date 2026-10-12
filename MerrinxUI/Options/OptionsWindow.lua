@@ -2,6 +2,7 @@ local addonName, ns = ...
 
 local L = ns.OptionsLogic
 local Theme = ns.Theme
+local LSM = LibStub("LibSharedMedia-3.0")
 local appName = "MerrinxUI"
 local OPTIONS_UI_NAME = "MerrinxUI-1.0"
 
@@ -33,6 +34,7 @@ local renderScheduled = false
 local escVariant = "none"
 local fontUsed
 local configCallbackRegistered = false
+local previewFailed = {}
 
 local function isRenderBlocked()
 	return next(renderBlockers) ~= nil
@@ -56,6 +58,19 @@ local function setFont(fs, size, flags)
 		fs:SetFont("Fonts\\FRIZQT__.TTF", size, flags)
 		fontUsed = "Fonts\\FRIZQT__.TTF"
 	end
+end
+
+local function isFontSelect(path)
+	return L.Member(root, path, "dialogControl") == "LSM30_Font"
+end
+
+local function setPreviewFont(fs, key)
+	local path = LSM:Fetch("font", key, true)
+	if path and fs:SetFont(path, Theme.size.value, "") then
+		return
+	end
+	previewFailed[key] = true
+	setFont(fs, Theme.size.value)
 end
 
 -- RegisterGameMenuEscHandler from addon code taints the Esc chain.
@@ -669,6 +684,12 @@ local function configureSelect(row, path)
 		row.button.text:SetText("")
 	end
 
+	if okGet and type(current) == "string" and isFontSelect(path) then
+		setPreviewFont(row.button.text, current)
+	else
+		setFont(row.button.text, Theme.size.value)
+	end
+
 	row.onOpen = function()
 		openDropdown(row.button, path, values)
 	end
@@ -832,11 +853,18 @@ function openDropdown(anchor, path, values)
 	dropdownChild:SetSize(Theme.geometry.control, math.max(count, 1) * Theme.geometry.dropItem)
 	dropdownScroll:SetVerticalScroll(0)
 
+	local fontList = isFontSelect(path)
+
 	for i, key in ipairs(keys) do
 		local item = pools.dropItem.acquire()
 		item:SetSize(Theme.geometry.control, Theme.geometry.dropItem)
 		item:ClearAllPoints()
 		item:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -(i - 1) * Theme.geometry.dropItem)
+		if fontList then
+			setPreviewFont(item.text, key)
+		else
+			setFont(item.text, Theme.size.value)
+		end
 		item.text:SetText(displayLabel(values[key]))
 		item.onClick = function()
 			closeDropdown()
@@ -1319,6 +1347,17 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 					return "PASS"
 				end
 				return "INFO", "fallback", fontUsed
+			end,
+		},
+		{
+			name = "font preview",
+			run = function()
+				local failed = {}
+				for key in pairs(previewFailed) do
+					failed[#failed + 1] = key
+				end
+				table.sort(failed)
+				return "INFO", #failed, unpack(failed, 1, #failed)
 			end,
 		},
 		{

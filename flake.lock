@@ -87,6 +87,18 @@
         "type": "github"
       }
     },
+    "libsharedmedia": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-4jw8Nk/U1dFLF1O45pdq5lqWhZo8w0xoKzh1MXvzakI=",
+        "type": "file",
+        "url": "https://repos.curseforge.com/wow/libsharedmedia-3-0/%21svn/bc/182/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://repos.curseforge.com/wow/libsharedmedia-3-0/%21svn/bc/182/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1791487292,
@@ -124,6 +136,7 @@
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
         "librangecheck": "librangecheck",
+        "libsharedmedia": "libsharedmedia",
         "nixpkgs": "nixpkgs"
       }
     }

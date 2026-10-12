@@ -247,6 +247,7 @@ function Debug:GetDebugChecks()
 					"AceConfigDialog-3.0",
 					"AceConfigCmd-3.0",
 					"LibRangeCheck-3.0",
+					"LibSharedMedia-3.0",
 				}
 				local missing = {}
 				local count = 0
