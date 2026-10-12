@@ -74,6 +74,7 @@ read_globals = {
 	"C_PetBattles",
 	"C_DamageMeter",
 	"CLASS_ICON_TCOORDS",
+	"MenuUtil",
 }
 
 files["spec"] = {

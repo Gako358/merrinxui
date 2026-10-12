@@ -24,24 +24,34 @@ local defaults = {
 local HEADER_HEIGHT = 22
 local ROW_SPACING = 2
 
-local function sessionLabel(session)
+local function sessionIndicator(hasSegment, session)
+	if hasSegment then
+		return "S"
+	end
 	if session == "Current" then
 		return "C"
 	end
 	return "O"
 end
 
-local function metricLabel(metric)
-	if metric == "DamageDone" then
-		return "D"
+local function segmentExpired(segmentID)
+	local readable = false
+	for _, entry in ipairs(C_DamageMeter.GetAvailableCombatSessions() or {}) do
+		if not issecretvalue(entry.sessionID) then
+			if entry.sessionID == segmentID then
+				return false
+			end
+			readable = true
+		end
 	end
-	return "H"
+	return readable
 end
 
 function DamageMeter:OnInitialize()
 	self.db = ns.addon.db:RegisterNamespace("DamageMeter", defaults)
 	self:SetEnabledState(self.db.profile.enabled)
 	self.rows = {}
+	self.types = L.TypeList(Enum.DamageMeterType)
 
 	local frame = CreateFrame("Frame", "MerrinxUIDamageMeter", UIParent)
 	frame:Hide()
@@ -66,7 +76,6 @@ function DamageMeter:OnInitialize()
 	local title = header:CreateFontString(nil, "OVERLAY")
 	title:SetFont(FONT, 11, "")
 	title:SetTextColor(Accent[1], Accent[2], Accent[3], Accent[4])
-	title:SetPoint("LEFT", header, "LEFT", 4, 0)
 	self.title = title
 
 	local function makeButton(text)
@@ -96,25 +105,24 @@ function DamageMeter:OnInitialize()
 		self:Redraw()
 	end)
 
-	local metricButton = makeButton(metricLabel(self.db.profile.metric))
-	metricButton:SetPoint("RIGHT", resetButton, "LEFT", 0, 0)
-	metricButton:SetScript("OnClick", function()
-		local profile = self.db.profile
-		profile.metric = L.Toggle(profile.metric, "DamageDone", "HealingDone")
-		ns.Debug:Log("DamageMeter", "metric", profile.metric)
-		self:Redraw()
+	local typeButton = makeButton("T")
+	typeButton:SetPoint("RIGHT", resetButton, "LEFT", 0, 0)
+	typeButton:SetScript("OnClick", function()
+		self:OpenTypeMenu(typeButton)
 	end)
-	self.metricButton = metricButton
+	self.typeButton = typeButton
 
-	local sessionButton = makeButton(sessionLabel(self.db.profile.session))
-	sessionButton:SetPoint("RIGHT", metricButton, "LEFT", 0, 0)
+	local sessionButton = makeButton("C")
+	sessionButton:SetPoint("RIGHT", typeButton, "LEFT", 0, 0)
 	sessionButton:SetScript("OnClick", function()
-		local profile = self.db.profile
-		profile.session = L.Toggle(profile.session, "Current", "Overall")
-		ns.Debug:Log("DamageMeter", "session", profile.session)
-		self:Redraw()
+		self:OpenSessionMenu(sessionButton)
 	end)
 	self.sessionButton = sessionButton
+
+	title:SetPoint("LEFT", header, "LEFT", 4, 0)
+	title:SetPoint("RIGHT", sessionButton, "LEFT", -2, 0)
+	title:SetJustifyH("LEFT")
+	title:SetWordWrap(false)
 
 	ns.Mover:Register(frame, "Damage Meter", function()
 		return self.db.profile.position
@@ -128,7 +136,7 @@ function DamageMeter:OnEnable()
 
 	self:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED", "RequestRedraw")
 	self:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED", "RequestRedraw")
-	self:RegisterEvent("DAMAGE_METER_RESET", "RequestRedraw")
+	self:RegisterEvent("DAMAGE_METER_RESET", "OnMeterReset")
 
 	self:Layout()
 	ns.Mover:Apply(self.frame)
@@ -169,6 +177,132 @@ function DamageMeter:RequestRedraw()
 		if self:IsEnabled() then
 			self:Redraw()
 		end
+	end)
+end
+
+function DamageMeter:OnMeterReset()
+	if self.segmentID then
+		self.segmentID = nil
+		self.segmentLabel = nil
+		ns.Debug:Log("DamageMeter", "segment", "none")
+	end
+	self:RequestRedraw()
+end
+
+function DamageMeter:CurrentType()
+	return L.ResolveType(self.types, self.db.profile.metric, "DamageDone")
+end
+
+function DamageMeter:SessionLabel()
+	return self.segmentLabel or self.db.profile.session
+end
+
+function DamageMeter:ReadSession(typeKey)
+	local value = Enum.DamageMeterType[typeKey]
+	if value == nil then
+		return nil
+	end
+
+	if self.segmentID then
+		return C_DamageMeter.GetCombatSessionFromID(self.segmentID, value)
+	end
+
+	local sessionKey = L.EnumKey(Enum.DamageMeterSessionType, self.db.profile.session)
+	if sessionKey == nil then
+		return nil
+	end
+	return C_DamageMeter.GetCombatSessionFromType(sessionKey, value)
+end
+
+function DamageMeter:SelectType(key)
+	self.db.profile.metric = key
+	ns.Debug:Log("DamageMeter", "type", key)
+	self:Refresh()
+end
+
+function DamageMeter:SelectSession(s)
+	self.segmentID = nil
+	self.segmentLabel = nil
+	self.db.profile.session = s
+	ns.Debug:Log("DamageMeter", "session", s)
+	self:Refresh()
+end
+
+function DamageMeter:SelectSegment(id, label)
+	self.segmentID = id
+	self.segmentLabel = label
+	ns.Debug:Log("DamageMeter", "segment", id)
+	self:Refresh()
+end
+
+function DamageMeter:OpenTypeMenu(button)
+	MenuUtil.CreateContextMenu(button, function(_, root)
+		for _, group in ipairs(L.MenuGroups(self.types)) do
+			local sub = root:CreateButton(group.label)
+			for _, key in ipairs(group.keys) do
+				sub:CreateRadio(L.TypeLabel(key), function()
+					return self:CurrentType() == key
+				end, function()
+					self:SelectType(key)
+				end)
+			end
+		end
+	end)
+end
+
+function DamageMeter:OpenSessionMenu(button)
+	local raw = C_DamageMeter.GetAvailableCombatSessions() or {}
+	local mapped = {}
+	for _, entry in ipairs(raw) do
+		local sessionID
+		if issecretvalue(entry.sessionID) then
+			sessionID = nil
+		else
+			sessionID = entry.sessionID
+		end
+
+		local name
+		if issecretvalue(entry.name) then
+			name = nil
+		else
+			name = entry.name
+		end
+
+		local durationSeconds
+		if issecretvalue(entry.durationSeconds) then
+			durationSeconds = nil
+		else
+			durationSeconds = entry.durationSeconds
+		end
+
+		table.insert(mapped, { sessionID = sessionID, name = name, durationSeconds = durationSeconds })
+	end
+
+	local segments = L.Segments(mapped, 20)
+
+	MenuUtil.CreateContextMenu(button, function(_, root)
+		for _, segment in ipairs(segments) do
+			root:CreateRadio(segment.label, function()
+				return self.segmentID == segment.sessionID
+			end, function()
+				self:SelectSegment(segment.sessionID, segment.label)
+			end)
+		end
+
+		if #segments > 0 then
+			root:CreateDivider()
+		end
+
+		root:CreateRadio("Current", function()
+			return self.segmentID == nil and self.db.profile.session == "Current"
+		end, function()
+			self:SelectSession("Current")
+		end)
+		root:CreateRadio("Overall", function()
+			return self.segmentID == nil and self.db.profile.session == "Overall"
+		end, function()
+			self:SelectSession("Overall")
+		end)
 	end)
 end
 
@@ -237,35 +371,38 @@ function DamageMeter:Redraw()
 	end
 
 	local profile = self.db.profile
-	local sessionKey = L.EnumKey(Enum.DamageMeterSessionType, profile.session)
-	local metricKey = L.EnumKey(Enum.DamageMeterType, profile.metric)
-
-	local src
-	if sessionKey ~= nil and metricKey ~= nil then
-		local session = C_DamageMeter.GetCombatSessionFromType(sessionKey, metricKey)
-		src = session and session.combatSources or {}
-	else
-		src = {}
+	local t = self:CurrentType()
+	local session
+	if not (self.segmentID and segmentExpired(self.segmentID)) then
+		session = self:ReadSession(t)
 	end
+
+	if self.segmentID and session == nil then
+		self.segmentID = nil
+		self.segmentLabel = nil
+		ns.Debug:Log("DamageMeter", "segment", "none")
+		session = self:ReadSession(t)
+	end
+
+	local src = session and session.combatSources or {}
+	local kind = L.TypeKind(t)
+	local field = L.BarField(kind)
 
 	self.lastCount = #src
 	local n = L.VisibleRows(#src, profile.rows)
 
-	self.title:SetText(L.Title(profile.session, profile.metric))
-	self.metricButton.text:SetText(metricLabel(profile.metric))
-	self.sessionButton.text:SetText(sessionLabel(profile.session))
+	self.title:SetText(L.Title(self:SessionLabel(), t))
+	self.sessionButton.text:SetText(sessionIndicator(self.segmentID ~= nil, profile.session))
 
 	for i = 1, n do
 		local s = src[i]
 		local row = self:GetRow(i)
 		row:Show()
 
-		row.bar:SetMinMaxValues(0, src[1].totalAmount)
-		row.bar:SetValue(s.totalAmount)
+		row.bar:SetMinMaxValues(0, src[1][field])
+		row.bar:SetValue(s[field])
 
-		row.right:SetText(
-			string.format("%s (%s)", AbbreviateNumbers(s.totalAmount), AbbreviateNumbers(s.amountPerSecond))
-		)
+		row.right:SetText(L.ValueText(kind, s.totalAmount, s.amountPerSecond, AbbreviateNumbers))
 		if issecretvalue(s.name) then
 			row.left:SetText(s.name)
 		else
@@ -327,24 +464,25 @@ function DamageMeter:GetOptions()
 					return self.db.profile.session
 				end,
 				set = function(_, value)
-					self.db.profile.session = value
-					self:Refresh()
+					self:SelectSession(value)
 				end,
 			},
 			metric = {
 				type = "select",
-				name = "Metric",
+				name = "Meter type",
 				order = 3,
-				values = {
-					DamageDone = "Damage Done",
-					HealingDone = "Healing Done",
-				},
+				values = function()
+					local values = {}
+					for _, key in ipairs(self.types) do
+						values[key] = L.TypeLabel(key)
+					end
+					return values
+				end,
 				get = function()
-					return self.db.profile.metric
+					return self:CurrentType()
 				end,
 				set = function(_, value)
-					self.db.profile.metric = value
-					self:Refresh()
+					self:SelectType(value)
 				end,
 			},
 			rows = {
@@ -440,7 +578,10 @@ function DamageMeter:GetDebugChecks()
 				end
 
 				local cdm = type(C_DamageMeter) == "table" and C_DamageMeter or {}
+				local menuUtil = type(MenuUtil) == "table" and MenuUtil or {}
 				checkFn("C_DamageMeter.GetCombatSessionFromType", cdm.GetCombatSessionFromType)
+				checkFn("C_DamageMeter.GetAvailableCombatSessions", cdm.GetAvailableCombatSessions)
+				checkFn("C_DamageMeter.GetCombatSessionFromID", cdm.GetCombatSessionFromID)
 				checkFn("C_DamageMeter.ResetAllCombatSessions", cdm.ResetAllCombatSessions)
 				checkFn("C_DamageMeter.IsDamageMeterAvailable", cdm.IsDamageMeterAvailable)
 				checkTbl("Enum.DamageMeterSessionType", type(Enum) == "table" and Enum.DamageMeterSessionType)
@@ -448,6 +589,7 @@ function DamageMeter:GetDebugChecks()
 				checkFn("AbbreviateNumbers", AbbreviateNumbers)
 				checkTbl("CLASS_ICON_TCOORDS", CLASS_ICON_TCOORDS)
 				checkTbl("RAID_CLASS_COLORS", RAID_CLASS_COLORS)
+				checkFn("MenuUtil.CreateContextMenu", menuUtil.CreateContextMenu)
 
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
@@ -456,13 +598,108 @@ function DamageMeter:GetDebugChecks()
 			end,
 		},
 		{
-			name = "available",
+			name = "types",
 			run = function()
-				if type(C_DamageMeter) ~= "table" or type(C_DamageMeter.IsDamageMeterAvailable) ~= "function" then
-					return "INFO", "missing api"
+				local list = L.TypeList(Enum.DamageMeterType)
+				if #list == 0 then
+					return "FAIL", "no types"
 				end
-				local available, reason = C_DamageMeter.IsDamageMeterAvailable()
-				return "INFO", available, reason
+
+				local groups = L.MenuGroups(list)
+				local grouped, other = 0, 0
+				for _, group in ipairs(groups) do
+					if group.label == "Other" then
+						other = other + #group.keys
+					else
+						grouped = grouped + #group.keys
+					end
+				end
+
+				return "PASS", #list, grouped, other, table.concat(list, " ")
+			end,
+		},
+		{
+			name = "type",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local profile = self.db.profile
+				local stored = false
+				for _, key in ipairs(self.types) do
+					if key == profile.metric then
+						stored = true
+						break
+					end
+				end
+
+				if stored then
+					return "PASS", profile.metric, Enum.DamageMeterType[profile.metric], L.TypeKind(profile.metric)
+				end
+				return "INFO", "fallback", profile.metric, self:CurrentType()
+			end,
+		},
+		{
+			name = "type counts",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local parts = {}
+				for _, key in ipairs(self.types) do
+					local s = self:ReadSession(key)
+					local n = #(s and s.combatSources or {})
+					local text
+					if issecretvalue(n) then
+						text = "?"
+					else
+						text = tostring(n)
+					end
+					table.insert(parts, key .. "=" .. text)
+				end
+
+				return "INFO", table.concat(parts, " ")
+			end,
+		},
+		{
+			name = "segments",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local raw = C_DamageMeter.GetAvailableCombatSessions() or {}
+				local count = #raw
+				local secretNames = 0
+				for _, entry in ipairs(raw) do
+					if issecretvalue(entry.name) then
+						secretNames = secretNames + 1
+					end
+				end
+
+				local readable = false
+				local present = false
+				for _, entry in ipairs(raw) do
+					if not issecretvalue(entry.sessionID) then
+						readable = true
+						if entry.sessionID == self.segmentID then
+							present = true
+							break
+						end
+					end
+				end
+
+				if self.segmentID and not readable then
+					return "INFO", "secret", count, secretNames, self.segmentID
+				end
+
+				if self.segmentID and not present then
+					return "FAIL", "stale", self.segmentID, count
+				end
+
+				return "INFO", count, secretNames, self.segmentID or "none", present
 			end,
 		},
 		{
@@ -480,6 +717,16 @@ function DamageMeter:GetDebugChecks()
 
 				local ok = hb.forced.damageMeter == true and cvar == "0"
 				return ok and "PASS" or "FAIL", hb.forced.damageMeter, cvar
+			end,
+		},
+		{
+			name = "available",
+			run = function()
+				if type(C_DamageMeter) ~= "table" or type(C_DamageMeter.IsDamageMeterAvailable) ~= "function" then
+					return "INFO", "missing api"
+				end
+				local available, reason = C_DamageMeter.IsDamageMeterAvailable()
+				return "INFO", available, reason
 			end,
 		},
 		{
@@ -510,8 +757,13 @@ function DamageMeter:GetDebugChecks()
 					return "INFO", "secret"
 				end
 
-				local expected = L.Title(self.db.profile.session, self.db.profile.metric)
-				return (text == expected) and "PASS" or "FAIL", text, expected
+				local expected = L.Title(self:SessionLabel(), self:CurrentType())
+				local ok = text == expected
+
+				if self.segmentID then
+					return ok and "PASS" or "FAIL", "segment", self.segmentID
+				end
+				return ok and "PASS" or "FAIL", text, expected
 			end,
 		},
 		{
@@ -522,29 +774,30 @@ function DamageMeter:GetDebugChecks()
 				end
 
 				local profile = self.db.profile
-				local sessionKey = L.EnumKey(Enum.DamageMeterSessionType, profile.session)
-				local metricKey = L.EnumKey(Enum.DamageMeterType, profile.metric)
-				if sessionKey == nil or metricKey == nil then
-					return "INFO", profile.session, profile.metric, sessionKey, metricKey, 0
-				end
-
-				local session = C_DamageMeter.GetCombatSessionFromType(sessionKey, metricKey)
+				local typeKey = self:CurrentType()
+				local session = self:ReadSession(typeKey)
 				local src = session and session.combatSources or {}
 				local count = #src
-				if count == 0 then
-					return "SKIP", "no data"
-				end
+
+				local label = self.segmentID and "segment" or profile.session
+				local sessionValue = self.segmentID or L.EnumKey(Enum.DamageMeterSessionType, profile.session)
+				local typeValue = Enum.DamageMeterType[typeKey]
 
 				local s = src[1]
-				return "INFO",
-					profile.session,
-					profile.metric,
-					sessionKey,
-					metricKey,
-					count,
-					issecretvalue(s.totalAmount),
-					issecretvalue(s.name),
-					issecretvalue(s.classFilename)
+				local secretAmount, secretName, secretClass = false, false, false
+				if s then
+					if issecretvalue(s.totalAmount) then
+						secretAmount = true
+					end
+					if issecretvalue(s.name) then
+						secretName = true
+					end
+					if issecretvalue(s.classFilename) then
+						secretClass = true
+					end
+				end
+
+				return "INFO", label, typeKey, sessionValue, typeValue, count, secretAmount, secretName, secretClass
 			end,
 		},
 		{
@@ -572,28 +825,28 @@ function DamageMeter:GetDebugChecks()
 					return "SKIP", "module disabled"
 				end
 
-				local profile = self.db.profile
-				local sessionKey = L.EnumKey(Enum.DamageMeterSessionType, profile.session)
-				local metricKey = L.EnumKey(Enum.DamageMeterType, profile.metric)
-				if sessionKey == nil or metricKey == nil then
-					return "SKIP", "no data"
+				local t = self:CurrentType()
+				local kind = L.TypeKind(t)
+				if kind == "deaths" then
+					return "SKIP", "unordered type"
 				end
 
-				local session = C_DamageMeter.GetCombatSessionFromType(sessionKey, metricKey)
+				local session = self:ReadSession(t)
 				local src = session and session.combatSources or {}
-				local n = L.VisibleRows(#src, profile.rows)
+				local n = L.VisibleRows(#src, self.db.profile.rows)
 				if n < 2 then
 					return "SKIP", "too few sources"
 				end
 
+				local field = L.BarField(kind)
 				for i = 1, n do
-					if issecretvalue(src[i].totalAmount) then
+					if issecretvalue(src[i][field]) then
 						return "INFO", "secret"
 					end
 				end
 
 				for i = 2, n do
-					if src[i].totalAmount > src[i - 1].totalAmount then
+					if src[i][field] > src[i - 1][field] then
 						return "FAIL", i
 					end
 				end
