@@ -1,0 +1,619 @@
+#+TITLE: MerrinxUI - debug mode, test button and copyable log (implementation plan)
+#+STARTUP: overview
+#+OPTIONS: toc:2
+
+* Status board
+| Section | Title                                                          | Status  | Depends on | Game gate | Next |
+|---------+----------------------------------------------------------------+---------+------------+-----------+------|
+| SD1     | Debug framework: toggle, log, window, test runner, core checks | PENDING | -          | no        | SD2  |
+| SD2     | Feature checks: Mover, Combat, Hider, RangeText, HideBlizzard  | PENDING | SD1        | no        | SD3  |
+| SD3     | Feature checks: EnemyCooldowns + spell table audit             | PENDING | SD2        | no        | SD4  |
+| SD4     | Feature checks: Nameplates, coverage guard, release 0.9.0      | PENDING | SD3        | yes       | SD5  |
+| SD5     | Feature trace logging, release 0.10.0                          | PENDING | SD4        | yes       | -    |
+
+Allowed statuses: =PENDING=, =IN_PROGRESS=, =PASSED=, =BLOCKED=.
+
+This plan extends =merrinxui-plan.org= (the master plan). Its decisions D-20, D-23, D-26, D-27 and D-33, its module contract and its game-gate procedure apply here unless a D-D decision below says otherwise.
+
+* Goal
+Add a debug mode to MerrinxUI so the user can test every feature from inside the game without pasting =/run= probe scripts:
+- A "Debug mode" toggle (options UI and =/mui debug=).
+- With debug mode on, a "Run tests" button (and =/mui test=) runs a self-test of *every* feature and writes PASS / FAIL / SKIP / INFO lines to a log.
+- A log window shows the whole log preselected; the user presses Ctrl+C and pastes it back to the agent, which fixes whatever failed.
+- While debug mode is on, features also write short trace lines at their state changes (SD5), so behaviour that can't be checked from state (an enemy cast, a combat relock) shows up in the same log.
+- Extensible by contract: every feature added later appends its own checks, and a busted guard fails =nix flake check= when a runtime file in the TOC has none, so new features are automatically part of the test button.
+
+* Scope
+In scope:
+- New =MerrinxUI/Debug/DebugLogic.lua= (pure) and =MerrinxUI/Debug/Debug.lua= (the "Debug" Ace module, =ns.Debug=).
+- A check contract: =Module:GetDebugChecks()= for Ace modules, =ns.Debug:RegisterChecks(source, provider)= for non-module runtime files (Util now, Options later).
+- Checks for every current feature: Core, Mover, Combat, Hider, RangeText, HideBlizzard, EnemyCooldowns, Nameplates (including the 0.8.0 health text / power / debuff work).
+- =EnemyCooldownLogic.Audit= (the S11 P3 probe as a pure, tested function).
+- busted specs: =spec/debug_logic_spec.lua=, =spec/debug_coverage_spec.lua=, Audit cases in =spec/enemy_cooldown_logic_spec.lua=.
+- =/mui debug [on|off]=, =/mui test=, =/mui log= routed from =Core.lua=.
+- Trace log calls at state-change points in the existing features (SD5).
+- Lead-owned update of =merrinxui-plan.org= so later sections (S7-S9, S14-S17) add checks and use =/mui test= at their game gates.
+
+* Acceptance criteria (observable)
+| ID     | Criterion |
+|--------+-----------|
+| AC-D1  | =/mui= shows a "Debug" tree node with: a "Debug mode" toggle; "Run tests" (greyed out while debug mode is off); "Show log"; "Clear log" (asks for confirmation); a line "Log: N/500 lines". Only D-27 option types are used. |
+| AC-D2  | =/mui debug= toggles, =/mui debug on= / =/mui debug off= set, =/mui test= runs the tests, =/mui log= opens the log. =/mui=, =/mui unlock=, =/mui lock= behave exactly as before. |
+| AC-D3  | Debug mode and the log persist across =/reload= and across characters (account-wide); the log keeps at most 500 lines, dropping the oldest. |
+| AC-D4  | With debug mode off nothing is logged. No secret value is ever compared, concatenated, =tostring='d, shown or stored; a secret is written as =<secret>=. SavedVariables hold only a boolean and log strings. No GUIDs, player names or profile names are logged. |
+| AC-D5  | "Run tests" writes a header line (version, interface, class, locale, combat), then every check source in a stable order (=Debug= first, then alphabetical), then a summary line. Chat shows the summary and up to 10 FAIL lines. The log window opens. A check *or a check provider* that throws is reported as FAIL with its error and never aborts the run. |
+| AC-D6  | The log window: one instance at a time, the full log preselected for Ctrl+C on every open, a Close button, usable in combat, Esc only clears focus, nothing added to =UISpecialFrames=, no =ADDON_ACTION_*= and no MerrinxUI line in =Logs/taint.log=. |
+| AC-D7  | Checks are read-only (see the forbidden-call list in the contract). Target-dependent checks SKIP without a target; running-state checks SKIP while their module is disabled. |
+| AC-D8  | Every current feature has checks (see the coverage matrix); every row marked "auto" names at least one check. |
+| AC-D9  | Extensibility: every TOC =.lua= file that is not exempt (=Core.lua=, =Debug/DebugLogic.lua=, =Util/CombatQueue.lua=, any =*Logic.lua=) either calls =:NewModule(= and defines =GetDebugChecks=, or calls =ns.Debug:RegisterChecks(=; =spec/debug_coverage_spec.lua= fails otherwise. At runtime, =Debug/coverage <Module>= is FAIL for any module without =GetDebugChecks=. |
+| AC-D10 | Every Ace module except Debug gets an automatic =settings= INFO line (its profile flattened, sorted, secret-safe) and an =enabled state= check (=IsEnabled()= equals =profile.enabled=). |
+| AC-D11 | busted covers =DebugLogic= (=Describe=, =Join=, =FormatLine=, =Push=, =Flatten=, =RunCheck=, =RunChecks=, =RunSource=, =FormatResult=, =Summary=, =SortSources=) and =EnemyCooldownLogic.Audit= with the examples in this plan. |
+| AC-D12 | (SD5) With debug mode on: a curated enemy cast gives one =hit= line; a newly styled / previously styled plate gives one =style= / =unstyle= line; a cast by the current target gives one =cast= line; HideBlizzard hides and meter changes, RangeText state changes and Mover lock changes each give one line. No trace call sits on =UNIT_HEALTH=, =UNIT_MAXHEALTH=, =UNIT_POWER_UPDATE=, =UNIT_AURA=, =OnTick= or =OnUpdate= paths except RangeText's state-change-only line. NPC plates never produce =skip= lines. |
+| AC-D13 | =nix flake check -L= exits 0 after every section (luacheck 0 warnings, stylua, =luac -p=, busted, package TOC check). |
+
+* Non-goals
+- Active tests that change settings, CVars, frames or combat state to exercise a feature (toggling an option and reverting it, the S11 P7 cooldown-swipe frame). Read-only checks plus SD5 traces only. See Q-D1.
+- Catching arbitrary Lua errors via =seterrorhandler= or BugGrabber integration.
+- A live-updating log window, a styled (S17-like) log window, closing it with Esc before S14/D-31 decide.
+- Per-character logs, echoing every log line to chat, log export other than copy/paste and the SavedVariables file.
+- Converting the S14 game-menu probes (they hook Blizzard frames; they stay manual until S14 runs).
+- Any change to =flake.nix=, =flake.lock= or =.github/workflows/ci.yml=.
+
+* Confirmed repository context (observed facts)
+** Repository state (read-only git, this planning pass)
+- Branch =main=, HEAD =cdc0764 feat(nameplates): add power bar, debuff display, and value formatting=. The nameplate work is committed; =git status= shows only the untracked plan files.
+- Tags: =v0.2.0-s3.1=, =v0.7.0-S13.1=. =v0.8.0-np.1= was never cut, so the nameplate game gate (E-NP-GAME in the master plan) is still open. Its probe block text is not in the master plan (only its description at the handoff: "step 0 is the probe block, with P7/P11 also run in combat and P12 with filter HARMFUL").
+- TOC =## Interface: 16001=, =## Version: 0.8.0=, =## SavedVariables: MerrinxUIDB=.
+- busted currently has 56 =it= cases. =EnemyCooldownLogic.SPELLS= already carries the four D-22 cooldown corrections.
+
+** Load order and core (=MerrinxUI/MerrinxUI.toc=, =MerrinxUI/Core.lua=)
+- TOC order: =embeds.xml=, =Core.lua=, =Util\MoverLogic.lua=, =Util\Mover.lua=, =Util\CombatQueue.lua=, =Util\Combat.lua=, =Util\Hider.lua=, then module pairs (Logic before runtime): RangeText, HideBlizzard, Nameplates, EnemyCooldowns.
+- =Core.lua=: =ns.addon= = AceAddon "MerrinxUI" with AceConsole and AceEvent. =OnInitialize= creates =self.db= (AceDB "MerrinxUIDB", ={ profile = {}, global = {} }=), registers profile callbacks to =RefreshModules=, registers =/mui= and =/merrinxui= to =SlashCommand=.
+- =OnEnable= builds the root AceConfig group (=childGroups = "tree"=, root toggle =unlock= order 1, =profiles= order 100) and adds =root.args[name] = module:GetOptions()= for every module with =GetOptions=, then =RegisterOptionsTable("MerrinxUI", root)=.
+- =SlashCommand(input)=: trims and lowercases into =command=; ="unlock"= / ="lock"= call =ns.Mover:SetUnlocked=; anything else opens AceConfigDialog.
+- AceAddon order: every =OnInitialize= runs in creation order (addon first, then modules); Core's =OnEnable= (options discovery) runs before any module's =OnEnable=; errors in these go through AceAddon =safecall=. =RefreshModules= skips modules without =Refresh=.
+
+** Modules (runtime state that checks can read)
+| Module | File | DB keys (profile) | State |
+|---|---|---|---|
+| RangeText | =Modules/RangeText.lua= | enabled, spell, font, fontSize, outline, position | =self.frame=, =fsMain=, =fsOut=, =lastGoodFont=, =reportedBadFont= |
+| HideBlizzard | =Modules/HideBlizzard.lua= | enabled, bags, micro, xp, actionBars, damageMeter; global =meterCVarOwned= | =self.forced=, =missingWarned=, =activeGroups=; =self:CurrentGroupSet()= returns the active group keys (honours =forced=) |
+| Nameplates (default =enabled = false=, =powerBar = false=) | =Modules/Nameplates.lua= | enabled, width, height, nameSize, castBar, healthText, powerBar, powerHeight, powerText, debuffs, debuffsMineOnly, debuffAnchor, debuffSize, debuffMax | =self.units=, =unitPlates=, =plateFrames= (weak, plate → styled frame), =castMode=, =castEventsOn=; styled frame fields =healthBar=, =healthText=, =highlight=, =nameText=, =powerBar=, =powerText=, =castBar=, =castText=, =castShield=, =debuffIcons[i]= (=.texture=, =.cooldown=, =.count=); file-local =DEBUFF_SPACING = 2= |
+| EnemyCooldowns | =Modules/EnemyCooldowns.lua= | enabled, iconSize, maxIcons, anchor, x, y | =self.state= (guid → records with =expires=), =units= (unit → guid), =unitPlate=, =containers= (weak, plate → container with =icons[i]= =.texture=, =.cooldown=), =index= (built in =OnEnable=), =ticker=; file-locals =LAYOUT_SPACING = 2=, =TICK_INTERVAL = 0.5= |
+- All four call =SetEnabledState(profile.enabled)= in =OnInitialize= and create their state tables there, so state exists even when a module starts disabled.
+- Lazy creators that call =CreateFrame= (checks must never call them): =EnemyCooldowns:GetContainer=, =EnemyCooldowns:GetIcon=, =Nameplates:GetDebuffIcon=, =Nameplates:CreateStyledFrame=.
+- Pure logic: =ns.RangeTextLogic= (=DEFAULT_SPELLS=, =NormalizeSpell=, =ResolveSpell=, =Classify=, =Color=, =FormatRange=), =ns.HideBlizzardLogic= (=GROUPS=, =Groups(profile, forced)=, =MeterCVar=), =ns.NameplateLogic= (=Color=, =FormatValue=, =PowerColor=, =DebuffLayout(anchor, i, n, size, spacing)=), =ns.EnemyCooldownLogic= (=CATEGORIES=, =SPELLS= ={id, class, category, cd}=, =BuildIndex=, =Lookup=, =Record=, =Prune=, =Active(state, key, now, maxIcons)= (already capped), =Layout(anchor, i, n, size, spacing, ox, oy)=), =ns.MoverLogic.CenterOffset=.
+
+** Utilities
+- =Util/Mover.lua=: file-local =isUnlocked= and =entries= (frame → ={label, getPosition, overlay, dragging, savePosition}=). =Apply= anchors =frame:SetPoint(point, UIParent, point, x, y)= and is only called from RangeText =OnEnable=/=Refresh= today, so a frame of a module that started disabled has no anchor. =SetUnlocked= sends =MERRINXUI_LOCK_CHANGED= and calls =AceConfigRegistry:NotifyChange("MerrinxUI")=. =PLAYER_REGEN_DISABLED= saves drags and relocks.
+- =Util/Combat.lua=: file-local =queue = ns.CombatQueue.New()= drained on =PLAYER_REGEN_ENABLED=. The queue object exposes =order= (array of pending keys) and =byKey=.
+- =Util/Hider.lua=: =Hider.parent= (=MerrinxUIHiddenParent=, hidden), file-local weak =hidden= set of frames it hid.
+
+** Libraries (verified in a read-only package build, =nix build .#default=)
+- =embeds.xml= loads LibStub, CallbackHandler, AceAddon, AceEvent, AceConsole, AceDB, AceDBOptions, AceGUI, AceConfig (its XML includes AceConfigRegistry, AceConfigCmd, AceConfigDialog), LibRangeCheck-3.0.
+- AceGUI =AceGUIContainer-Frame.lua=: =SetTitle=, =SetStatusText=, =OnClose= callback, no =UISpecialFrames= insertion. =AceGUIWidget-MultiLineEditBox.lua=: =SetLabel=, =SetText=, =GetText=, =DisableButton=, =SetFocus=, =HighlightText(from, to)= → EditBox, =SetMaxLetters(0)= default, =OnEscapePressed = ClearFocus=; both =OnTextSet= and =OnEditFocusLost= call =HighlightText(0, 0)=.
+- AceAddon mixes =Enable=, =Disable=, =IsEnabled=, =SetEnabledState= into every module; =IterateModules= is =pairs(self.modules)= (unordered).
+- AceDB =RegisterNamespace(name, defaults)= supports a =global= section; table defaults are copied; defaults are stripped at logout. Reading =db.profile= on a namespace creates an empty profile. SavedVariables path: =MerrinxUIDB.namespaces.<name>.global=.
+- AceConsole names slash handlers =SlashCmdList["ACECONSOLE_" .. COMMAND]=.
+- AceConfigRegistry =GetOptionsTable(app, uiType, uiName)= returns the table; =execute= accepts =func= and =confirm=; =name= may be a function.
+
+** Checks and tooling
+- =nix flake check -L= runs pre-commit (statix, deadnix, nil, nixfmt, luacheck, stylua), =merrinxui= (package with TOC/embeds reference check), =lua-syntax= (=luac -p= on =MerrinxUI/**.lua=), =busted= (fileset =MerrinxUI= + =spec=, cwd = source root, so relative =io.open= works).
+- Flake sources come from the git tree: new files are invisible to =nix flake check= until =git add --intent-to-add= (user approval required, master plan R-05).
+- luacheck 1.2.0 (=std = "lua51"=, includes =io=; ignores only =211/addonName= and =212/self=, so an unused =ctx= argument warns), busted 2.3.0. =.luacheckrc= =read_globals= lacks =date=, =GetLocale=, =C_AddOns=, =GetSpellBaseCooldown=, =SlashCmdList=.
+- Specs load pure files with =assert(loadfile("MerrinxUI/.../X.lua"))("MerrinxUI", ns)= and use no WoW stubs.
+- CI: =check= job runs =nix flake check --keep-going -L= and =nix build .#release -L=; the =release= job on =v*= tags checks the TOC version against the tag (=v<Version>-*= allowed) and publishes the zip.
+
+* Decisions
+| ID | Decision | Source |
+|---|---|---|
+| D-D1 | Debug is an Ace module created with =ns.addon:NewModule("Debug")= (no mixins) and exposed as =ns.Debug=. It never calls =SetEnabledState=; it is always running, and "debug mode" is the stored flag =db.global.enabled=. Its options come from the existing =GetOptions= discovery; Core needs only slash routing. Debug never reads its own =db.profile=. | Architect + user |
+| D-D2 | Public on/off API is =IsActive()= / =SetActive(value)=; never define =IsEnabled=, =Enable=, =Disable= or =SetEnabledState= on Debug (AceAddon mixins). | Verified collision |
+| D-D3 | TOC: =Debug\DebugLogic.lua= and =Debug\Debug.lua= go directly after =Core.lua=, before =Util\MoverLogic.lua=, so Util (and later Options) files can call =ns.Debug:RegisterChecks= at file load. New master-plan load-order rule: embeds, Core, Debug, Util, Options, Modules. | Design |
+| D-D4 | Debug state is account-wide: namespace ="Debug"=, defaults ={ global = { enabled = false } }=; =db.global.log= is created lazily (=self.db.global.log = self.db.global.log or {}=), never as a default. | Design + AceDB behaviour |
+| D-D5 | Two check sources, one shape. Ace modules implement =Module:GetDebugChecks()=; non-module runtime files call =ns.Debug:RegisterChecks(source, provider)= at file load. Both return an array of checks at run time, so checks can be built per frame/group/plate. A repeated =RegisterChecks= with the same source appends a provider. Provider calls are protected (=DebugLogic.RunSource=). | User ("append to the debug test") + design |
+| D-D6 | Checks return a status and raw values; only =DebugLogic.Describe= turns values into text. Checks never =tostring= or concatenate game values. | Secret safety |
+| D-D7 | Log window: AceGUI =Frame= + =MultiLineEditBox= (=DisableButton(true)=), one instance reused, released on close, snapshot (no live updates), no Esc hook. Every =ShowLog= runs =SetText(text)= → =SetFocus()= → =HighlightText()= in that order (=OnTextSet= clears the selection). AceGUI stays embedded after S17 (master D-26). | Architect; verified widget behaviour |
+| D-D8 | Log cap 500 lines, line cap 400 chars, value cap 200 chars. Timestamps =date("%H:%M:%S")=. | Design |
+| D-D9 | Coverage is enforced twice: statically by =spec/debug_coverage_spec.lua= (TOC-driven, with an exempt list, so new runtime files are included without anyone remembering to list them) and at runtime by =Debug/coverage <Module>= checks. | User ("new features included automatically") |
+| D-D10 | The pending nameplate game gate is folded into the SD4 release (=v0.9.0-sd4.1=): the Nameplates checks replace its probe step 0, and the nameplate option steps are written out in G-SD4-GAME. Record in the master plan that E-NP-GAME ran on 0.9.0. | Architect recommendation; Q-D2 lets the user override |
+| D-D11 | Versions per D-23/D-33: SD1-SD3 have no game gate and don't bump. SD4 sets =## Version: 0.9.0= (tag =v0.9.0-sd4.1=). SD5 sets =0.10.0= (tag =v0.10.0-sd5.1=, may share a release with the next feature section). | Master plan D-23/D-33 |
+| D-D12 | Combat checks read =#queue.order= inside =Combat.lua=; no new CombatQueue API. | Smallest diff |
+| D-D13 | Privacy: log unit tokens (=nameplate3=), spell IDs and names, Blizzard frame names, option values, counts. Never GUIDs, unit/player names or profile names. | Master plan SEC-S0 precedent |
+| D-D14 | Trace calls pass only values the code already holds; a disabled-mode call costs one method call and an early return. Traces fire on state changes only, never per NPC plate or per enemy cast. | Performance, 500-line cap |
+| D-D15 | SD1 has no game gate; the window, =date=, =C_AddOns= and taint are first exercised at the SD4 gate (accepted risk R-D12, chosen to keep one round trip to the gaming PC). | User preference for fewer round trips |
+
+* Shared interfaces and contracts
+The =--= notes in the blocks below are plan text; do not copy them into source (AGENTS minimal-comment rule).
+
+** =ns.DebugLogic= (=MerrinxUI/Debug/DebugLogic.lua=, pure, busted)
+#+begin_src lua
+DebugLogic.CAP = 500          -- log lines
+DebugLogic.MAX_LINE = 400     -- chars per log line
+DebugLogic.MAX_PART = 200     -- chars per described value
+DebugLogic.STATUSES = { PASS = true, FAIL = true, SKIP = true, INFO = true }
+
+DebugLogic.Describe(v, isSecret) -> string
+-- isSecret(v) first, before type(). secret -> "<secret>"; nil -> "nil"; boolean -> "true"/"false";
+-- number -> tostring; string -> "\n"/"\r" become " ", "|" becomes "||", cut to MAX_PART then "...";
+-- anything else -> type(v). Never indexes tables, never errors.
+DebugLogic.Join(parts, n, isSecret) -> string        -- Describe(parts[1..n]) joined by " "; n keeps nil gaps
+DebugLogic.FormatLine(stamp, source, text) -> string -- "[" .. stamp .. "] " .. source .. ": " .. text, cut to MAX_LINE
+DebugLogic.Push(log, line, cap) -> removed           -- append, then drop oldest until #log <= cap (cap >= 1)
+DebugLogic.Flatten(tbl, isSecret) -> string          -- "k=v" sorted by key; nested tables one level as "k.sub=v"; deeper -> "k.sub=table"
+DebugLogic.RunCheck(check, ctx, isSecret) -> { name, status, detail }
+DebugLogic.RunChecks(source, checks, ctx, isSecret) -> results   -- order kept; each result gets .source; nil checks -> {}
+DebugLogic.RunSource(source, provider, ctx, isSecret) -> results
+-- pcall(provider); throw -> { {source=, name="checks", status="FAIL", detail="error: " .. Describe(err)} };
+-- non-table, non-nil return -> { {source=, name="checks", status="FAIL", detail="not a table"} }; else RunChecks
+DebugLogic.FormatResult(r) -> string                 -- "FAIL EnemyCooldowns/spell table: mismatched 6346 180000 30000"
+DebugLogic.Summary(results) -> text, counts          -- "12 checks: 9 PASS, 1 FAIL, 1 SKIP, 1 INFO", {PASS=9,FAIL=1,SKIP=1,INFO=1,total=12}
+DebugLogic.SortSources(names) -> array               -- "Debug" first, rest alphabetical
+#+end_src
+=RunCheck= error semantics:
+- non-table check, or =run= not a function → =FAIL "malformed check"=;
+- =run= throws → =FAIL "error: " .. Describe(err)= (a secret error reads =error: <secret>=);
+- status nil, secret or not in =STATUSES= → =FAIL "invalid status: " .. Describe(status)=;
+- a non-string name goes through =Describe=;
+- otherwise =detail = Join(values after status)=.
+
+busted examples (=S= is a sentinel table, =isS = function(v) return v == S end=):
+| Call | Result |
+|---|---|
+| =Describe(S, isS)= | ="<secret>"= |
+| =Describe(nil, isS)= / =Describe(false, isS)= / =Describe(1.5, isS)= | ="nil"= / ="false"= / ="1.5"= |
+| =Describe({}, isS)= | ="table"= |
+| =Describe(PIPE_INPUT, isS)= | =PIPE_OUTPUT= (literals below) |
+| =Describe(string.rep("x", 300), isS)= | 200 × ="x"= then ="..."= |
+| =Join({1, nil, S}, 3, isS)= | ="1 nil <secret>"= |
+| =FormatLine("12:00:01", "EnemyCooldowns", "hit 2139 Counterspell")= | ="[12:00:01] EnemyCooldowns: hit 2139 Counterspell"= |
+| =FormatLine= with a 1000-char text | length 400 |
+| =Push({"a","b"}, "c", 2)= | log ={"b","c"}=, returns 1 |
+| =Push({"a","b","c","d"}, "e", 2)= | log ={"d","e"}=, returns 3 |
+| =Flatten({b=1, a="x", position={x=0, point="CENTER"}}, isS)= | ="a=x b=1 position.point=CENTER position.x=0"= |
+| =Flatten({k=S}, isS)= | ="k=<secret>"= |
+| =RunCheck({name="x", run=function() return "PASS", 133, "Fireball" end}, {}, isS)= | ={name="x", status="PASS", detail="133 Fireball"}= |
+| check whose =run= does =error("boom")= | =FAIL=, detail starts with ="error: "= and contains ="boom"= |
+| check whose =run= does =error(S)= | =FAIL=, ="error: <secret>"= |
+| check returning ="OK"= / =S= as status | =FAIL=, ="invalid status: OK"= / ="invalid status: <secret>"= |
+| =RunCheck("x", {}, isS)= | =FAIL=, ="malformed check"= |
+| =RunChecks("RangeText", nil, {}, isS)= | ={}= |
+| =RunSource("Mover", function() error("bad index") end, {}, isS)= | one result: =source="Mover"=, =name="checks"=, =FAIL=, detail contains ="bad index"= |
+| =RunSource("Mover", function() return 5 end, {}, isS)= | one result =FAIL "not a table"= |
+| =RunSource("Mover", function() return { {name="a", run=function() return "INFO", true end} } end, {}, isS)= | ={ {source="Mover", name="a", status="INFO", detail="true"} }= |
+| =Summary= of PASS, PASS, FAIL | ="3 checks: 2 PASS, 1 FAIL, 0 SKIP, 0 INFO"= |
+| =SortSources({"RangeText","Debug","EnemyCooldowns"})= | ={"Debug","EnemyCooldowns","RangeText"}= |
+Pipe literals (Lua): =PIPE_INPUT = "a|cffb\nc"=, =PIPE_OUTPUT = "a||cffb c"=.
+
+** =ns.Debug= (=MerrinxUI/Debug/Debug.lua=, runtime)
+#+begin_src lua
+local Debug = ns.addon:NewModule("Debug")
+ns.Debug = Debug
+-- OnInitialize: self.db = ns.addon.db:RegisterNamespace("Debug", { global = { enabled = false } })
+--               self.db.global.log = self.db.global.log or {}
+-- OnEnable:     if active -> Log("Debug", "session", version, interface, classFile, locale)
+
+Debug:IsActive() -> boolean
+Debug:SetActive(value)            -- not not value; logs "debug on"/"debug off" (logs before turning off);
+                                  -- prints one chat line; AceConfigRegistry:NotifyChange("MerrinxUI")
+Debug:Log(source, ...)            -- returns at once if not active or self.db is nil;
+                                  -- Push(log, FormatLine(date("%H:%M:%S"), source, Join({...}, select("#", ...), issecretvalue)), CAP)
+Debug:RegisterChecks(source, provider)  -- provider() -> checks array; works before OnInitialize (file-scope table)
+Debug:RunTests() -> results | nil -- inactive: prints "debug mode is off (/mui debug on)", returns nil
+Debug:ShowLog()                   -- open or refresh the single log window; SetText -> SetFocus -> HighlightText()
+Debug:ClearLog()
+Debug:Slash(verb, arg)            -- "debug" [on|off], "test", "log"; anything else prints usage
+Debug:GetDebugChecks()            -- core checks (catalogue in the coverage matrix)
+Debug:GetOptions()                -- group "Debug", order 1000
+#+end_src
+=RunTests= order:
+1. =Log("Debug", "test run", version, interface, classFile, locale, "combat", InCombatLockdown())=.
+2. =ctx = { inCombat = InCombatLockdown(), hasTarget = UnitExists("target") }=.
+3. For each source in =SortSources(module names ∪ registered sources)=:
+   - module with =GetDebugChecks=: =ctx.enabled = module:IsEnabled()=; =RunSource(name, function() return module:GetDebugChecks() end, ctx, issecretvalue)=;
+   - every module except Debug that has =db.profile=: also the automatic =settings= (INFO, =Flatten(profile)=) and =enabled state= (PASS if =IsEnabled() == profile.enabled=) results;
+   - registered providers: =ctx.enabled = nil=; =RunSource= per provider under that source.
+4. Every =FormatResult= goes to the log; =Summary= is logged and printed with up to 10 FAIL lines; then =ShowLog()=.
+
+Options group (=order = 1000=): =active= toggle; =run= execute (=disabled= while inactive); =show= execute; =clear= execute with =confirm = true=; =info= description whose =name= is a function returning ="Log: N/500 lines"=.
+
+Core change (=SlashCommand= only): keep =command == "unlock"= / ="lock"= on the full trimmed command; then =local verb, arg = command:match("^(%S*)%s*(.-)$")=, and =verb= ∈ {=debug=, =test=, =log=} goes to =ns.Debug:Slash(verb, arg)=; everything else opens the options as before.
+
+** Check contract (append-only extension point)
+#+begin_src lua
+-- Ace modules (discovered like GetOptions):
+function Module:GetDebugChecks()
+  return {
+    { name = "spell", run = function() return "PASS", 133, "Fireball" end },
+    { name = "visibility", run = function(ctx)
+        if ctx.enabled == false then return "SKIP", "module disabled" end
+        return "PASS", self.frame:IsShown()
+      end },
+  }
+end
+-- Non-module runtime files (Util/*, later Options/*), at file load:
+ns.Debug:RegisterChecks("Mover", function()
+  return { { name = "unlocked", run = function() return "INFO", isUnlocked end } }
+end)
+#+end_src
+- =status= ∈ =PASS=, =FAIL=, =SKIP=, =INFO=; trailing values are raw (Debug describes them). Omit =ctx= when unused (luacheck 212).
+- =ctx.inCombat=, =ctx.hasTarget=, =ctx.enabled= (module sources only; =nil= for registered providers).
+- Target checks return =SKIP, "no target"= when =not ctx.hasTarget=; running-state checks return =SKIP, "module disabled"= when =ctx.enabled == false=.
+- Read-only. Forbidden inside checks and providers: =CreateFrame=, =C_CVar.SetCVar=/=SetCVar=, =:Show(=, =:Hide(=, =SetText=, =SetAlpha=, =SetSize=, =SetPoint=, =ClearAllPoints=, =SetParent=, =RegisterEvent=, protected calls, Blizzard-field writes (D-20), =UnitGUID=, and every module method with side effects: =GetContainer=, =GetIcon=, =GetDebuffIcon=, =CreateStyledFrame=, =Render=, =Update*=, =Apply*=, =Style*=/=Unstyle*=, =SyncCastBar=, =Refresh=, =Enable=, =Disable=. Read existing objects directly (=self.containers[plate]=, =container.icons[i]=, =frame.debuffIcons[i]=).
+- Never compare a value before =issecretvalue= has cleared it; report secret-ness as INFO (=issecretvalue(x)= is a plain boolean). Getters handed to pure helpers map secret values to nil.
+- Check names are stable strings; the log line is =STATUS Source/name: detail=.
+- *Rule for future work:* every new runtime file in the TOC either defines =GetDebugChecks= on its module or calls =ns.Debug:RegisterChecks=; =spec/debug_coverage_spec.lua= fails the build otherwise. Pure =*Logic.lua= files are covered by busted instead.
+
+** =EnemyCooldownLogic.Audit= (pure, busted)
+#+begin_src lua
+L.Audit(spells, getName, getBaseCooldownMs) -> { unresolved = {ids}, duplicates = {ids}, mismatched = { {id=, expected=, actual=} }, unknownCd = {ids} }
+-- getName(id) -> string|nil ; getBaseCooldownMs(id) -> number|nil
+-- unresolved: name nil. duplicates: second and later ids whose name was already seen.
+-- mismatched: actual ~= nil and actual ~= cd * 1000. unknownCd: actual == nil. Lists keep spells order.
+#+end_src
+Examples:
+- spells ={ {id=1,cd=10}, {id=2,cd=20}, {id=3,cd=30} }=, names ={[1]="A",[2]="A"}=, base ={[1]=10000,[2]=5000}= → ={ unresolved={3}, duplicates={2}, mismatched={ {id=2,expected=20000,actual=5000} }, unknownCd={3} }=.
+- spells ={}= → all four lists empty.
+- every =getBaseCooldownMs= returns nil, names unique → only =unknownCd= (all ids).
+
+** Coverage spec (=spec/debug_coverage_spec.lua=)
+- Read =MerrinxUI/MerrinxUI.toc= with =io.open=; strip =\r=; skip blank and =#= lines; keep entries ending =.lua=; convert =\= to =/=; read each file.
+- =EXEMPT= = ={ "MerrinxUI/Core.lua", "MerrinxUI/Debug/DebugLogic.lua", "MerrinxUI/Util/CombatQueue.lua" }= plus any path ending =Logic.lua=.
+- Every other file must satisfy: (=src:find(":NewModule(", 1, true)= and =src:find("function%s+[%w_]+:GetDebugChecks%(")=) or =src:find("ns.Debug:RegisterChecks(", 1, true)=. Use plain =find= for the literal strings.
+- Assert at least 5 =:NewModule(= files were found (Debug + four modules), so a parse bug cannot pass vacuously.
+- Assert the =Debug\Debug.lua= line comes before the first =Util\= line (D-D3).
+
+* Feature coverage matrix
+"auto" = a named check verifies it; "trace" = SD5 trace lines plus a re-run of =/mui test= show it; "eye" = the user looks.
+| Feature (master AC) | Source/check names | How |
+|---|---|---|
+| Interface (AC-08) | =Debug/interface= (PASS if 16001) | auto |
+| Addon version (AC-08) | =Debug/test run= header, =Debug/version= (INFO; FAIL if =C_AddOns= missing) | auto |
+| Libraries (AC-03) | =Debug/libraries= (INFO: =LibStub(name, true)= loaded for each embedded lib; FAIL if any missing — loaded, not proof of embedding) | auto |
+| Hub, slash, tree nodes (AC-09) | =Debug/slash= (=SlashCmdList.ACECONSOLE_MUI= and =ACECONSOLE_MERRINXUI= are functions), =Debug/options= (registered root has =unlock=, =profiles= and one node per module with =GetOptions=) | auto |
+| Profiles refresh modules (AC-10) | automatic =<Module>/enabled state= and =<Module>/settings=; =Debug/profile= INFO (profile count, shared or per-character, no names) | auto (re-run after a profile switch) |
+| Coverage (AC-D9) | =Debug/coverage <Module>= | auto |
+| Secret API (all) | =Debug/secret api= | auto |
+| Debug itself (AC-D3) | =Debug/log= (INFO lines/cap) | auto |
+| Unlock, positions, combat relock (AC-14) | =Mover/unlocked= (FAIL if unlocked in combat), =Mover/position <label>= (anchor equals saved =point/x/y= within 0.5; SKIP if =frame:GetNumPoints() == 0= or =entry.dragging=), =Mover/overlay <label>= (shown == unlocked) | auto; drag = eye; relock = trace |
+| Combat queue (AC-17) | =Combat/queue= (INFO pending; FAIL if out of combat with pending > 0) | auto |
+| Hidden frames (AC-17) | =Hider/parent= (hidden), =Hider/frame <Name>= (each frame in =hidden=: parent is =Hider.parent= and not =IsVisible()=) | auto |
+| Range text value (AC-11) | =RangeText/range= (target: =GetRange= min/max INFO; PASS if =fsMain:GetText()= equals =FormatRange=, secret-guarded) | auto |
+| Range colour, secret path (AC-12) | =RangeText/in range= (target: INFO result + secret flag; non-secret: PASS if =fsMain= colour equals =Color(Classify(r))= within 0.01; secret: PASS if both font strings shown) | auto |
+| Per-class default spell (AC-13) | =RangeText/spell= (resolved id + =C_Spell.GetSpellName=; INFO "yards only" if none) | auto |
+| Font, visibility (AC-15) | =RangeText/font= (=lastGoodFont == profile.font=, =GetFont= size rounds to =fontSize=, flags equal =outline=), =RangeText/visibility= (module running: shown == target or unlocked) | auto |
+| HideBlizzard toggles (AC-17) | =HideBlizzard/frame <Name>= (each frame of each group in =CurrentGroupSet()=: PASS if parent is =ns.Hider.parent= and not =IsVisible()=; INFO if the global is missing), =HideBlizzard/reload needed <key>= (INFO for each group not in =CurrentGroupSet()= with a frame still parented to =ns.Hider.parent=), =HideBlizzard/meter cvar= (PASS if =CurrentGroupSet().damageMeter= implies CVar ="0"=; INFO CVar and =meterCVarOwned=) | auto |
+| Spell table (AC-30) | =EnemyCooldowns/spell table= (=Audit=: FAIL lists ids; =unknownCd= INFO; SKIP the cooldown part if =GetSpellBaseCooldown= missing) | auto |
+| Tracker running (AC-24, AC-28) | =EnemyCooldowns/index=, =EnemyCooldowns/ticker= (module running), =EnemyCooldowns/tracked= (INFO count of tracked units and count of state records; never GUIDs) | auto |
+| Icons, order, cap, options (AC-24, AC-26, AC-28) | =EnemyCooldowns/icons <unit>= (shown icons equal =#L.Active(self.state, guid, GetTime(), maxIcons)=; SKIP if any record's =expires= is within =[now - 0.5, now]=; each icon width ≈ =iconSize=; each =GetPoint(1)= equals =L.Layout(anchor, i, n, iconSize, LAYOUT_SPACING, x, y)= relative to the container), =EnemyCooldowns/container parent <unit>= (=container:GetParent() == plate=) | auto after a cast; the cast = trace |
+| No NPC/friendly icons (AC-25, AC-29) | =EnemyCooldowns/no foreign icons= (no shown container on a plate whose unit isn't in =self.units=) | auto |
+| Enemy plates (AC-18) | =Nameplates/apis= (every global API the module calls is a function), =Nameplates/styled plates= (every visible plate with non-secret =UnitCanAttack= true has a shown styled frame; no friendly plate has one; secret → counted as unknown), =Nameplates/target plate= (target: size ≈ width/height; =nameText:GetFont()= size ≈ =nameSize=; =plate.UnitFrame:GetAlpha() == 0=), =Nameplates/health colour= (target: =healthBar:GetStatusBarColor()= ≈ =NameplateLogic.Color(...)= with the module's secret→nil mapping), =Nameplates/highlight= (target: =highlight:GetAlpha() == 1=, others 0, when =UnitIsUnit= is non-secret; else INFO secret) | auto; textures = eye |
+| Cast bar (AC-19) | =Nameplates/cast events= (=castEventsOn == profile.castBar=), =Nameplates/cast anchor= (=castBar:GetPoint(1)= relative to =powerBar= if =profile.powerBar= else =healthBar=), =Nameplates/target cast= (target: INFO casting/channel mode and secret flags of duration and notInterruptible) | auto + trace |
+| Health text (AC-39) | =Nameplates/health text= (target: mode =none= → text empty or nil; otherwise PASS if shown, INFO =issecretvalue(GetText())=) | auto |
+| Power bar and text (AC-40, AC-41) | =Nameplates/power bar= (target: shown == =powerBar=; height ≈ =powerHeight=), =Nameplates/power text= (only when =powerBar= on; same rule as health text) | auto |
+| Debuffs (AC-42..AC-44) | =Nameplates/debuffs= (target: shown icons ≤ =debuffMax=; width ≈ =debuffSize=; =GetPoint(1)= equals =DebuffLayout(anchor, i, n, debuffSize, DEBUFF_SPACING)=; relative frame follows =UpdateDebuffs= (BOTTOM → castBar/powerBar/healthBar, LEFT/RIGHT → frame, else nameText); INFO counts for =HARMFUL|PLAYER= and =HARMFUL=) | auto |
+| Secret flags (probe step 0 parity, AC-45) | =Nameplates/secret flags= (target, INFO =issecretvalue= only: =UnitHealth=, =UnitHealthMax=, =UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)=, =UnitPower=, =UnitPowerMax=, =UnitPowerPercent(unit, nil, false, CurveConstants.ScaleTo100)=, second return of =UnitPowerType=, =UnitReaction=, =UnitIsUnit(unit, "target")=, =UnitCanAttack=; for the first aura of =HARMFUL|PLAYER= and of =HARMFUL=: =aura.icon=, =GetAuraDuration=, =GetAuraApplicationDisplayCount=) | auto, run out of combat and in combat |
+
+* Assumptions (unverified until the named gate)
+- A-D1 (SD4 game gate): =date=, =GetLocale=, =C_AddOns.GetAddOnMetadata= exist on Forever. A missing =C_AddOns= gives FAIL in =Debug/version=, not an error; =date= missing is a stop condition.
+- A-D2 (SD4 game gate): =HighlightText()= with no arguments after =SetText= and =SetFocus= selects all; Ctrl+A is the fallback. Escaped =||= copies as =||= (harmless in a paste).
+- A-D3 (SD4 game gate): =FontString:GetFont()= returns the path, a size that rounds to the set size and the flags string; =GetTextColor=/=GetStatusBarColor= return the set colour within 0.01. If not, those checks become INFO (a remediation, not a redesign).
+- A-D4 (SD4 game gate): =frame:GetPoint(1)= on Mover-managed frames returns =(point, UIParent, point, x, y)= with x/y equal to the saved values within 0.5.
+- A-D5 (SD4): the =Nameplates/secret flags= list is reconstructed from the calls in =Nameplates.lua=; the original NP probe block is not recorded anywhere.
+
+* Open questions
+- Q-D1 (non-blocking): active tests (a check that toggles a setting or creates a test frame, then reverts) are a non-goal. If wanted later they need their own design (combat safety, revert on error).
+- Q-D2 (confirm at SD4 start): D-D10 folds the nameplate game gate into =v0.9.0-sd4.1=. If the user wants the nameplate verdict sooner, they cut =v0.8.0-np.1= now with the manual probes and SD4 proceeds unchanged.
+
+* Risks
+| ID | Risk | Mitigation |
+|---|---|---|
+| R-D1 | Defining =IsEnabled= on Debug breaks AceAddon state | D-D2; verifier grep gate |
+| R-D2 | A secret leaks into a string, the log or SavedVariables | D-D6; =Describe= checks =isSecret= first; SEC gate reads every check |
+| R-D3 | A check has a side effect (taint, CVar, frame) | Forbidden-call list; verifier grep *and* a read of every check body; SEC gate |
+| R-D4 | Util files reach =ns.Debug= before it exists | D-D3 puts Debug before Util; coverage spec asserts the order; Util code still looks =ns.Debug= up at call time |
+| R-D5 | Traces on hot paths cost frame time or flood the 500-line log | AC-D12, D-D14; hot-path grep gate |
+| R-D6 | =IterateModules= order is random | =SortSources= |
+| R-D7 | New files invisible to =nix flake check= | =git add --intent-to-add= with user approval before the verifier runs |
+| R-D9 | Esc does not close the log window | Close button; revisit after S14/D-31 |
+| R-D10 | Checks reach into module internals and drift when a module changes | Checks live in the module's own file (one owner); a module edit updates its checks in the same section |
+| R-D11 | A check FAILs because of a wrong expectation, not a bug | Every FAIL line carries raw values; the lead fixes the check or the code with the user's paste as evidence, never by deleting or loosening the check without saying why |
+| R-D12 | SD1-SD3 code is first run in game at SD4 | Accepted (D-D15); SD4 gate step 2-3 exercise the framework before feature steps; stop conditions apply |
+| R-D13 | A throwing provider would lose the whole log | =RunSource= protects provider calls (AC-D5) |
+| R-D14 | The 0.5 s EnemyCooldowns ticker makes icon counts lag at expiry | =icons <unit>= SKIPs when a record expires within the last 0.5 s |
+
+* Stop conditions
+- Any Lua error, =ADDON_ACTION_BLOCKED=/=FORBIDDEN=, or a MerrinxUI line in =Logs/taint.log= at a game gate.
+- A check would need a side effect, a new module field or a change outside its owned paths.
+- A trace call would sit on a frequent path (AC-D12).
+- =date= missing on Forever; AceGUI widgets missing at runtime.
+- The user refuses =git add --intent-to-add= for the new files.
+- An edit to =flake.nix=, =flake.lock= or =.github/= appears necessary.
+- SEC-NP-02 carry-over: =SetTexture= rejects a secret aura icon during the folded nameplate steps.
+
+* Ownership (one owner per writable path)
+| Owner | Paths |
+|---|---|
+| backend (lua-wow) | =MerrinxUI/Debug/DebugLogic.lua= (new), =MerrinxUI/Debug/Debug.lua= (new), =MerrinxUI/Core.lua= (=SlashCommand= only), =MerrinxUI/MerrinxUI.toc=, =.luacheckrc=, =MerrinxUI/Util/Mover.lua=, =MerrinxUI/Util/Combat.lua=, =MerrinxUI/Util/Hider.lua=, =MerrinxUI/Modules/RangeText.lua=, =MerrinxUI/Modules/HideBlizzard.lua=, =MerrinxUI/Modules/EnemyCooldowns.lua=, =MerrinxUI/Modules/EnemyCooldownLogic.lua= (=Audit= only), =MerrinxUI/Modules/Nameplates.lua=, =spec/debug_logic_spec.lua= (new), =spec/debug_coverage_spec.lua= (new), =spec/enemy_cooldown_logic_spec.lua= (Audit cases only) |
+| lead | =debug-mode-plan.org= (state and evidence, every section), =merrinxui-plan.org= (contract, load-order and gate-procedure updates in SD1 and SD4) |
+| user | =git add --intent-to-add= approval, commits, pushes, tags, in-game gates and log pastes |
+
+Sections run strictly in order with one backend owner; there is no parallel work.
+
+* Working directory and validation commands
+All commands run in =/home/merrinx/Projects/merrinxui=, plain shell; =nix develop -c= provides the tools. No Haskell, no direnv.
+#+begin_src sh
+git add --intent-to-add MerrinxUI/Debug/DebugLogic.lua MerrinxUI/Debug/Debug.lua spec/debug_logic_spec.lua   # SD1, user approval
+git add --intent-to-add spec/debug_coverage_spec.lua                                                         # SD4, user approval
+nix develop -c busted spec                      # N successes / 0 failures / 0 errors (N > 56 from SD1 on)
+nix develop -c luacheck MerrinxUI spec          # 0 warnings / 0 errors
+nix develop -c stylua --check MerrinxUI spec    # exit 0
+nix flake check -L                              # exit 0
+nix build .#release -L && unzip -l result/MerrinxUI.zip | grep -E 'MerrinxUI/Debug/(DebugLogic|Debug)\.lua'   # both listed (SD1 on)
+#+end_src
+Read-only grep gates (verifier, =eca__grep= over =MerrinxUI=), plus a read of every =GetDebugChecks= / =RegisterChecks= body:
+- =function Debug:(IsEnabled|Enable|Disable|SetEnabledState)= → no match.
+- =UISpecialFrames= → no match.
+- =tostring\(= in =MerrinxUI/Debug/Debug.lua= → no match (only DebugLogic may =tostring=).
+- inside check bodies: =CreateFrame|SetCVar|:Show\(|:Hide\(|RegisterEvent|SetPoint|ClearAllPoints|SetParent|SetText|SetAlpha|SetSize|UnitGUID|GetContainer|GetIcon|GetDebuffIcon|CreateStyledFrame|Render\(|:Update|:Apply|Style|Refresh\(|:Enable\(|:Disable\(= → no match.
+- (SD5) =ns.Debug:Log= inside =OnUnitHealth=, =OnUnitPower=, =OnUnitAura=, =OnTick=, =OnUpdate= scripts → no match.
+
+Game gate procedure (SD4, SD5), user on the gaming PC:
+1. Commit, push, tag (=v0.9.0-sd4.1= / =v0.10.0-sd5.1=); wait for the green release (lead may watch with =gh run list= / =gh run view=).
+2. Install the zip into =Interface/AddOns/=, *full client restart* (new TOC files).
+3. =/console scriptErrors 1=, =/console taintLog 1=.
+4. =/mui debug on=, run the gate steps (each step: set up the situation, =/mui test=).
+5. =/mui log=, Ctrl+C (Ctrl+A first if nothing is selected), paste the whole log back. That paste is the evidence.
+
+* Implementation sections
+Lead protocol for each section:
+1. Set the section to =IN_PROGRESS= in this file (status board, section, JSON) before any implementation.
+2. Run the section's workstream (backend lua-wow); ask the user to approve =git add --intent-to-add= for new files.
+3. Gates in order: verifier, reviewer, security (security is required at every section), then the user game gate where there is one.
+4. Set =PASSED= only when the latest verifier report is =PASSED= and the latest reviewer and security reports are =CLEAR= (and, where present, the game-gate paste shows no FAIL the section owns and no stop condition). Expected outcomes in this plan are not evidence; record actual commands, outputs and report verdicts.
+5. On a stop condition, set =BLOCKED= with the reason.
+6. Update the status board, then offer the user a continue-or-stop checkpoint.
+
+** SD1 - Debug framework: toggle, log, window, test runner, core checks
+- Section ID: SD1
+- Status: PENDING
+- Workstreams / tasks: WS-D1 / T-D1, T-D2, T-D3, T-D4; lead task T-D5
+- Acceptance: AC-D1, AC-D2, AC-D3, AC-D4, AC-D5, AC-D6 (code part), AC-D7 (core checks), AC-D9 (runtime =Debug/coverage= part), AC-D10, AC-D11 (DebugLogic part), AC-D13
+- Dependencies: none (HEAD =cdc0764=, clean tree apart from the plan files)
+- Owned paths: =MerrinxUI/Debug/DebugLogic.lua=, =MerrinxUI/Debug/Debug.lua=, =spec/debug_logic_spec.lua=, =MerrinxUI/Core.lua= (=SlashCommand= only), =MerrinxUI/MerrinxUI.toc= (two lines after =Core.lua=; no version change), =.luacheckrc= (add =date=, =GetLocale=, =C_AddOns=, =SlashCmdList=); lead: =merrinxui-plan.org=, =debug-mode-plan.org=
+- Steps:
+  1. T-D1: =DebugLogic.lua= + =spec/debug_logic_spec.lua= with every example in the DebugLogic table (spec style from =spec/range_text_logic_spec.lua=).
+  2. T-D2: =Debug.lua= per the =ns.Debug= contract: namespace, lazy log, =IsActive/SetActive/Log/RegisterChecks/RunTests/ShowLog/ClearLog/Slash/GetOptions=, automatic =settings= and =enabled state= results, =RunSource= for every provider.
+  3. T-D3: core checks =version=, =interface=, =secret api=, =libraries=, =slash=, =options=, =profile=, =coverage <Module>=, =log=.
+  4. T-D4: =Core.SlashCommand= routing (unlock/lock unchanged on the full command); TOC lines; =.luacheckrc= rows.
+  5. T-D5 (lead): update =merrinxui-plan.org=: module-contract row for =GetDebugChecks= and the =RegisterChecks= rule for non-module runtime files; load-order rule embeds, Core, Debug, Util, Options, Modules; reference D-D1..D-D15 as master D-35 onward pointing at this file.
+- Regressions to protect: =/mui=, =/mui unlock=, =/mui lock=, =/mui unlock x= (opens options as today); profile callbacks; existing 56 busted cases; =Unlock frames= root toggle; options node set.
+- Expected: =nix flake check -L= exit 0; busted > 56 successes, 0 failures; release zip lists both Debug files. At runtime (not gated here) =Debug/coverage= FAILs for every module until SD2-SD4.
+- Gates: G-SD1-VER, G-SD1-REV, G-SD1-SEC
+- Evidence:
+  - E-SD1-VER = (pending)
+  - E-SD1-REV = (pending)
+  - E-SD1-SEC = (pending)
+  - E-SD1-PLAN (lead, master plan updated) = (pending)
+- Next: SD2
+
+** SD2 - Feature checks: Mover, Combat, Hider, RangeText, HideBlizzard
+- Section ID: SD2
+- Status: PENDING
+- Workstreams / tasks: WS-D2 / T-D6, T-D7, T-D8
+- Acceptance: AC-D7, AC-D8 (rows Mover, Combat, Hider, RangeText, HideBlizzard), AC-D13
+- Dependencies: SD1 =PASSED=
+- Owned paths: =MerrinxUI/Util/Mover.lua=, =MerrinxUI/Util/Combat.lua=, =MerrinxUI/Util/Hider.lua= (one =ns.Debug:RegisterChecks= block appended at the end of each), =MerrinxUI/Modules/RangeText.lua=, =MerrinxUI/Modules/HideBlizzard.lua= (=GetDebugChecks= appended after =GetOptions=), =.luacheckrc= (only if a new global is read); lead: =debug-mode-plan.org=
+- Steps:
+  1. T-D6: Mover, Combat, Hider providers per the matrix, using file-local state (=entries=, =isUnlocked=, =queue.order=, =hidden=, =parent=).
+  2. T-D7: RangeText checks =spell=, =font=, =visibility=, =range=, =in range=.
+  3. T-D8: HideBlizzard checks =frame <Name>=, =reload needed <key>=, =meter cvar=.
+- Regressions to protect: no behaviour change outside the appended blocks; RangeText 10 Hz update and Hider purge loop untouched.
+- Gates: G-SD2-VER, G-SD2-REV, G-SD2-SEC
+- Evidence:
+  - E-SD2-VER = (pending)
+  - E-SD2-REV = (pending)
+  - E-SD2-SEC = (pending)
+- Next: SD3
+
+** SD3 - Feature checks: EnemyCooldowns + spell table audit
+- Section ID: SD3
+- Status: PENDING
+- Workstreams / tasks: WS-D3 / T-D9, T-D10
+- Acceptance: AC-D7, AC-D8 (EnemyCooldowns rows), AC-D11 (Audit part), AC-D13
+- Dependencies: SD2 =PASSED=
+- Owned paths: =MerrinxUI/Modules/EnemyCooldownLogic.lua= (=Audit= added), =spec/enemy_cooldown_logic_spec.lua= (Audit cases), =MerrinxUI/Modules/EnemyCooldowns.lua= (=GetDebugChecks= appended), =.luacheckrc= (=GetSpellBaseCooldown=); lead: =debug-mode-plan.org=
+- Steps:
+  1. T-D9: =Audit= + the three spec examples.
+  2. T-D10: EnemyCooldowns checks =spell table=, =index=, =ticker=, =tracked=, =icons <unit>=, =container parent <unit>=, =no foreign icons=. Getters passed to =Audit= map secret values to nil.
+- Regressions to protect: existing EnemyCooldownLogic spec cases; =SPELLS= unchanged; no behaviour change in =EnemyCooldowns.lua= outside the appended block.
+- Gates: G-SD3-VER, G-SD3-REV, G-SD3-SEC
+- Evidence:
+  - E-SD3-VER = (pending)
+  - E-SD3-REV = (pending)
+  - E-SD3-SEC = (pending)
+- Next: SD4
+
+** SD4 - Feature checks: Nameplates, coverage guard, release 0.9.0
+- Section ID: SD4
+- Status: PENDING
+- Workstreams / tasks: WS-D4 / T-D11, T-D12; lead task T-D13; user task T-D14
+- Acceptance: AC-D6, AC-D7, AC-D8 (all rows), AC-D9, AC-D13; folded master AC-39..AC-46 game evidence (D-D10)
+- Dependencies: SD3 =PASSED=; Q-D2 answered
+- Owned paths: =MerrinxUI/Modules/Nameplates.lua= (=GetDebugChecks= appended), =spec/debug_coverage_spec.lua= (new), =MerrinxUI/MerrinxUI.toc= (=## Version: 0.9.0=); lead: =merrinxui-plan.org= (E-NP-GAME note), =debug-mode-plan.org=
+- Steps:
+  1. T-D11: Nameplates checks =apis=, =styled plates=, =target plate=, =health colour=, =highlight=, =cast events=, =cast anchor=, =target cast=, =health text=, =power bar=, =power text=, =debuffs=, =secret flags=.
+  2. T-D12: =spec/debug_coverage_spec.lua= per the coverage-spec contract; TOC 0.9.0.
+  3. T-D13 (lead): record in =merrinxui-plan.org= that E-NP-GAME runs on =v0.9.0-sd4.1= with the Nameplates checks as step 0 (unless Q-D2 says otherwise).
+  4. T-D14 (user): G-SD4-GAME.
+- G-SD4-GAME steps (Druid or Mage; "test" = =/mui test=):
+  1. Full restart, =/console scriptErrors 1=, =/console taintLog 1=; =/mui= shows the Debug node; "Run tests" is greyed out.
+  2. =/mui debug on=, =/reload=: still on; the log has a =session= line.
+  3. No target, out of combat, test: target checks SKIP; no FAIL from Debug, Mover, Combat, Hider, HideBlizzard, EnemyCooldowns =spell table=.
+  4. =/mui= → Nameplates → Enabled on. Target a hostile NPC (training dummy), test.
+  5. Health text percent, then number, then both, then none; test after each.
+  6. Power bar on, power text percent, power height 8; target a mana or energy mob; test.
+  7. Debuff anchor TOP, then BOTTOM, then LEFT; apply your own DoT; test after each. Look: TOP does not overlap EnemyCooldowns icons (R-NP-03).
+  8. Only my debuffs off; test.
+  9. Repeat steps 6 and 7 in combat (P7/P11 parity): no Lua error; =Mover/unlocked= PASS. Stop on SEC-NP-02.
+  10. =/mui unlock=, test (=Mover/overlay= PASS); =/mui lock=.
+  11. Near a hostile player (duel or battleground): test (=EnemyCooldowns/tracked= > 0); after they cast a curated spell, test (=icons <unit>= PASS). Set EnemyCooldowns anchor LEFT, x 10, y 5; after another cast, test; restore.
+  12. Log window: =/mui log= twice gives one window; Close works; Esc only clears focus; Ctrl+C copies. *Copy and paste the log now.*
+  13. "Clear log" → 0 lines; =/mui debug off= → =/mui test= refused.
+  14. =Logs/taint.log= has no MerrinxUI lines.
+  - Paste: the full copied log from step 12, plus a one-line note for steps 1, 2, 7 (overlap look), 12-14.
+- Expected: no FAIL lines except ones the user and lead agree are wrong expectations (fixed in a remediation batch with fresh gates).
+- Gates: G-SD4-VER, G-SD4-REV, G-SD4-SEC, G-SD4-GAME
+- Evidence:
+  - E-SD4-VER = (pending)
+  - E-SD4-REV = (pending)
+  - E-SD4-SEC = (pending)
+  - E-SD4-GAME = (pending: pasted log, step notes, tag, release URL)
+  - E-NP-GAME (also recorded in the master plan) = (pending)
+- Next: SD5
+
+** SD5 - Feature trace logging, release 0.10.0
+- Section ID: SD5
+- Status: PENDING
+- Workstreams / tasks: WS-D5 / T-D15; user task T-D16
+- Acceptance: AC-D12, AC-D4, AC-D13
+- Dependencies: SD4 =PASSED=
+- Owned paths: =MerrinxUI/Modules/EnemyCooldowns.lua=, =MerrinxUI/Modules/Nameplates.lua=, =MerrinxUI/Modules/HideBlizzard.lua=, =MerrinxUI/Modules/RangeText.lua=, =MerrinxUI/Util/Mover.lua=, =MerrinxUI/MerrinxUI.toc= (=## Version: 0.10.0=); lead: =debug-mode-plan.org=
+- Trace points (=ns.Debug:Log(source, ...)=, looked up at call time; only add calls, no behaviour change):
+  - EnemyCooldowns: =OnSpellcastSucceeded= → ="hit", unit, spellID, name, entry.cd= only on a curated hit; =HandleUnit= → ="track", unit= when a unit becomes tracked, ="skip", unit, reason= only for =secret flags=, =secret guid=, =forbidden= (never for non-hostile or NPC units); =OnEnteringWorld= → ="reset"=.
+  - Nameplates: =StyleUnit= → ="style", unit= only when a new unit is styled; =UnstyleUnit= → ="unstyle", unit= only when a styled frame existed; =OnCastStart= / =OnChannelStart= → ="cast", unit, mode= only when =UnitIsUnit(unit, "target")= is non-secret true; =SetCastEventsEnabled= → ="cast events", enable= on change.
+  - HideBlizzard: =ApplyGroup= → ="hide", key, frameName, ok= or ="missing", frameName=; =ApplyMeter= → ="meter", newValue, owned= when it writes the CVar.
+  - RangeText: one line only when the state (=none=, =in=, =out=, =unknown=, =secret=) changes, kept in one new module field =lastTraceState= that is only compared with these strings.
+  - Mover: =SetUnlocked= → ="unlocked", value= on change; combat relock → ="relock combat"=.
+- G-SD5-GAME: debug on; duel or battleground cast of a curated spell → a =hit= line; walk past NPCs → no =skip= lines; =/mui unlock= then enter combat → =unlocked true= then =relock combat=; RangeText moving in and out of range → one line per change; paste the log.
+- Gates: G-SD5-VER, G-SD5-REV, G-SD5-SEC, G-SD5-GAME
+- Evidence:
+  - E-SD5-VER = (pending)
+  - E-SD5-REV = (pending)
+  - E-SD5-SEC = (pending)
+  - E-SD5-GAME = (pending)
+- Next: none (later master-plan sections add their own checks per the contract)
+
+* Workstreams
+| Field | WS-D1 | WS-D2 | WS-D3 | WS-D4 | WS-D5 |
+|---|---|---|---|---|---|
+| Workstream ID | WS-D1 | WS-D2 | WS-D3 | WS-D4 | WS-D5 |
+| Specialist | backend (lua-wow) | backend (lua-wow) | backend (lua-wow) | backend (lua-wow) | backend (lua-wow) |
+| Goal | DebugLogic + spec, Debug module (toggle, log, window, runner, options, core checks), Core slash routing, TOC lines, luacheck | Checks for Mover, Combat, Hider, RangeText, HideBlizzard | Audit + spec, EnemyCooldowns checks | Nameplates checks, coverage spec, version 0.9.0 | Trace calls at state changes, version 0.10.0 |
+| Owned files/modules | =Debug/DebugLogic.lua=, =Debug/Debug.lua=, =spec/debug_logic_spec.lua=, =Core.lua= (SlashCommand), TOC (Debug lines), =.luacheckrc= | =Util/Mover.lua=, =Util/Combat.lua=, =Util/Hider.lua=, =Modules/RangeText.lua=, =Modules/HideBlizzard.lua=, =.luacheckrc= (if needed) | =Modules/EnemyCooldownLogic.lua= (Audit), =spec/enemy_cooldown_logic_spec.lua=, =Modules/EnemyCooldowns.lua=, =.luacheckrc= | =Modules/Nameplates.lua=, =spec/debug_coverage_spec.lua=, TOC (version) | =Modules/EnemyCooldowns.lua=, =Modules/Nameplates.lua=, =Modules/HideBlizzard.lua=, =Modules/RangeText.lua=, =Util/Mover.lua=, TOC (version) |
+| Dependencies | user approves =git add -N= | SD1 PASSED | SD2 PASSED | SD3 PASSED; =git add -N= for the coverage spec; Q-D2 | SD4 PASSED |
+| Shared interfaces | defines =ns.DebugLogic.*=, =ns.Debug:*=, check contract | consumes =RegisterChecks= / =GetDebugChecks= | consumes the contract; defines =EnemyCooldownLogic.Audit= | consumes the contract; coverage spec enforces it | consumes =ns.Debug:Log= |
+| Parallel group | P1 (alone) | P2 (alone) | P3 (alone) | P4 (alone) | P5 (alone) |
+| Integration order | 1 | 2 | 3 | 4 | 5 |
+| Targeted validation | busted (=spec/debug_logic_spec.lua=), luacheck, stylua, =nix flake check -L=, release zip listing, grep gates (D-D2, =tostring=, side effects in core checks) | luacheck, stylua, =nix flake check -L=, side-effect grep + body read | busted (Audit), luacheck, stylua, =nix flake check -L=, side-effect grep + body read | busted (coverage spec), luacheck, stylua, =nix flake check -L=, =nix build .#release=, side-effect grep + body read | luacheck, stylua, =nix flake check -L=, hot-path grep |
+
+* Registers (JSON)
+#+begin_src json
+{
+  "requirements": [
+    {"id": "AC-D1", "text": "Debug options node: toggle, Run tests (disabled when off), Show log, Clear log (confirm), line count; D-27 types only", "sections": ["SD1"]},
+    {"id": "AC-D2", "text": "/mui debug [on|off], /mui test, /mui log; existing slash behaviour unchanged", "sections": ["SD1"]},
+    {"id": "AC-D3", "text": "Debug flag and log account-wide, persist across /reload; log capped at 500", "sections": ["SD1"]},
+    {"id": "AC-D4", "text": "No logging when off; secret-safe everywhere; no GUIDs, names or profile names", "sections": ["SD1", "SD5"]},
+    {"id": "AC-D5", "text": "Run tests: header, sorted sources, summary with up to 10 FAIL lines, throwing check or provider -> FAIL, log window opens", "sections": ["SD1"]},
+    {"id": "AC-D6", "text": "Single log window, preselected text on every open, Close button, combat-safe, no UISpecialFrames, no taint", "sections": ["SD1", "SD4"]},
+    {"id": "AC-D7", "text": "Checks read-only per the forbidden-call list; SKIP without target or when module disabled", "sections": ["SD1", "SD2", "SD3", "SD4"]},
+    {"id": "AC-D8", "text": "Every current feature covered per the coverage matrix", "sections": ["SD2", "SD3", "SD4"]},
+    {"id": "AC-D9", "text": "Coverage guard: TOC-driven spec with exempt list + runtime coverage checks", "sections": ["SD1", "SD4"]},
+    {"id": "AC-D10", "text": "Automatic settings INFO and enabled-state check per module", "sections": ["SD1"]},
+    {"id": "AC-D11", "text": "busted for DebugLogic and EnemyCooldownLogic.Audit", "sections": ["SD1", "SD3"]},
+    {"id": "AC-D12", "text": "Trace lines at state changes only; no NPC skip lines; no hot-path calls", "sections": ["SD5"]},
+    {"id": "AC-D13", "text": "nix flake check -L exits 0", "sections": ["SD1", "SD2", "SD3", "SD4", "SD5"]}
+  ],
+  "sections": [
+    {"id": "SD1", "title": "Debug framework", "status": "PENDING", "deps": [], "workstreams": ["WS-D1"], "tasks": ["T-D1", "T-D2", "T-D3", "T-D4", "T-D5"], "acs": ["AC-D1", "AC-D2", "AC-D3", "AC-D4", "AC-D5", "AC-D6", "AC-D7", "AC-D9", "AC-D10", "AC-D11", "AC-D13"], "owned_paths": {"backend": ["MerrinxUI/Debug/DebugLogic.lua", "MerrinxUI/Debug/Debug.lua", "spec/debug_logic_spec.lua", "MerrinxUI/Core.lua", "MerrinxUI/MerrinxUI.toc", ".luacheckrc"], "lead": ["merrinxui-plan.org", "debug-mode-plan.org"]}, "gates": ["G-SD1-VER", "G-SD1-REV", "G-SD1-SEC"], "next": "SD2"},
+    {"id": "SD2", "title": "Feature checks: Mover, Combat, Hider, RangeText, HideBlizzard", "status": "PENDING", "deps": ["SD1"], "workstreams": ["WS-D2"], "tasks": ["T-D6", "T-D7", "T-D8"], "acs": ["AC-D7", "AC-D8", "AC-D13"], "owned_paths": {"backend": ["MerrinxUI/Util/Mover.lua", "MerrinxUI/Util/Combat.lua", "MerrinxUI/Util/Hider.lua", "MerrinxUI/Modules/RangeText.lua", "MerrinxUI/Modules/HideBlizzard.lua", ".luacheckrc"], "lead": ["debug-mode-plan.org"]}, "gates": ["G-SD2-VER", "G-SD2-REV", "G-SD2-SEC"], "next": "SD3"},
+    {"id": "SD3", "title": "Feature checks: EnemyCooldowns + spell table audit", "status": "PENDING", "deps": ["SD2"], "workstreams": ["WS-D3"], "tasks": ["T-D9", "T-D10"], "acs": ["AC-D7", "AC-D8", "AC-D11", "AC-D13"], "owned_paths": {"backend": ["MerrinxUI/Modules/EnemyCooldownLogic.lua", "spec/enemy_cooldown_logic_spec.lua", "MerrinxUI/Modules/EnemyCooldowns.lua", ".luacheckrc"], "lead": ["debug-mode-plan.org"]}, "gates": ["G-SD3-VER", "G-SD3-REV", "G-SD3-SEC"], "next": "SD4"},
+    {"id": "SD4", "title": "Feature checks: Nameplates, coverage guard, release 0.9.0", "status": "PENDING", "deps": ["SD3"], "workstreams": ["WS-D4"], "tasks": ["T-D11", "T-D12", "T-D13", "T-D14"], "acs": ["AC-D6", "AC-D7", "AC-D8", "AC-D9", "AC-D13"], "owned_paths": {"backend": ["MerrinxUI/Modules/Nameplates.lua", "spec/debug_coverage_spec.lua", "MerrinxUI/MerrinxUI.toc"], "lead": ["merrinxui-plan.org", "debug-mode-plan.org"]}, "gates": ["G-SD4-VER", "G-SD4-REV", "G-SD4-SEC", "G-SD4-GAME"], "next": "SD5"},
+    {"id": "SD5", "title": "Feature trace logging, release 0.10.0", "status": "PENDING", "deps": ["SD4"], "workstreams": ["WS-D5"], "tasks": ["T-D15", "T-D16"], "acs": ["AC-D4", "AC-D12", "AC-D13"], "owned_paths": {"backend": ["MerrinxUI/Modules/EnemyCooldowns.lua", "MerrinxUI/Modules/Nameplates.lua", "MerrinxUI/Modules/HideBlizzard.lua", "MerrinxUI/Modules/RangeText.lua", "MerrinxUI/Util/Mover.lua", "MerrinxUI/MerrinxUI.toc"], "lead": ["debug-mode-plan.org"]}, "gates": ["G-SD5-VER", "G-SD5-REV", "G-SD5-SEC", "G-SD5-GAME"], "next": null}
+  ],
+  "workstreams": [
+    {"id": "WS-D1", "specialist": "backend (lua-wow)", "section": "SD1", "parallel_group": "P1", "integration_order": 1},
+    {"id": "WS-D2", "specialist": "backend (lua-wow)", "section": "SD2", "parallel_group": "P2", "integration_order": 2},
+    {"id": "WS-D3", "specialist": "backend (lua-wow)", "section": "SD3", "parallel_group": "P3", "integration_order": 3},
+    {"id": "WS-D4", "specialist": "backend (lua-wow)", "section": "SD4", "parallel_group": "P4", "integration_order": 4},
+    {"id": "WS-D5", "specialist": "backend (lua-wow)", "section": "SD5", "parallel_group": "P5", "integration_order": 5}
+  ],
+  "tasks": [
+    {"id": "T-D1", "ws": "WS-D1", "text": "DebugLogic.lua + spec/debug_logic_spec.lua with all DebugLogic examples"},
+    {"id": "T-D2", "ws": "WS-D1", "text": "Debug.lua: module, namespace, lazy log, IsActive/SetActive/Log/RegisterChecks/RunTests/ShowLog/ClearLog/Slash/GetOptions, RunSource for providers, automatic settings and enabled-state results, AceGUI log window"},
+    {"id": "T-D3", "ws": "WS-D1", "text": "Core checks: version, interface, secret api, libraries, slash, options, profile, coverage <Module>, log"},
+    {"id": "T-D4", "ws": "WS-D1", "text": "Core.SlashCommand routing (unlock/lock unchanged); TOC Debug lines after Core.lua; .luacheckrc date, GetLocale, C_AddOns, SlashCmdList"},
+    {"id": "T-D5", "ws": "lead", "text": "Update merrinxui-plan.org: GetDebugChecks/RegisterChecks contract, load-order rule, D-D references"},
+    {"id": "T-D6", "ws": "WS-D2", "text": "Mover, Combat, Hider RegisterChecks providers"},
+    {"id": "T-D7", "ws": "WS-D2", "text": "RangeText GetDebugChecks: spell, font, visibility, range, in range"},
+    {"id": "T-D8", "ws": "WS-D2", "text": "HideBlizzard GetDebugChecks: frame <Name>, reload needed <key>, meter cvar"},
+    {"id": "T-D9", "ws": "WS-D3", "text": "EnemyCooldownLogic.Audit + spec cases"},
+    {"id": "T-D10", "ws": "WS-D3", "text": "EnemyCooldowns GetDebugChecks: spell table, index, ticker, tracked, icons <unit>, container parent <unit>, no foreign icons"},
+    {"id": "T-D11", "ws": "WS-D4", "text": "Nameplates GetDebugChecks: apis, styled plates, target plate, health colour, highlight, cast events, cast anchor, target cast, health text, power bar, power text, debuffs, secret flags"},
+    {"id": "T-D12", "ws": "WS-D4", "text": "spec/debug_coverage_spec.lua (TOC-driven, EXEMPT list, >= 5 modules, Debug before Util); TOC 0.9.0"},
+    {"id": "T-D13", "ws": "lead", "text": "Record E-NP-GAME folding in merrinxui-plan.org (or not, per Q-D2)"},
+    {"id": "T-D14", "ws": "user", "text": "G-SD4-GAME steps 1-14; paste the copied log and step notes"},
+    {"id": "T-D15", "ws": "WS-D5", "text": "Trace calls at the listed points; RangeText lastTraceState; TOC 0.10.0"},
+    {"id": "T-D16", "ws": "user", "text": "G-SD5-GAME; paste the copied log"}
+  ],
+  "evidence": [
+    {"id": "E-SD1-VER", "gate": "G-SD1-VER", "expect": "flake check exit 0; busted > 56 / 0 / 0; luacheck 0/0; stylua 0; zip lists Debug files; grep gates clean", "value": null},
+    {"id": "E-SD1-REV", "gate": "G-SD1-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SD1-SEC", "gate": "G-SD1-SEC", "expect": "CLEAR (secret handling, SavedVariables content, no side effects)", "value": null},
+    {"id": "E-SD1-PLAN", "gate": "lead", "expect": "merrinxui-plan.org contract and load-order updated", "value": null},
+    {"id": "E-SD2-VER", "gate": "G-SD2-VER", "expect": "flake check exit 0; side-effect grep and body read clean", "value": null},
+    {"id": "E-SD2-REV", "gate": "G-SD2-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SD2-SEC", "gate": "G-SD2-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SD3-VER", "gate": "G-SD3-VER", "expect": "flake check exit 0; Audit spec passes; side-effect grep and body read clean", "value": null},
+    {"id": "E-SD3-REV", "gate": "G-SD3-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SD3-SEC", "gate": "G-SD3-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SD4-VER", "gate": "G-SD4-VER", "expect": "flake check exit 0; coverage spec passes; release zip builds", "value": null},
+    {"id": "E-SD4-REV", "gate": "G-SD4-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SD4-SEC", "gate": "G-SD4-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SD4-GAME", "gate": "G-SD4-GAME", "expect": "pasted log with no unaccepted FAIL; step notes; tag v0.9.0-sd4.1 release URL", "value": null},
+    {"id": "E-NP-GAME", "gate": "G-SD4-GAME", "expect": "steps 4-9 results for the nameplate text/power/debuff work (master plan AC-39..AC-46)", "value": null},
+    {"id": "E-SD5-VER", "gate": "G-SD5-VER", "expect": "flake check exit 0; hot-path grep clean", "value": null},
+    {"id": "E-SD5-REV", "gate": "G-SD5-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SD5-SEC", "gate": "G-SD5-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SD5-GAME", "gate": "G-SD5-GAME", "expect": "pasted log with hit/style/unlocked/relock/range-change lines and no NPC skip lines", "value": null}
+  ],
+  "gates": [
+    {"id": "G-SD1-VER", "type": "verifier", "section": "SD1"},
+    {"id": "G-SD1-REV", "type": "reviewer", "section": "SD1"},
+    {"id": "G-SD1-SEC", "type": "security", "section": "SD1"},
+    {"id": "G-SD2-VER", "type": "verifier", "section": "SD2"},
+    {"id": "G-SD2-REV", "type": "reviewer", "section": "SD2"},
+    {"id": "G-SD2-SEC", "type": "security", "section": "SD2"},
+    {"id": "G-SD3-VER", "type": "verifier", "section": "SD3"},
+    {"id": "G-SD3-REV", "type": "reviewer", "section": "SD3"},
+    {"id": "G-SD3-SEC", "type": "security", "section": "SD3"},
+    {"id": "G-SD4-VER", "type": "verifier", "section": "SD4"},
+    {"id": "G-SD4-REV", "type": "reviewer", "section": "SD4"},
+    {"id": "G-SD4-SEC", "type": "security", "section": "SD4"},
+    {"id": "G-SD4-GAME", "type": "user", "section": "SD4"},
+    {"id": "G-SD5-VER", "type": "verifier", "section": "SD5"},
+    {"id": "G-SD5-REV", "type": "reviewer", "section": "SD5"},
+    {"id": "G-SD5-SEC", "type": "security", "section": "SD5"},
+    {"id": "G-SD5-GAME", "type": "user", "section": "SD5"}
+  ]
+}
+#+end_src
+
+* Gate assignment template (lead)
+#+begin_example
+Workflow intent: <implementation|remediation|verification|review|security>
+Section: SD<n>   Workstream: WS-D<n>   Tasks: T-D..   Acceptance: AC-D..
+Owned paths: <from the section>   Out of bounds: everything else
+Contracts: "Shared interfaces and contracts" and "Feature coverage matrix" in debug-mode-plan.org
+Evidence expected: <E-SD..-*>; report Overall verdict PASSED/FAILED/UNVERIFIED or CLEAR/FINDINGS/UNVERIFIED
+Working directory: /home/merrinx/Projects/merrinxui
+#+end_example
+
+* Handoff
+- *Continuation point:* planning complete; no section started. HEAD =cdc0764=, tree clean apart from =merrinxui-plan.org= and this file (both untracked).
+- *Next:* SD1 — ready. Before the verifier runs, ask the user to approve =git add --intent-to-add= for the three SD1 files.
+- *Then:* SD2 and SD3 (each ready once the previous section is =PASSED=); SD4 needs SD3 and an answer to Q-D2 (fold the nameplate gate into =v0.9.0-sd4.1=, recommended); SD5 needs SD4.
+- *Blocked:* nothing external. SD4 and SD5 game gates need the user at the gaming PC; SD4 step 11 and SD5 need a hostile player (duel partner or battleground).
+- *Safe stopping points:* after any section. SD1-SD3 produce no release; runtime =Debug/coverage= FAILs are expected until SD4.
+- *After SD4 passes:* every later master-plan section (S7, S8, S9, S14-S17) adds =GetDebugChecks= or a =RegisterChecks= provider for its feature and runs its game gate as "=/mui test= + paste the log"; the coverage spec fails the build if a new runtime file forgets.

@@ -137,7 +137,24 @@
         "git-hooks": "git-hooks",
         "librangecheck": "librangecheck",
         "libsharedmedia": "libsharedmedia",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "wow-api": "wow-api"
+      }
+    },
+    "wow-api": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1782307145,
+        "narHash": "sha256-moaTfFGbW35Pebyn0qKNO+T656dyhk+7yRhyk/p73T4=",
+        "owner": "Ketho",
+        "repo": "vscode-wow-api",
+        "rev": "d0b5b51fac4c52c493371b9b18e66ce604ea4326",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Ketho",
+        "repo": "vscode-wow-api",
+        "type": "github"
       }
     }
   },

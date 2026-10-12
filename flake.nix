@@ -20,6 +20,11 @@
       flake = false;
     };
 
+    wow-api = {
+      url = "github:Ketho/vscode-wow-api";
+      flake = false;
+    };
+
     libsharedmedia = {
       url = "file+https://repos.curseforge.com/wow/libsharedmedia-3-0/!svn/bc/182/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua";
       flake = false;
@@ -68,6 +73,19 @@
             cp ${inputs.libsharedmedia} $out/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
             cp ${pkgs.spdx-license-list-data.text}/text/LGPL-2.1-only.txt $out/LibSharedMedia-3.0-LICENSE.txt
           '';
+
+          luarc = pkgs.writeText "luarc.json" (
+            builtins.toJSON {
+              runtime.version = "Lua 5.1";
+              workspace = {
+                library = [
+                  "${inputs.wow-api}/Annotations/Core"
+                  "${addonLibs}"
+                ];
+                checkThirdParty = false;
+              };
+            }
+          );
 
           merrinxui = pkgs.runCommand "merrinxui" { } ''
             mkdir -p "$out/MerrinxUI"
@@ -154,7 +172,7 @@
           };
 
           devShells.default = pkgs.mkShell {
-            inherit (pre-commit-check) shellHook;
+            shellHook = pre-commit-check.shellHook + "\ninstall -m 644 ${luarc} .luarc.json\n";
             packages =
               pre-commit-check.enabledPackages
               ++ (with pkgs; [

@@ -64,6 +64,16 @@ read_globals = {
 	"HideUIPanel",
 	"InputUtil",
 	"UISpecialFrames",
+	"RegisterStateDriver",
+	"UnregisterStateDriver",
+	"C_ActionBar",
+	"SetOverrideBindingClick",
+	"ClearOverrideBindings",
+	"GetBindingKey",
+	"GetBindingAction",
+	"C_PetBattles",
+	"C_DamageMeter",
+	"CLASS_ICON_TCOORDS",
 }
 
 files["spec"] = {
