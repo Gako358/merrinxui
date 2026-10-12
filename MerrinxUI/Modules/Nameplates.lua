@@ -32,6 +32,7 @@ local CAST_SHIELD_SIZE = 14
 local POWER_BAR_GAP = 1
 local DEBUFF_SPACING = 2
 local DEBUFF_GROUP = "debuffs"
+local DEBUFF_COUNT_SIZE = 10
 
 local CAST_EVENTS = {
 	UNIT_SPELLCAST_START = "OnCastStart",
@@ -302,6 +303,28 @@ function Nameplates:UnstyleUnit(unit)
 	end
 end
 
+-- CustomAuraButtonTemplate has no size or regions; the container only fills in what we register here
+local function InitializeDebuffButton(button, size)
+	button:SetSize(size, size)
+
+	local icon = button:CreateTexture(nil, "ARTWORK")
+	icon:SetAllPoints(button)
+	button:SetIcon(icon)
+
+	local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+	cooldown:SetAllPoints(button)
+	button:SetDurationCooldown(cooldown)
+
+	local countOverlay = CreateFrame("Frame", nil, button)
+	countOverlay:SetAllPoints(button)
+	countOverlay:SetFrameLevel(cooldown:GetFrameLevel() + 1)
+
+	local count = countOverlay:CreateFontString(nil, "OVERLAY")
+	count:SetPoint("BOTTOMRIGHT", button)
+	count:SetFont(FONT, DEBUFF_COUNT_SIZE, "OUTLINE")
+	button:SetApplicationCount(count)
+end
+
 local function CreateDebuffContainer(frame, profile)
 	local debuffs = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
 	-- parsing and layout run from a run-when-visible OnUpdate, which needs a rect; layout replaces this size
@@ -310,6 +333,9 @@ local function CreateDebuffContainer(frame, profile)
 	debuffs:Hide()
 	debuffs:AddAuraGroup(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL", {
 		maxFrameCount = profile.debuffMax,
+		initializeFrame = function(button)
+			InitializeDebuffButton(button, profile.debuffSize)
+		end,
 		layout = {
 			elementWidth = profile.debuffSize,
 			elementHeight = profile.debuffSize,
@@ -497,6 +523,12 @@ function Nameplates:UpdateDebuffs(unit, frame)
 		elementHeight = profile.debuffSize,
 		elementSpacing = DEBUFF_SPACING,
 	})
+	-- buttons deny tainted access while auras are secret; a size change made then applies on the next update
+	if not C_Secrets.ShouldAurasBeSecret() then
+		for i = 1, debuffs:GetAuraGroupFrameCount(DEBUFF_GROUP) do
+			debuffs:GetAuraGroupFrame(DEBUFF_GROUP, i):SetSize(profile.debuffSize, profile.debuffSize)
+		end
+	end
 	debuffs:SetUnit(unit)
 	debuffs:UpdateAllAuras()
 	debuffs:Show()
