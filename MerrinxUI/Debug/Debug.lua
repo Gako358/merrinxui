@@ -3,6 +3,8 @@ local addonName, ns = ...
 local DebugLogic = ns.DebugLogic
 local AceGUI = LibStub("AceGUI-3.0")
 
+local TOC_INTERFACE = 16001
+
 local registeredChecks = {}
 local logFrame, logEdit
 
@@ -26,9 +28,9 @@ local function environment()
 	local version = (type(C_AddOns) == "table" and type(C_AddOns.GetAddOnMetadata) == "function")
 			and C_AddOns.GetAddOnMetadata(addonName, "Version")
 		or nil
-	local interface = select(4, GetBuildInfo())
+	local gameVersion, build, buildDate, interface = GetBuildInfo()
 	local _, classFile = UnitClass("player")
-	return version, interface, classFile, GetLocale()
+	return version, gameVersion, build, buildDate, interface, classFile, GetLocale()
 end
 
 function Debug:OnInitialize()
@@ -79,8 +81,20 @@ function Debug:RunTests()
 		return nil
 	end
 
-	local version, interface, classFile, locale = environment()
-	self:Log("Debug", "test run", version, interface, classFile, locale, "combat", InCombatLockdown())
+	local version, gameVersion, build, buildDate, interface, classFile, locale = environment()
+	self:Log(
+		"Debug",
+		"test run",
+		version,
+		gameVersion,
+		build,
+		buildDate,
+		interface,
+		classFile,
+		locale,
+		"combat",
+		InCombatLockdown()
+	)
 
 	local ctx = { inCombat = InCombatLockdown(), hasTarget = UnitExists("target") }
 
@@ -113,12 +127,14 @@ function Debug:RunTests()
 				status = "INFO",
 				detail = DebugLogic.Flatten(profile, issecretvalue),
 			})
-			table.insert(results, {
-				source = name,
-				name = "enabled state",
-				status = (module:IsEnabled() == (profile.enabled == true)) and "PASS" or "FAIL",
-				detail = DebugLogic.Join({ module:IsEnabled(), profile.enabled }, 2, issecretvalue),
-			})
+			if profile.enabled ~= nil then
+				table.insert(results, {
+					source = name,
+					name = "enabled state",
+					status = (module:IsEnabled() == (profile.enabled == true)) and "PASS" or "FAIL",
+					detail = DebugLogic.Join({ module:IsEnabled(), profile.enabled }, 2, issecretvalue),
+				})
+			end
 		end
 
 		if module and type(module.GetDebugChecks) == "function" then
@@ -222,7 +238,20 @@ function Debug:GetDebugChecks()
 		{
 			name = "interface",
 			run = function()
-				return (select(4, GetBuildInfo()) == 16001) and "PASS" or "FAIL"
+				local toc = select(4, GetBuildInfo())
+				if issecretvalue(toc) then
+					return "INFO", toc
+				end
+				if toc ~= TOC_INTERFACE then
+					return "FAIL", toc, TOC_INTERFACE, "update ## Interface"
+				end
+				return "PASS", toc, TOC_INTERFACE
+			end,
+		},
+		{
+			name = "game version",
+			run = function()
+				return "INFO", GetBuildInfo()
 			end,
 		},
 		{

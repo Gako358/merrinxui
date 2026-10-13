@@ -89,4 +89,31 @@ describe("FontLogic", function()
 		assert.are.equal("A", L.Migrate("Fonts\\X.TTF", { B = "Fonts\\X.TTF", A = "Fonts\\X.TTF" }, "Z"))
 		assert.are.equal("Z", L.Migrate("Fonts\\X.TTF", { B = "Fonts\\X.TTF", Z = "Fonts\\X.TTF" }, "Z"))
 	end)
+
+	it("resolves the global token to the global key, and anything else unchanged", function()
+		assert.are.equal("*", L.GLOBAL)
+		assert.are.equal("Morpheus", L.Resolve("*", "Morpheus"))
+		assert.are.equal("Morpheus", L.Resolve(nil, "Morpheus"))
+		assert.are.equal("Skurri", L.Resolve("Skurri", "Morpheus"))
+	end)
+
+	it("adds a global entry to Values when a label is given, even for a nil hash", function()
+		assert.are.same({
+			["Friz Quadrata TT"] = "Friz Quadrata TT",
+			["Arial Narrow"] = "Arial Narrow",
+			Morpheus = "Morpheus",
+			["*"] = "Use global (Friz Quadrata TT)",
+		}, L.Values(H, nil, nil, "Use global (Friz Quadrata TT)"))
+		assert.are.same({ ["*"] = "x" }, L.Values(nil, nil, nil, "x"))
+		assert.are.same({
+			["Friz Quadrata TT"] = "Friz Quadrata TT",
+			["Arial Narrow"] = "Arial Narrow",
+			Morpheus = "Morpheus",
+		}, L.Values(H))
+	end)
+
+	it("migrates the global token through and the global default to the global token", function()
+		assert.are.equal("*", L.Migrate("*", H, "Friz Quadrata TT"))
+		assert.are.equal("*", L.Migrate("", H, L.GLOBAL))
+	end)
 end)

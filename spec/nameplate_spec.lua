@@ -106,4 +106,43 @@ describe("NameplateLogic", function()
 			)
 		end)
 	end)
+
+	describe("DebuffFilter/CC_FILTER", function()
+		it("builds filter strings per ccSeparate and matches the CC_FILTER literal", function()
+			assert.are.equal("HARMFUL|PLAYER", ns.NameplateLogic.DebuffFilter(true, false))
+			assert.are.equal("HARMFUL", ns.NameplateLogic.DebuffFilter(false, false))
+			assert.are.equal("HARMFUL|PLAYER|!CROWD_CONTROL", ns.NameplateLogic.DebuffFilter(true, true))
+			assert.are.equal("HARMFUL|!CROWD_CONTROL", ns.NameplateLogic.DebuffFilter(false, true))
+			assert.are.equal("HARMFUL|CROWD_CONTROL", ns.NameplateLogic.CC_FILTER)
+		end)
+	end)
+
+	describe("LevelText/LevelColor", function()
+		it("formats the level with a classification suffix", function()
+			assert.are.equal("10", ns.NameplateLogic.LevelText(10, "normal"))
+			assert.are.equal("10+", ns.NameplateLogic.LevelText(10, "elite"))
+			assert.are.equal("10r", ns.NameplateLogic.LevelText(10, "rare"))
+			assert.are.equal("10r+", ns.NameplateLogic.LevelText(10, "rareelite"))
+			assert.are.equal("??", ns.NameplateLogic.LevelText(-1, "elite"))
+			assert.are.equal("??", ns.NameplateLogic.LevelText(63, "worldboss"))
+			assert.are.equal("12", ns.NameplateLogic.LevelText(12, "trivial"))
+			assert.are.equal("12", ns.NameplateLogic.LevelText(12, "minus"))
+			assert.is_nil(ns.NameplateLogic.LevelText(nil, "normal"))
+			assert.is_nil(ns.NameplateLogic.LevelText(0, "normal"))
+		end)
+
+		it("colours by classification, falling back to a provided colour table", function()
+			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.LevelColor(-1, "normal", nil) })
+			assert.are.same(
+				{ 1, 0, 0 },
+				{ ns.NameplateLogic.LevelColor(60, "worldboss", { r = 0.5, g = 0.5, b = 0.5 }) }
+			)
+			assert.are.same(
+				{ 0.25, 0.75, 0.25 },
+				{ ns.NameplateLogic.LevelColor(10, "normal", { r = 0.25, g = 0.75, b = 0.25 }) }
+			)
+			assert.are.same({ 1, 1, 1 }, { ns.NameplateLogic.LevelColor(10, "normal", nil) })
+			assert.are.same({ 1, 1, 1 }, { ns.NameplateLogic.LevelColor(10, "normal", "x") })
+		end)
+	end)
 end)

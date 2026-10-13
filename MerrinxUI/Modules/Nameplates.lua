@@ -1,6 +1,7 @@
 local addonName, ns = ...
 
 local NameplateLogic = ns.NameplateLogic
+local FontLogic = ns.FontLogic
 
 local Nameplates = ns.addon:NewModule("Nameplates", "AceEvent-3.0")
 
@@ -10,6 +11,8 @@ local defaults = {
 		width = 130,
 		height = 10,
 		nameSize = 10,
+		font = FontLogic.GLOBAL,
+		barTexture = FontLogic.GLOBAL,
 		castBar = true,
 		healthText = "percent",
 		powerBar = false,
@@ -20,10 +23,15 @@ local defaults = {
 		debuffAnchor = "TOP",
 		debuffSize = 18,
 		debuffMax = 4,
+		debuffX = 0,
+		debuffY = 0,
+		levelText = true,
+		cc = true,
+		ccSize = 26,
+		ccMax = 2,
 	},
 }
 
-local FONT = "Fonts\\FRIZQT__.TTF"
 local BAR_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local SHIELD_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Small-Shield"
 local CAST_BAR_HEIGHT = 8
@@ -32,7 +40,9 @@ local CAST_SHIELD_SIZE = 14
 local POWER_BAR_GAP = 1
 local DEBUFF_SPACING = 2
 local DEBUFF_GROUP = "debuffs"
+local CC_GROUP = "cc"
 local DEBUFF_COUNT_SIZE = 10
+local LEVEL_GAP = 2
 
 local CAST_EVENTS = {
 	UNIT_SPELLCAST_START = "OnCastStart",
@@ -55,6 +65,12 @@ local POWER_EVENTS = {
 
 local AURA_EVENTS = {
 	UNIT_AURA = "OnUnitAura",
+}
+
+local LEVEL_EVENTS = {
+	UNIT_LEVEL = "OnUnitLevel",
+	UNIT_CLASSIFICATION_CHANGED = "OnUnitLevel",
+	PLAYER_LEVEL_UP = "OnPlayerLevelUp",
 }
 
 local reapplyingAlpha = false
@@ -106,10 +122,12 @@ function Nameplates:OnEnable()
 	self:RegisterEvent("UNIT_NAME_UPDATE", "OnUnitNameUpdate")
 	self:RegisterEvent("UNIT_FACTION", "OnUnitFaction")
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
+	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
 
 	self:SetCastEventsEnabled(self.db.profile.castBar)
 	self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
-	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs)
+	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
+	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText)
 
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.unitToken
@@ -143,16 +161,20 @@ function Nameplates:Refresh()
 		self:Enable()
 		self:SetCastEventsEnabled(self.db.profile.castBar)
 		self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
-		self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs)
+		self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
+		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText)
 		for _, frame in pairs(self.plateFrames) do
 			self:ApplySize(frame)
 		end
+		self:ApplyCountFonts()
 		for unit, plate in pairs(self.unitPlates) do
 			local frame = self.plateFrames[plate]
 			if frame then
 				self:UpdateHealth(unit, frame)
+				self:UpdateLevel(unit, frame)
 				self:UpdatePower(unit, frame)
 				self:UpdateDebuffs(unit, frame)
+				self:UpdateCC(unit, frame)
 			end
 		end
 	else
@@ -178,6 +200,26 @@ function Nameplates:OnUnitHealth(_, unit)
 	local frame = plate and self.plateFrames[plate]
 	if frame then
 		self:UpdateHealth(unit, frame)
+	end
+end
+
+function Nameplates:OnUnitLevel(_, unit)
+	if not self.units[unit] then
+		return
+	end
+	local plate = self.unitPlates[unit]
+	local frame = plate and self.plateFrames[plate]
+	if frame then
+		self:UpdateLevel(unit, frame)
+	end
+end
+
+function Nameplates:OnPlayerLevelUp()
+	for unit, plate in pairs(self.unitPlates) do
+		local frame = self.plateFrames[plate]
+		if frame then
+			self:UpdateLevel(unit, frame)
+		end
 	end
 end
 
@@ -209,6 +251,20 @@ function Nameplates:OnTargetChanged()
 	end
 end
 
+function Nameplates:OnMediaChanged(_, mediatype, key)
+	local profile = self.db.profile
+	if mediatype == "font" and (key == nil or key == ns.Media:Resolve("font", profile.font)) then
+		for _, frame in pairs(self.plateFrames) do
+			self:ApplySize(frame)
+		end
+		self:ApplyCountFonts()
+	elseif mediatype == "statusbar" and (key == nil or key == ns.Media:Resolve("statusbar", profile.barTexture)) then
+		for _, frame in pairs(self.plateFrames) do
+			self:ApplySize(frame)
+		end
+	end
+end
+
 function Nameplates:OnUnitPower(_, unit)
 	local frame = self:GetCastFrame(unit)
 	if frame then
@@ -218,8 +274,11 @@ end
 
 function Nameplates:OnUnitAura(_, unit)
 	local frame = self:GetCastFrame(unit)
-	if frame and frame.debuffs then
+	if frame and frame.debuffs and self.db.profile.debuffs then
 		frame.debuffs:UpdateAllAuras()
+	end
+	if frame and frame.cc and self.db.profile.cc then
+		frame.cc:UpdateAllAuras()
 	end
 	if self.debuffResizePending then
 		self:ApplyPendingDebuffResize()
@@ -265,11 +324,13 @@ function Nameplates:StyleUnit(unit)
 	frame:Show()
 	self:UpdateHealth(unit, frame)
 	self:UpdateName(unit, frame)
+	self:UpdateLevel(unit, frame)
 	self:UpdateColor(unit, frame)
 	self:UpdateHighlight(unit, frame)
 	self:SyncCastBar(unit, frame)
 	self:UpdatePower(unit, frame)
 	self:UpdateDebuffs(unit, frame)
+	self:UpdateCC(unit, frame)
 
 	if isNewPlate and ns.Debug:IsActive() then
 		local isPlayer = UnitIsPlayer(unit)
@@ -314,7 +375,6 @@ local function InitializeDebuffButton(button, size)
 	if initializedDebuffButtons[button] then
 		return
 	end
-	initializedDebuffButtons[button] = true
 
 	button:SetSize(size, size)
 
@@ -332,16 +392,30 @@ local function InitializeDebuffButton(button, size)
 
 	local count = countOverlay:CreateFontString(nil, "OVERLAY")
 	count:SetPoint("BOTTOMRIGHT", button)
-	count:SetFont(FONT, DEBUFF_COUNT_SIZE, "OUTLINE")
+	initializedDebuffButtons[button] = count
+	ns.Media:SetFont(count, Nameplates.db.profile.font, DEBUFF_COUNT_SIZE, "OUTLINE")
 	button:SetApplicationCount(count)
 end
 
-local function ResizeDebuffButtons(debuffs, size)
+local function ResizeAuraButtons(container, group, size)
 	if C_Secrets.ShouldAurasBeSecret() then
 		return
 	end
-	for i = 1, debuffs:GetAuraGroupFrameCount(DEBUFF_GROUP) do
-		debuffs:GetAuraGroupFrame(DEBUFF_GROUP, i):SetSize(size, size)
+	for i = 1, container:GetAuraGroupFrameCount(group) do
+		container:GetAuraGroupFrame(group, i):SetSize(size, size)
+	end
+end
+
+function Nameplates:ApplyCountFonts()
+	if C_Secrets.ShouldAurasBeSecret() then
+		self.debuffResizePending = true
+		ns.Combat:Run("Nameplates:debuffSize", function()
+			self:ApplyPendingDebuffResize()
+		end)
+		return
+	end
+	for _, count in pairs(initializedDebuffButtons) do
+		ns.Media:SetFont(count, self.db.profile.font, DEBUFF_COUNT_SIZE, "OUTLINE")
 	end
 end
 
@@ -351,30 +425,35 @@ function Nameplates:ApplyPendingDebuffResize()
 	end
 	for _, plateFrame in pairs(self.plateFrames) do
 		if plateFrame.debuffs then
-			ResizeDebuffButtons(plateFrame.debuffs, self.db.profile.debuffSize)
+			ResizeAuraButtons(plateFrame.debuffs, DEBUFF_GROUP, self.db.profile.debuffSize)
+		end
+		if plateFrame.cc then
+			ResizeAuraButtons(plateFrame.cc, CC_GROUP, self.db.profile.ccSize)
 		end
 	end
+	self:ApplyCountFonts()
 	self.debuffResizePending = false
 end
 
-local function CreateDebuffContainer(frame, profile)
-	local debuffs = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+local function CreateAuraContainer(frame, group, filter, maxCount, size)
+	local container = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
 	-- parsing and layout run from a run-when-visible OnUpdate, which needs a rect; layout replaces this size
-	debuffs:SetPoint("CENTER", frame, "CENTER")
-	debuffs:SetSize(1, 1)
-	debuffs:Hide()
-	debuffs:AddAuraGroup(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL", {
-		maxFrameCount = profile.debuffMax,
+	container:SetPoint("CENTER", frame, "CENTER")
+	container:SetSize(1, 1)
+	container:Hide()
+	container:AddAuraGroup(group, filter, {
+		maxFrameCount = maxCount,
 		initializeFrame = function(button)
-			InitializeDebuffButton(button, Nameplates.db.profile.debuffSize)
+			local liveSize = (group == CC_GROUP) and Nameplates.db.profile.ccSize or Nameplates.db.profile.debuffSize
+			InitializeDebuffButton(button, liveSize)
 		end,
 		layout = {
-			elementWidth = profile.debuffSize,
-			elementHeight = profile.debuffSize,
+			elementWidth = size,
+			elementHeight = size,
 			elementSpacing = DEBUFF_SPACING,
 		},
 	})
-	return debuffs
+	return container
 end
 
 function Nameplates:CreateStyledFrame(plate)
@@ -394,6 +473,9 @@ function Nameplates:CreateStyledFrame(plate)
 
 	local healthText = healthBar:CreateFontString(nil, "OVERLAY")
 	healthText:SetPoint("CENTER", healthBar)
+
+	local levelText = frame:CreateFontString(nil, "OVERLAY")
+	levelText:SetPoint("LEFT", healthBar, "RIGHT", LEVEL_GAP, 0)
 
 	local highlight = frame:CreateTexture(nil, "OVERLAY")
 	highlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
@@ -442,6 +524,7 @@ function Nameplates:CreateStyledFrame(plate)
 
 	frame.healthBar = healthBar
 	frame.healthText = healthText
+	frame.levelText = levelText
 	frame.highlight = highlight
 	frame.nameText = nameText
 	frame.powerBar = powerBar
@@ -450,7 +533,15 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.castText = castText
 	frame.castShield = castShield
 
-	local ok, debuffs = pcall(CreateDebuffContainer, frame, self.db.profile)
+	local profile = self.db.profile
+	local ok, debuffs = pcall(
+		CreateAuraContainer,
+		frame,
+		DEBUFF_GROUP,
+		NameplateLogic.DebuffFilter(profile.debuffsMineOnly, profile.cc),
+		profile.debuffMax,
+		profile.debuffSize
+	)
 	if ok then
 		frame.debuffs = debuffs
 		if InCombatLockdown() then
@@ -460,22 +551,53 @@ function Nameplates:CreateStyledFrame(plate)
 		self.debuffContainerError = debuffs
 	end
 
+	local ccOk, cc =
+		pcall(CreateAuraContainer, frame, CC_GROUP, NameplateLogic.CC_FILTER, profile.ccMax, profile.ccSize)
+	if ccOk then
+		frame.cc = cc
+		if InCombatLockdown() then
+			self.debuffContainersInCombat = self.debuffContainersInCombat + 1
+		end
+	elseif self.ccContainerError == nil then
+		self.ccContainerError = cc
+	end
+
 	return frame
 end
 
 function Nameplates:ApplySize(frame)
 	local profile = self.db.profile
 	frame:SetSize(profile.width, profile.height)
-	frame.nameText:SetFont(FONT, profile.nameSize, "OUTLINE")
-	frame.healthText:SetFont(FONT, profile.nameSize - 1, "OUTLINE")
-	frame.powerText:SetFont(FONT, profile.nameSize - 1, "OUTLINE")
-	frame.castText:SetFont(FONT, profile.nameSize - 1, "OUTLINE")
+	local _, namePath = ns.Media:SetFont(frame.nameText, profile.font, profile.nameSize, "OUTLINE")
+	self.appliedFont = namePath
+	ns.Media:SetFont(frame.healthText, profile.font, profile.nameSize - 1, "OUTLINE")
+	ns.Media:SetFont(frame.levelText, profile.font, profile.nameSize - 1, "OUTLINE")
+	ns.Media:SetFont(frame.powerText, profile.font, profile.nameSize - 1, "OUTLINE")
+	ns.Media:SetFont(frame.castText, profile.font, profile.nameSize - 1, "OUTLINE")
 	frame.powerBar:SetHeight(profile.powerHeight)
 
 	local castAnchor = profile.powerBar and frame.powerBar or frame.healthBar
 	frame.castBar:ClearAllPoints()
 	frame.castBar:SetPoint("TOPLEFT", castAnchor, "BOTTOMLEFT", 0, -CAST_BAR_GAP)
 	frame.castBar:SetPoint("TOPRIGHT", castAnchor, "BOTTOMRIGHT", 0, -CAST_BAR_GAP)
+
+	-- SetStatusBarTexture replaces the bar's texture object and resets its vertex colour, so
+	-- only touch the bars when the resolved path actually changes, and restore colours after
+	local barPath = ns.Media:Fetch("statusbar", profile.barTexture) or BAR_TEXTURE
+	if barPath ~= frame.barPath then
+		local hr, hg, hb = frame.healthBar:GetStatusBarColor()
+		local pr, pg, pb = frame.powerBar:GetStatusBarColor()
+
+		barPath = ns.Media:SetStatusBarTexture(frame.healthBar, profile.barTexture)
+		ns.Media:SetStatusBarTexture(frame.powerBar, profile.barTexture)
+		ns.Media:SetStatusBarTexture(frame.castBar, profile.barTexture)
+
+		frame.healthBar:SetStatusBarColor(hr, hg, hb)
+		frame.powerBar:SetStatusBarColor(pr, pg, pb)
+		frame.castBar:SetStatusBarColor(0.9, 0.6, 0.1)
+
+		frame.barPath = barPath
+	end
 end
 
 function Nameplates:UpdateHealth(unit, frame)
@@ -520,6 +642,27 @@ function Nameplates:UpdatePower(unit, frame)
 	frame.powerBar:Show()
 end
 
+local function DebuffAnchorFrame(frame, profile)
+	local anchor = profile.debuffAnchor
+	local relativeTo
+	if anchor == "BOTTOM" then
+		if profile.castBar then
+			relativeTo = frame.castBar
+		elseif profile.powerBar then
+			relativeTo = frame.powerBar
+		else
+			relativeTo = frame.healthBar
+		end
+	elseif anchor == "RIGHT" then
+		relativeTo = profile.levelText and frame.levelText or frame
+	elseif anchor == "LEFT" then
+		relativeTo = (profile.cc and frame.cc) or frame
+	else
+		relativeTo = frame.nameText
+	end
+	return relativeTo
+end
+
 function Nameplates:UpdateDebuffs(unit, frame)
 	local debuffs = frame.debuffs
 	if not debuffs then
@@ -532,23 +675,13 @@ function Nameplates:UpdateDebuffs(unit, frame)
 	end
 
 	local anchor = profile.debuffAnchor
-	local relativeTo = frame
-	if anchor == "BOTTOM" then
-		if profile.castBar then
-			relativeTo = frame.castBar
-		elseif profile.powerBar then
-			relativeTo = frame.powerBar
-		else
-			relativeTo = frame.healthBar
-		end
-	elseif anchor ~= "LEFT" and anchor ~= "RIGHT" then
-		relativeTo = frame.nameText
-	end
+	local relativeTo = DebuffAnchorFrame(frame, profile)
+	local filter = NameplateLogic.DebuffFilter(profile.debuffsMineOnly, profile.cc and frame.cc ~= nil)
 
 	local point, relPoint, x, y = NameplateLogic.DebuffLayout(anchor, 1, 1, profile.debuffSize, DEBUFF_SPACING)
 	debuffs:ClearAllPoints()
-	debuffs:SetPoint(point, relativeTo, relPoint, x, y)
-	debuffs:SetAuraGroupFilterString(DEBUFF_GROUP, profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL")
+	debuffs:SetPoint(point, relativeTo, relPoint, x + profile.debuffX, y + profile.debuffY)
+	debuffs:SetAuraGroupFilterString(DEBUFF_GROUP, filter)
 	debuffs:SetAuraGroupMaxFrameCount(DEBUFF_GROUP, profile.debuffMax)
 	debuffs:SetAuraGroupLayout(DEBUFF_GROUP, {
 		elementWidth = profile.debuffSize,
@@ -566,13 +699,74 @@ function Nameplates:UpdateDebuffs(unit, frame)
 			self:ApplyPendingDebuffResize()
 		end)
 	else
-		ResizeDebuffButtons(debuffs, profile.debuffSize)
+		ResizeAuraButtons(debuffs, DEBUFF_GROUP, profile.debuffSize)
+		self:ApplyPendingDebuffResize()
+	end
+end
+
+function Nameplates:UpdateCC(unit, frame)
+	local cc = frame.cc
+	if not cc then
+		return
+	end
+	local profile = self.db.profile
+	if not profile.cc then
+		cc:Hide()
+		return
+	end
+
+	local point, relPoint, x, y = NameplateLogic.DebuffLayout("LEFT", 1, 1, profile.ccSize, DEBUFF_SPACING)
+	cc:ClearAllPoints()
+	cc:SetPoint(point, frame, relPoint, x, y)
+	cc:SetAuraGroupFilterString(CC_GROUP, NameplateLogic.CC_FILTER)
+	cc:SetAuraGroupMaxFrameCount(CC_GROUP, profile.ccMax)
+	cc:SetAuraGroupLayout(CC_GROUP, {
+		elementWidth = profile.ccSize,
+		elementHeight = profile.ccSize,
+		elementSpacing = DEBUFF_SPACING,
+	})
+	cc:SetUnit(unit)
+	cc:UpdateAllAuras()
+	cc:Show()
+
+	-- buttons deny tainted access while auras are secret, so the resize is retried until auras stop being secret
+	if C_Secrets.ShouldAurasBeSecret() then
+		self.debuffResizePending = true
+		ns.Combat:Run("Nameplates:debuffSize", function()
+			self:ApplyPendingDebuffResize()
+		end)
+	else
+		ResizeAuraButtons(cc, CC_GROUP, profile.ccSize)
 		self:ApplyPendingDebuffResize()
 	end
 end
 
 function Nameplates:UpdateName(unit, frame)
 	frame.nameText:SetText(UnitName(unit))
+end
+
+function Nameplates:UpdateLevel(unit, frame)
+	if not self.db.profile.levelText then
+		frame.levelText:SetText(nil)
+		return
+	end
+
+	local level = UnitEffectiveLevel(unit)
+	local classification = UnitClassification(unit)
+	if issecretvalue(level) then
+		level = nil
+	end
+	if issecretvalue(classification) then
+		classification = nil
+	end
+
+	local color = nil
+	if type(level) == "number" and level > 0 then
+		color = GetCreatureDifficultyColor(level)
+	end
+
+	frame.levelText:SetTextColor(NameplateLogic.LevelColor(level, classification, color))
+	frame.levelText:SetText(NameplateLogic.LevelText(level, classification))
 end
 
 function Nameplates:UpdateColor(unit, frame)
@@ -1029,6 +1223,134 @@ function Nameplates:GetOptions()
 					return not self.db.profile.debuffs
 				end,
 			},
+			debuffX = {
+				type = "range",
+				name = "Debuff X offset",
+				order = 16,
+				min = -100,
+				max = 100,
+				step = 1,
+				get = function()
+					return self.db.profile.debuffX
+				end,
+				set = function(_, value)
+					self.db.profile.debuffX = value
+					self:Refresh()
+				end,
+				disabled = function()
+					return not self.db.profile.debuffs
+				end,
+			},
+			debuffY = {
+				type = "range",
+				name = "Debuff Y offset",
+				order = 17,
+				min = -100,
+				max = 100,
+				step = 1,
+				get = function()
+					return self.db.profile.debuffY
+				end,
+				set = function(_, value)
+					self.db.profile.debuffY = value
+					self:Refresh()
+				end,
+				disabled = function()
+					return not self.db.profile.debuffs
+				end,
+			},
+			cc = {
+				type = "toggle",
+				name = "CC icons",
+				order = 18,
+				get = function()
+					return self.db.profile.cc
+				end,
+				set = function(_, value)
+					self.db.profile.cc = value
+					self:Refresh()
+				end,
+			},
+			ccSize = {
+				type = "range",
+				name = "CC icon size",
+				order = 19,
+				min = 10,
+				max = 48,
+				step = 1,
+				get = function()
+					return self.db.profile.ccSize
+				end,
+				set = function(_, value)
+					self.db.profile.ccSize = value
+					self:Refresh()
+				end,
+				disabled = function()
+					return not self.db.profile.cc
+				end,
+			},
+			ccMax = {
+				type = "range",
+				name = "Max CC icons",
+				order = 20,
+				min = 1,
+				max = 4,
+				step = 1,
+				get = function()
+					return self.db.profile.ccMax
+				end,
+				set = function(_, value)
+					self.db.profile.ccMax = value
+					self:Refresh()
+				end,
+				disabled = function()
+					return not self.db.profile.cc
+				end,
+			},
+			levelText = {
+				type = "toggle",
+				name = "Show level",
+				order = 15,
+				get = function()
+					return self.db.profile.levelText
+				end,
+				set = function(_, value)
+					self.db.profile.levelText = value
+					self:Refresh()
+				end,
+			},
+			font = {
+				type = "select",
+				name = "Font",
+				order = 21,
+				dialogControl = "LSM30_Font",
+				values = function()
+					return ns.Media:Values("font", self.db.profile.font)
+				end,
+				get = function()
+					return self.db.profile.font
+				end,
+				set = function(_, value)
+					self.db.profile.font = value
+					self:Refresh()
+				end,
+			},
+			barTexture = {
+				type = "select",
+				name = "Bar texture",
+				order = 22,
+				dialogControl = "LSM30_Statusbar",
+				values = function()
+					return ns.Media:Values("statusbar", self.db.profile.barTexture)
+				end,
+				get = function()
+					return self.db.profile.barTexture
+				end,
+				set = function(_, value)
+					self.db.profile.barTexture = value
+					self:Refresh()
+				end,
+			},
 		},
 	}
 end
@@ -1057,6 +1379,13 @@ function Nameplates:GetDebugChecks()
 		return true, p, rel, rp, x, y
 	end
 
+	local function normalizePath(path)
+		if type(path) ~= "string" then
+			return path
+		end
+		return path:lower():gsub("/", "\\")
+	end
+
 	return {
 		{
 			name = "apis",
@@ -1074,6 +1403,9 @@ function Nameplates:GetDebugChecks()
 					"AbbreviateNumbers",
 					"Enum.StatusBarInterpolation",
 					"Enum.StatusBarTimerDirection",
+					"UnitEffectiveLevel",
+					"UnitClassification",
+					"GetCreatureDifficultyColor",
 				}
 
 				local missing = {}
@@ -1408,6 +1740,89 @@ function Nameplates:GetDebugChecks()
 			end,
 		},
 		{
+			name = "level",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				if not self.db.profile.levelText then
+					local text = frame.levelText:GetText()
+					return (text == nil or text == "") and "PASS" or "FAIL", false
+				end
+
+				local text = frame.levelText:GetText()
+				if issecretvalue(text) then
+					return "INFO", "secret"
+				end
+
+				local unit = "target"
+				local level = UnitEffectiveLevel(unit)
+				local classification = UnitClassification(unit)
+				if issecretvalue(level) then
+					level = nil
+				end
+				if issecretvalue(classification) then
+					classification = nil
+				end
+
+				local color = nil
+				if type(level) == "number" and level > 0 then
+					color = GetCreatureDifficultyColor(level)
+				end
+
+				local expected = NameplateLogic.LevelText(level, classification)
+				local er, eg, eb = NameplateLogic.LevelColor(level, classification, color)
+				local cr, cg, cb = frame.levelText:GetTextColor()
+
+				local textOk = text == expected or (expected == nil and (text == nil or text == ""))
+				local ok = textOk
+					and math.abs(cr - er) <= 0.01
+					and math.abs(cg - eg) <= 0.01
+					and math.abs(cb - eb) <= 0.01
+
+				local pointsRestricted = false
+				local ptOk, point, relTo, relPoint, x, y = readPoint(frame.levelText)
+				if not ptOk then
+					pointsRestricted = true
+				elseif
+					point ~= "LEFT"
+					or relTo ~= frame.healthBar
+					or relPoint ~= "RIGHT"
+					or issecretvalue(x)
+					or issecretvalue(y)
+					or math.abs(x - LEVEL_GAP) > 0.5
+					or math.abs(y) > 0.5
+				then
+					ok = false
+				end
+
+				if pointsRestricted then
+					return ok and "PASS" or "FAIL",
+						text,
+						expected,
+						level,
+						classification,
+						cr,
+						cg,
+						cb,
+						er,
+						eg,
+						eb,
+						"points restricted"
+				end
+				return ok and "PASS" or "FAIL", text, expected, level, classification, cr, cg, cb, er, eg, eb
+			end,
+		},
+		{
 			name = "power bar",
 			run = function(ctx)
 				if ctx.enabled == false then
@@ -1488,18 +1903,7 @@ function Nameplates:GetDebugChecks()
 				local shown = debuffs:IsShown() == true
 
 				local anchor = profile.debuffAnchor
-				local relativeTo = frame
-				if anchor == "BOTTOM" then
-					if profile.castBar then
-						relativeTo = frame.castBar
-					elseif profile.powerBar then
-						relativeTo = frame.powerBar
-					else
-						relativeTo = frame.healthBar
-					end
-				elseif anchor ~= "LEFT" and anchor ~= "RIGHT" then
-					relativeTo = frame.nameText
-				end
+				local relativeTo = DebuffAnchorFrame(frame, profile)
 
 				local ok = shown
 				local pointsRestricted = false
@@ -1509,6 +1913,8 @@ function Nameplates:GetDebugChecks()
 				else
 					local expPoint, expRelPoint, expX, expY =
 						NameplateLogic.DebuffLayout(anchor, 1, 1, profile.debuffSize, DEBUFF_SPACING)
+					expX = expX + profile.debuffX
+					expY = expY + profile.debuffY
 					if
 						point ~= expPoint
 						or relTo ~= relativeTo
@@ -1596,14 +2002,179 @@ function Nameplates:GetDebugChecks()
 						status = "INFO"
 					end
 				else
-					local auras =
-						C_UnitAuras.GetUnitAuras("target", profile.debuffsMineOnly and "HARMFUL|PLAYER" or "HARMFUL")
+					local auras = C_UnitAuras.GetUnitAuras(
+						"target",
+						NameplateLogic.DebuffFilter(profile.debuffsMineOnly, profile.cc and frame.cc ~= nil)
+					)
 					expected = math.min(auras and #auras or 0, profile.debuffMax)
 					if count ~= expected then
 						status = "FAIL"
 					end
 				end
 				return status, count, width, height, expected, owned, bound, protected, self.debuffContainersInCombat
+			end,
+		},
+		{
+			name = "cc",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				if not self.db.profile.cc then
+					return "SKIP", "cc off"
+				end
+				if not frame.cc then
+					return "FAIL", "no container", self.ccContainerError
+				end
+
+				local cc = frame.cc
+				local shown = cc:IsShown() == true
+
+				local ok = shown
+				local pointsRestricted = false
+				local ptOk, point, relTo, relPoint, x, y = readPoint(cc)
+				if not ptOk then
+					pointsRestricted = true
+				elseif
+					point ~= "RIGHT"
+					or relTo ~= frame
+					or relPoint ~= "LEFT"
+					or issecretvalue(x)
+					or issecretvalue(y)
+					or math.abs(x - -2) > 0.5
+					or math.abs(y) > 0.5
+				then
+					ok = false
+				end
+
+				local ccCount = "auras secret"
+				if not C_Secrets.ShouldAurasBeSecret() then
+					local auras = C_UnitAuras.GetUnitAuras("target", NameplateLogic.CC_FILTER)
+					ccCount = auras and #auras or 0
+				end
+
+				if pointsRestricted then
+					return ok and "PASS" or "FAIL", shown, ccCount, "points restricted"
+				end
+				return ok and "PASS" or "FAIL", shown, ccCount
+			end,
+		},
+		{
+			name = "cc icons",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				if not self.db.profile.cc then
+					return "SKIP", "cc off"
+				end
+				if not frame.cc then
+					return "SKIP", "no container"
+				end
+
+				local cc = frame.cc
+				local profile = self.db.profile
+				local owned = cc:GetAuraGroupFrameCount(CC_GROUP)
+				local unit = cc:GetUnit()
+				local bound = not issecretvalue(owned)
+					and owned > 0
+					and not issecretvalue(unit)
+					and unit == plate.unitToken
+				local protected = cc:IsProtected()
+
+				local sizeRead, width, height = pcall(cc.GetSize, cc)
+				if not sizeRead or issecretvalue(width) or issecretvalue(height) then
+					return bound and "INFO" or "FAIL",
+						sizeRead and "size secret" or "size restricted",
+						owned,
+						bound,
+						protected
+				end
+
+				local size = profile.ccSize
+				local count = 0
+				if width > 1.5 or height > 1.5 then
+					count = math.floor((width + DEBUFF_SPACING) / (size + DEBUFF_SPACING) + 0.5)
+				end
+				local ok = bound and count <= profile.ccMax
+				if count > 0 then
+					ok = ok
+						and math.abs(height - size) <= 0.5
+						and math.abs(width - (count * size + (count - 1) * DEBUFF_SPACING)) <= 0.5
+				end
+
+				local status = ok and "PASS" or "FAIL"
+				local expected = "auras secret"
+				if C_Secrets.ShouldAurasBeSecret() then
+					if ok then
+						status = "INFO"
+					end
+				else
+					local auras = C_UnitAuras.GetUnitAuras("target", NameplateLogic.CC_FILTER)
+					expected = math.min(auras and #auras or 0, profile.ccMax)
+					if count ~= expected then
+						status = "FAIL"
+					end
+				end
+				return status, count, width, height, expected, owned, bound, protected
+			end,
+		},
+		{
+			name = "cc filters",
+			run = function(ctx)
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+				if C_Secrets.ShouldAurasBeSecret() then
+					return "SKIP", "auras secret"
+				end
+
+				local filters = {
+					"HARMFUL|PLAYER",
+					"HARMFUL|PLAYER|CROWD_CONTROL",
+					"HARMFUL|PLAYER|!CROWD_CONTROL",
+					"HARMFUL",
+					"HARMFUL|CROWD_CONTROL",
+					"HARMFUL|!CROWD_CONTROL",
+				}
+
+				local counts = {}
+				local hadError = false
+				for i, filter in ipairs(filters) do
+					local ok, result = pcall(C_UnitAuras.GetUnitAuras, "target", filter)
+					if ok then
+						counts[i] = result and #result or 0
+					else
+						counts[i] = result
+						hadError = true
+					end
+				end
+
+				local function sumOk(all, a, b)
+					return type(all) == "number" and type(a) == "number" and type(b) == "number" and all == a + b
+				end
+
+				local ok = not hadError
+					and sumOk(counts[1], counts[2], counts[3])
+					and sumOk(counts[4], counts[5], counts[6])
+
+				return ok and "PASS" or "FAIL", counts[1], counts[2], counts[3], counts[4], counts[5], counts[6]
 			end,
 		},
 		{
@@ -1671,6 +2242,36 @@ function Nameplates:GetDebugChecks()
 					allDurationSecret,
 					allCountSecret,
 					aurasSecret
+			end,
+		},
+		{
+			name = "media",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local path = frame.nameText:GetFont()
+				local expected = ns.Media:FontPath(profile.font)
+				local ok = normalizePath(path) == normalizePath(self.appliedFont)
+					and normalizePath(path) == normalizePath(expected)
+
+				return ok and "PASS" or "FAIL",
+					path,
+					self.appliedFont,
+					expected,
+					frame.healthBar:GetStatusBarTexture():GetTexture(),
+					ns.Media:Resolve("statusbar", profile.barTexture),
+					frame.barPath
 			end,
 		},
 	}

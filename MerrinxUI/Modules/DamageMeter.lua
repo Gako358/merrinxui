@@ -17,6 +17,8 @@ local defaults = {
 		width = 220,
 		rowHeight = 18,
 		fontSize = 11,
+		font = "Arial Narrow",
+		barTexture = "Solid",
 		position = { point = "CENTER", x = 400, y = -200 },
 	},
 }
@@ -104,6 +106,7 @@ function DamageMeter:OnInitialize()
 		ns.Debug:Log("DamageMeter", "reset")
 		self:Redraw()
 	end)
+	self.resetButton = resetButton
 
 	local typeButton = makeButton("T")
 	typeButton:SetPoint("RIGHT", resetButton, "LEFT", 0, 0)
@@ -137,6 +140,7 @@ function DamageMeter:OnEnable()
 	self:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED", "RequestRedraw")
 	self:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED", "RequestRedraw")
 	self:RegisterEvent("DAMAGE_METER_RESET", "OnMeterReset")
+	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
 
 	self:Layout()
 	ns.Mover:Apply(self.frame)
@@ -150,6 +154,17 @@ function DamageMeter:OnDisable()
 	if self.shown then
 		ns.addon:Print("DamageMeter: /reload restores Blizzard's damage meter")
 		self.shown = false
+	end
+end
+
+function DamageMeter:OnMediaChanged(_, mediatype, key)
+	local profile = self.db.profile
+	if mediatype == "font" and (key == nil or key == ns.Media:Resolve("font", profile.font)) then
+		self:Layout()
+		self:Redraw()
+	elseif mediatype == "statusbar" and (key == nil or key == ns.Media:Resolve("statusbar", profile.barTexture)) then
+		self:Layout()
+		self:Redraw()
 	end
 end
 
@@ -345,6 +360,11 @@ function DamageMeter:Layout()
 
 	frame:SetSize(profile.width, L.WindowHeight(profile.rows, profile.rowHeight, ROW_SPACING, HEADER_HEIGHT))
 
+	ns.Media:SetFont(self.title, profile.font, 11, "")
+	ns.Media:SetFont(self.resetButton.text, profile.font, 11, "")
+	ns.Media:SetFont(self.typeButton.text, profile.font, 11, "")
+	ns.Media:SetFont(self.sessionButton.text, profile.font, 11, "")
+
 	for i = 1, profile.rows do
 		local row = self:GetRow(i)
 		row:SetSize(profile.width, profile.rowHeight)
@@ -352,10 +372,18 @@ function DamageMeter:Layout()
 		row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(HEADER_HEIGHT + (i - 1) * (profile.rowHeight + ROW_SPACING)))
 
 		row.icon:SetSize(profile.rowHeight, profile.rowHeight)
-		row.left:SetFont(FONT, profile.fontSize, "")
+		ns.Media:SetFont(row.left, profile.font, profile.fontSize, "")
 		row.left:SetTextColor(1, 1, 1, 1)
-		row.right:SetFont(FONT, profile.fontSize, "")
+		ns.Media:SetFont(row.right, profile.font, profile.fontSize, "")
 		row.right:SetTextColor(1, 1, 1, 1)
+
+		-- SetStatusBarTexture replaces the bar's texture object and resets its alpha, so
+		-- only touch it when the resolved path actually changes, and restore alpha after
+		local barPath = ns.Media:Fetch("statusbar", profile.barTexture) or TEXTURE
+		if barPath ~= row.barPath then
+			row.barPath = ns.Media:SetStatusBarTexture(row.bar, profile.barTexture)
+			row.bar:GetStatusBarTexture():SetAlpha(1)
+		end
 
 		row:Show()
 	end
@@ -545,10 +573,42 @@ function DamageMeter:GetOptions()
 					self:Refresh()
 				end,
 			},
+			font = {
+				type = "select",
+				name = "Font",
+				order = 8,
+				dialogControl = "LSM30_Font",
+				values = function()
+					return ns.Media:Values("font", self.db.profile.font)
+				end,
+				get = function()
+					return self.db.profile.font
+				end,
+				set = function(_, value)
+					self.db.profile.font = value
+					self:Refresh()
+				end,
+			},
+			barTexture = {
+				type = "select",
+				name = "Bar texture",
+				order = 9,
+				dialogControl = "LSM30_Statusbar",
+				values = function()
+					return ns.Media:Values("statusbar", self.db.profile.barTexture)
+				end,
+				get = function()
+					return self.db.profile.barTexture
+				end,
+				set = function(_, value)
+					self.db.profile.barTexture = value
+					self:Refresh()
+				end,
+			},
 			reset = {
 				type = "execute",
 				name = "Reset",
-				order = 8,
+				order = 10,
 				confirm = true,
 				func = function()
 					C_DamageMeter.ResetAllCombatSessions()
@@ -558,6 +618,13 @@ function DamageMeter:GetOptions()
 			},
 		},
 	}
+end
+
+local function normalizePath(path)
+	if type(path) ~= "string" then
+		return path
+	end
+	return path:lower():gsub("/", "\\")
 end
 
 function DamageMeter:GetDebugChecks()
@@ -860,18 +927,28 @@ function DamageMeter:GetDebugChecks()
 					return "SKIP", "module disabled"
 				end
 
+				local profile = self.db.profile
+				local resolved = ns.Media:Resolve("font", profile.font)
+				local expected = normalizePath(ns.Media:FontPath(profile.font))
+
 				local path, size = self.title:GetFont()
-				local ok = type(path) == "string"
-					and path:lower() == "fonts\\arialn.ttf"
-					and math.floor(size + 0.5) == 11
+				local ok = type(path) == "string" and normalizePath(path) == expected and math.floor(size + 0.5) == 11
 
 				local row = self.rows[1]
 				if ok and row then
 					local _, rowSize = row.left:GetFont()
-					ok = math.floor(rowSize + 0.5) == self.db.profile.fontSize
+					ok = math.floor(rowSize + 0.5) == profile.fontSize
 				end
 
-				return ok and "PASS" or "FAIL", path, size
+				local barTexture = row and row.bar:GetStatusBarTexture()
+
+				return ok and "PASS" or "FAIL",
+					path,
+					size,
+					resolved,
+					barTexture and barTexture:GetTexture(),
+					ns.Media:Resolve("statusbar", profile.barTexture),
+					row and row.barPath
 			end,
 		},
 		{

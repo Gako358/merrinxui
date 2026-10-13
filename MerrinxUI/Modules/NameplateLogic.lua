@@ -47,6 +47,45 @@ function NameplateLogic.PowerColor(token)
 	return 0.5, 0.5, 0.5
 end
 
+function NameplateLogic.LevelText(level, classification)
+	if level == nil or level == 0 then
+		return nil
+	end
+	if level == -1 or classification == "worldboss" then
+		return "??"
+	end
+
+	local suffix = ""
+	if classification == "elite" then
+		suffix = "+"
+	elseif classification == "rare" then
+		suffix = "r"
+	elseif classification == "rareelite" then
+		suffix = "r+"
+	end
+	return tostring(level) .. suffix
+end
+
+function NameplateLogic.LevelColor(level, classification, color)
+	if level == -1 or classification == "worldboss" then
+		return 1, 0, 0
+	end
+	if type(color) == "table" and type(color.r) == "number" then
+		return color.r, color.g, color.b
+	end
+	return 1, 1, 1
+end
+
+NameplateLogic.CC_FILTER = "HARMFUL|CROWD_CONTROL"
+
+function NameplateLogic.DebuffFilter(mineOnly, ccSeparate)
+	local filter = mineOnly and "HARMFUL|PLAYER" or "HARMFUL"
+	if ccSeparate then
+		filter = filter .. "|!CROWD_CONTROL"
+	end
+	return filter
+end
+
 function NameplateLogic.DebuffLayout(anchor, i, n, size, spacing)
 	local step = size + spacing
 	local x = (i - 1) * step - ((n - 1) * step) / 2

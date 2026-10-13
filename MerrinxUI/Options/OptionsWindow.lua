@@ -2,7 +2,6 @@ local addonName, ns = ...
 
 local L = ns.OptionsLogic
 local Theme = ns.Theme
-local LSM = LibStub("LibSharedMedia-3.0")
 local appName = "MerrinxUI"
 local OPTIONS_UI_NAME = "MerrinxUI-1.0"
 
@@ -33,6 +32,7 @@ local renderScheduled = false
 
 local escVariant = "none"
 local fontUsed
+local windowFont
 local configCallbackRegistered = false
 local previewFailed = {}
 
@@ -52,7 +52,9 @@ end
 -- stock FRIZQT font when SetFont reports failure so text stays readable.
 local function setFont(fs, size, flags)
 	flags = flags or ""
-	if fs:SetFont(Theme.font, size, flags) then
+	if windowFont and fs:SetFont(windowFont, size, flags) then
+		fontUsed = windowFont
+	elseif fs:SetFont(Theme.font, size, flags) then
 		fontUsed = Theme.font
 	else
 		fs:SetFont("Fonts\\FRIZQT__.TTF", size, flags)
@@ -64,8 +66,12 @@ local function isFontSelect(path)
 	return L.Member(root, path, "dialogControl") == "LSM30_Font"
 end
 
+local function isStatusbarSelect(path)
+	return L.Member(root, path, "dialogControl") == "LSM30_Statusbar"
+end
+
 local function setPreviewFont(fs, key)
-	local path = LSM:Fetch("font", key, true)
+	local path = ns.Media:Fetch("font", key)
 	if path and fs:SetFont(path, Theme.size.value, "") then
 		return
 	end
@@ -542,6 +548,13 @@ local function createDropItem()
 	setColor(bg, Theme.color.button)
 	item.bg = bg
 
+	local preview = item:CreateTexture(nil, "ARTWORK")
+	preview:SetPoint("TOPLEFT", item, "TOPLEFT", 1, -1)
+	preview:SetPoint("BOTTOMRIGHT", item, "BOTTOMRIGHT", -1, 1)
+	preview:SetVertexColor(0.5, 0.5, 0.5)
+	preview:Hide()
+	item.preview = preview
+
 	local text = item:CreateFontString(nil, "OVERLAY")
 	setFont(text, Theme.size.value)
 	text:SetPoint("LEFT", item, "LEFT", 6, 0)
@@ -551,9 +564,11 @@ local function createDropItem()
 
 	item:SetScript("OnEnter", function()
 		setColor(bg, Theme.color.buttonHover)
+		preview:SetVertexColor(0.8, 0.8, 0.8)
 	end)
 	item:SetScript("OnLeave", function()
 		setColor(bg, Theme.color.button)
+		preview:SetVertexColor(0.5, 0.5, 0.5)
 	end)
 	item:SetScript("OnClick", function()
 		if item.onClick then
@@ -854,6 +869,7 @@ function openDropdown(anchor, path, values)
 	dropdownScroll:SetVerticalScroll(0)
 
 	local fontList = isFontSelect(path)
+	local statusbarList = isStatusbarSelect(path)
 
 	for i, key in ipairs(keys) do
 		local item = pools.dropItem.acquire()
@@ -864,6 +880,13 @@ function openDropdown(anchor, path, values)
 			setPreviewFont(item.text, key)
 		else
 			setFont(item.text, Theme.size.value)
+		end
+		item.preview:SetVertexColor(0.5, 0.5, 0.5)
+		if statusbarList then
+			item.preview:SetTexture(ns.Media:Fetch("statusbar", key))
+			item.preview:Show()
+		else
+			item.preview:Hide()
 		end
 		item.text:SetText(displayLabel(values[key]))
 		item.onClick = function()
@@ -1263,6 +1286,8 @@ local function buildConfirm(win)
 end
 
 local function build()
+	windowFont = ns.Media:FontPath(ns.Media.db.profile.optionsFont)
+
 	frame = CreateFrame("Frame", "MerrinxUIOptionsFrame", UIParent)
 	frame:SetSize(Theme.geometry.width, Theme.geometry.height)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -1343,10 +1368,10 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 				if not frame then
 					return "SKIP", "not built"
 				end
-				if fontUsed == ns.Theme.font then
-					return "PASS"
+				if fontUsed == windowFont then
+					return "PASS", fontUsed, windowFont
 				end
-				return "INFO", "fallback", fontUsed
+				return "INFO", "fallback", fontUsed, windowFont
 			end,
 		},
 		{

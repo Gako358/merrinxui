@@ -75,6 +75,9 @@ read_globals = {
 	"C_DamageMeter",
 	"CLASS_ICON_TCOORDS",
 	"MenuUtil",
+	"UnitEffectiveLevel",
+	"UnitClassification",
+	"GetCreatureDifficultyColor",
 }
 
 files["spec"] = {

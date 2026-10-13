@@ -4,6 +4,7 @@ local FontLogic = {}
 ns.FontLogic = FontLogic
 
 FontLogic.DEFAULT = "Friz Quadrata TT"
+FontLogic.GLOBAL = "*"
 
 function FontLogic.IsPath(value)
 	if type(value) ~= "string" then
@@ -12,15 +13,24 @@ function FontLogic.IsPath(value)
 	return value:find("[\\/]") ~= nil
 end
 
-function FontLogic.Values(hash, isUsable, keep)
-	local values = {}
-	if hash == nil then
-		return values
+function FontLogic.Resolve(key, globalKey)
+	if key == nil or key == FontLogic.GLOBAL then
+		return globalKey
 	end
-	for key, path in pairs(hash) do
-		if isUsable == nil or key == keep or isUsable(path) then
-			values[key] = key
+	return key
+end
+
+function FontLogic.Values(hash, isUsable, keep, globalLabel)
+	local values = {}
+	if hash ~= nil then
+		for key, path in pairs(hash) do
+			if isUsable == nil or key == keep or isUsable(path) then
+				values[key] = key
+			end
 		end
+	end
+	if globalLabel ~= nil then
+		values[FontLogic.GLOBAL] = globalLabel
 	end
 	return values
 end
