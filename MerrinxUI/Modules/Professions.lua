@@ -91,7 +91,6 @@ function Professions:OnInitialize()
 	menuText:SetAllPoints()
 	menuText:SetJustifyH("CENTER")
 	menuText:SetTextColor(1, 1, 1, 1)
-	menuText:SetText("P")
 	menuButton.text = menuText
 	menuButton:SetScript("OnEnter", function()
 		menuText:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3], ACCENT[4])
@@ -213,6 +212,7 @@ function Professions:Layout()
 
 	ns.Media:SetFont(self.title, profile.font, 11, "")
 	ns.Media:SetFont(self.menuButton.text, profile.font, 11, "")
+	self.menuButton.text:SetText("P")
 
 	for i, line in ipairs(self.lines) do
 		ns.Media:SetFont(line.fs, profile.font, profile.fontSize, "")

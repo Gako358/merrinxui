@@ -141,16 +141,22 @@ function Media:SetStatusBarTexture(bar, key)
 	return path
 end
 
+-- SetFont raises instead of returning false for some files the client doesn't know.
+local function probeFont(fs, path)
+	local ok, loaded = pcall(fs.SetFont, fs, path, 12, "")
+	if not ok then
+		return "error"
+	end
+	return loaded and true or false
+end
+
 function Media:Values(mediatype, keep, noGlobal)
 	local isUsable
 	if mediatype == "font" then
 		if not self.controls.font then
-			local function probe(path)
-				return self.fontProbe:SetFont(path, 12, "") and true or false
-			end
 			self.controls.font = {
-				good = probe(LSM:Fetch("font", FontLogic.DEFAULT)),
-				missing = probe("Interface\\AddOns\\MerrinxUI\\no-such-file.ttf"),
+				good = probeFont(self.fontProbe, LSM:Fetch("font", FontLogic.DEFAULT)),
+				missing = probeFont(self.fontProbe, "Interface\\AddOns\\MerrinxUI\\no-such-file.ttf"),
 			}
 		end
 		isUsable = function(path)
@@ -175,7 +181,7 @@ function Media:Values(mediatype, keep, noGlobal)
 		for _, entry in pairs(stats.rejected) do
 			if type(entry.path) == "string" then
 				if mediatype == "font" then
-					entry.usable = self.fontProbe:SetFont(entry.path, 12, "") and true or false
+					entry.usable = probeFont(self.fontProbe, entry.path) == true
 				elseif mediatype == "statusbar" then
 					entry.usable = self.textureProbe:SetTexture(entry.path) and true or false
 					self.textureProbe:SetTexture(nil)

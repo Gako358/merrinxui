@@ -61,7 +61,6 @@ read_globals = {
 	"GetSpellBaseCooldown",
 	"GameMenuFrame",
 	"ADDONS",
-	"HideUIPanel",
 	"InputUtil",
 	"UISpecialFrames",
 	"RegisterStateDriver",

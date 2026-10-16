@@ -9,9 +9,6 @@ if GameMenuFrame then
 	btn:SetText("MerrinxUI")
 	btn:Hide()
 	btn:SetScript("OnClick", function()
-		if not InCombatLockdown() then
-			HideUIPanel(GameMenuFrame)
-		end
 		ns.addon:OpenOptions()
 	end)
 
