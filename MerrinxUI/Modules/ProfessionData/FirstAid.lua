@@ -1,0 +1,126 @@
+local addonName, ns = ...
+
+ns.ProfessionData = ns.ProfessionData or {}
+
+ns.ProfessionData[129] = {
+	name = "First Aid",
+	skillLine = 129,
+	kind = "secondary",
+	source = "https://www.wow-professions.com/forever/first-aid-leveling-guide",
+	routeEnd = 300,
+	train = {
+		[3] = {
+			how = "book",
+			text = "Expert First Aid - Under Wraps (Deneb Walker, Arathi or Balai Lok'Wein, Dustwallow)",
+		},
+		[4] = {
+			how = "quest",
+			skill = 225,
+			text = "Triage (Doctor Gregory Victor, Hammerfall or Doctor Gustaf VanHowzen, Theramore)",
+		},
+	},
+	steps = {
+		{
+			from = 1,
+			to = 40,
+			name = "Linen Bandage",
+			count = 50,
+			mats = { { name = "Linen Cloth", count = 50 } },
+		},
+		{
+			from = 40,
+			to = 75,
+			name = "Heavy Linen Bandage",
+			count = 40,
+			mats = { { name = "Linen Cloth", count = 80 } },
+			note = "Yellow from 50",
+		},
+		{
+			from = 75,
+			to = 80,
+			name = "Heavy Linen Bandage",
+			count = 12,
+			mats = { { name = "Linen Cloth", count = 24 } },
+			note = "Green, about half the crafts give a point",
+		},
+		{
+			from = 80,
+			to = 115,
+			name = "Wool Bandage",
+			count = 50,
+			mats = { { name = "Wool Cloth", count = 50 } },
+		},
+		{
+			from = 115,
+			to = 150,
+			name = "Heavy Wool Bandage",
+			count = 50,
+			mats = { { name = "Wool Cloth", count = 100 } },
+		},
+		{
+			from = 150,
+			to = 180,
+			name = "Silk Bandage",
+			count = 42,
+			mats = { { name = "Silk Cloth", count = 42 } },
+			note = "Taught with Expert First Aid",
+		},
+		{
+			from = 180,
+			to = 210,
+			name = "Heavy Silk Bandage",
+			count = 46,
+			mats = { { name = "Silk Cloth", count = 92 } },
+			note = "Manual: Heavy Silk Bandage",
+		},
+		{
+			from = 210,
+			to = 225,
+			name = "Mageweave Bandage",
+			count = 17,
+			mats = { { name = "Mageweave Cloth", count = 17 } },
+			alt = "42 Heavy Silk Bandage (84 Silk Cloth) if Mageweave is scarce",
+			note = "Manual: Mageweave Bandage",
+		},
+		{
+			from = 225,
+			to = 240,
+			name = "Superior Healing Potion",
+			count = 16,
+			mats = {
+				{ name = "Sungrass", count = 16 },
+				{ name = "Soothing Spices", count = 16 },
+				{ name = "Crystal Vial", count = 16 },
+			},
+			note = "Manual: Superior Healing Potion (drop, no vendor); yellow at 230",
+		},
+		{
+			from = 240,
+			to = 260,
+			name = "Heavy Mageweave Bandage",
+			count = 30,
+			mats = { { name = "Mageweave Cloth", count = 60 } },
+			note = "Taught by the Triage doctor at 240",
+		},
+		{
+			from = 260,
+			to = 275,
+			name = "Runecloth Bandage",
+			count = 20,
+			mats = { { name = "Runecloth", count = 20 } },
+			note = "Taught by the Triage doctor at 260",
+		},
+		{
+			from = 275,
+			to = 300,
+			name = "Major Healing Potion",
+			count = 30,
+			mats = {
+				{ name = "Golden Sansam", count = 30 },
+				{ name = "Soothing Spices", count = 90 },
+				{ name = "Crystal Vial", count = 30 },
+			},
+			note = "Manual: Major Healing Potion (drop, no vendor)",
+		},
+	},
+}

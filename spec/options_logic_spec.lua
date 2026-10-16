@@ -106,6 +106,11 @@ describe("OptionsLogic", function()
 			t.get = false
 			assert.are.equal(false, L.Value(root, { "g", "t" }, "get", "MerrinxUI"))
 		end)
+
+		it("treats width as a literal, without a handler lookup", function()
+			t.width = "full"
+			assert.are.equal("full", L.Value(root, { "g", "t" }, "width", "MerrinxUI"))
+		end)
 	end)
 
 	describe("Sorted", function()
@@ -373,6 +378,84 @@ describe("OptionsLogic", function()
 			local offsets, total = L.Stack({}, 2)
 			assert.are.same({}, offsets)
 			assert.are.equal(0, total)
+		end)
+	end)
+
+	describe("Span", function()
+		it("returns 1 for a toggle without width", function()
+			assert.are.equal(1, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it('returns 1 for width = "half"', function()
+			t.width = "half"
+			assert.are.equal(1, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it('returns 2 for width = "full"', function()
+			t.width = "full"
+			assert.are.equal(2, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it("returns 2 for a width number > 1", function()
+			t.width = 1.5
+			assert.are.equal(2, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it('returns 2 for a width function returning "double"', function()
+			t.width = function()
+				return "double"
+			end
+			assert.are.equal(2, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it("returns 1 when the width function errors", function()
+			t.width = function()
+				error("boom")
+			end
+			assert.are.equal(1, L.Span(root, { kind = "toggle", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it('returns 2 for kind = "section"', function()
+			assert.are.equal(2, L.Span(root, { kind = "section", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+
+		it('returns 2 for kind = "description"', function()
+			assert.are.equal(2, L.Span(root, { kind = "description", path = { "g", "t" } }, "MerrinxUI"))
+		end)
+	end)
+
+	describe("Grid", function()
+		it("packs three single-span items into two rows of two columns", function()
+			local placements, rows = L.Grid({ 1, 1, 1 }, 2)
+			assert.are.same({ { row = 1, col = 1 }, { row = 1, col = 2 }, { row = 2, col = 1 } }, placements)
+			assert.are.equal(2, rows)
+		end)
+
+		it("gives a full-width item its own row", function()
+			local placements, rows = L.Grid({ 2, 1, 1 }, 2)
+			assert.are.same({ { row = 1, col = 1 }, { row = 2, col = 1 }, { row = 2, col = 2 } }, placements)
+			assert.are.equal(2, rows)
+		end)
+
+		it("closes a row with a free slot when a full item follows", function()
+			local placements, rows = L.Grid({ 1, 2, 1 }, 2)
+			assert.are.same({ { row = 1, col = 1 }, { row = 2, col = 1 }, { row = 3, col = 1 } }, placements)
+			assert.are.equal(3, rows)
+		end)
+
+		it("fills a row of halves then gives two full items separate rows", function()
+			local placements, rows = L.Grid({ 1, 1, 2, 2 }, 2)
+			assert.are.same(
+				{ { row = 1, col = 1 }, { row = 1, col = 2 }, { row = 2, col = 1 }, { row = 3, col = 1 } },
+				placements
+			)
+			assert.are.equal(3, rows)
+		end)
+
+		it("returns no placements and zero rows for an empty list", function()
+			local placements, rows = L.Grid({}, 2)
+			assert.are.same({}, placements)
+			assert.are.equal(0, rows)
 		end)
 	end)
 end)

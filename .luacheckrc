@@ -78,6 +78,11 @@ read_globals = {
 	"UnitEffectiveLevel",
 	"UnitClassification",
 	"GetCreatureDifficultyColor",
+	"C_UIFileAsset",
+	"C_SkillInfo",
+	"UnitLevel",
+	"GameTooltip",
+	"C_VoiceChat",
 }
 
 files["spec"] = {

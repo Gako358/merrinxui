@@ -45,7 +45,7 @@ L.SPELLS = {
 	{ id = 7744, class = "ANY", category = "racial", cd = 120 },
 	{ id = 20589, class = "ANY", category = "racial", cd = 120 },
 	{ id = 20594, class = "ANY", category = "racial", cd = 180 },
-	{ id = 20549, class = "ANY", category = "racial", cd = 120 },
+	{ id = 20549, class = "ANY", category = "racial", cd = 90 },
 	{ id = 20554, class = "ANY", category = "racial", cd = 180 },
 	{ id = 5579, class = "ANY", category = "racial", cd = 300 },
 	{ id = 23273, class = "ANY", category = "racial", cd = 300 },

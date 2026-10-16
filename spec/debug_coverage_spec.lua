@@ -7,7 +7,9 @@ describe("debug coverage", function()
 	}
 
 	local function isExempt(path)
-		return EXEMPT[path] == true or path:find("Logic%.lua$") ~= nil
+		return EXEMPT[path] == true
+			or path:find("Logic%.lua$") ~= nil
+			or path:find("^MerrinxUI/Modules/ProfessionData/") ~= nil
 	end
 
 	local function readFile(path)

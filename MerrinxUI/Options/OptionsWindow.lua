@@ -7,7 +7,8 @@ local OPTIONS_UI_NAME = "MerrinxUI-1.0"
 
 local CONTENT_W = Theme.geometry.width - Theme.geometry.sidebar
 local CONTENT_H = Theme.geometry.height - Theme.geometry.header - Theme.geometry.footer
-local LABEL_W = CONTENT_W - 2 * Theme.geometry.pad - Theme.geometry.control - 10
+local INNER_W = CONTENT_W - 2 * Theme.geometry.pad
+local CELL_W = math.floor((INNER_W - Theme.geometry.colGap) / Theme.geometry.columns)
 
 local W = {}
 ns.OptionsWindow = W
@@ -24,6 +25,8 @@ local currentPageIndex = 1
 local contentScrollOffset = 0
 local footerErrorText
 local confirmState
+local gridLines = 0
+local gridCells = 0
 
 local renderBlockers = {}
 local focusedEdit
@@ -111,6 +114,9 @@ local function newPool(create)
 		active = {}
 		for i = 1, #released do
 			local item = released[i]
+			if GameTooltip:IsOwned(item) then
+				GameTooltip:Hide()
+			end
 			item:Hide()
 			item:ClearAllPoints()
 			free[#free + 1] = item
@@ -163,17 +169,29 @@ end
 
 local function applyBase(row, name, desc, disabled)
 	row.label:SetText(name)
-	if desc then
-		row.desc:SetText(desc)
-		row.desc:Show()
-	else
-		row.desc:Hide()
-	end
+	row.tipName = name
+	row.tipDesc = desc
 	if disabled then
 		row:SetAlpha(Theme.disabledAlpha)
 	else
 		row:SetAlpha(1)
 	end
+end
+
+local function showTooltip(row)
+	if not row.tipName then
+		return
+	end
+	GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+	GameTooltip:SetText(row.tipName)
+	if row.tipDesc then
+		GameTooltip:AddLine(row.tipDesc, nil, nil, nil, true)
+	end
+	GameTooltip:Show()
+end
+
+local function hideTooltip()
+	GameTooltip:Hide()
 end
 
 local function displayLabel(v)
@@ -186,7 +204,7 @@ end
 local requestRender, blockRender, unblockRender
 local withConfirm, openConfirm, closeConfirm
 local openDropdown, closeDropdown
-local renderRow, renderSidebar, renderContentRows, clearContentRows, renderNow, switchToPage
+local configureCell, renderSidebar, renderContentRows, clearContentRows, renderNow, switchToPage
 
 function requestRender()
 	if renderScheduled then
@@ -234,11 +252,13 @@ local function closeCleanup()
 	clearRenderBlocks()
 	closeDropdown()
 	closeConfirm()
+	GameTooltip:Hide()
 end
 
 local function newRowBase()
 	local row = CreateFrame("Frame", nil, contentChild)
 	row:SetHeight(Theme.geometry.row)
+	row:EnableMouse(true)
 
 	local bg = row:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints()
@@ -246,19 +266,16 @@ local function newRowBase()
 
 	local label = row:CreateFontString(nil, "OVERLAY")
 	setFont(label, Theme.size.label)
-	label:SetPoint("TOPLEFT", row, "TOPLEFT", Theme.geometry.pad, -4)
-	label:SetWidth(LABEL_W)
+	label:SetPoint("LEFT", row, "LEFT", Theme.geometry.inset, 0)
 	label:SetJustifyH("LEFT")
+	label:SetWordWrap(false)
 	setTextColor(label, Theme.color.text)
 	row.label = label
 
-	local desc = row:CreateFontString(nil, "OVERLAY")
-	setFont(desc, Theme.size.desc)
-	desc:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
-	desc:SetWidth(LABEL_W)
-	desc:SetJustifyH("LEFT")
-	setTextColor(desc, Theme.color.textDim)
-	row.desc = desc
+	row:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	row:SetScript("OnLeave", hideTooltip)
 
 	return row
 end
@@ -309,7 +326,7 @@ local function createToggleRow()
 
 	local switch = CreateFrame("Button", nil, row)
 	switch:SetSize(Theme.geometry.switchW, Theme.geometry.switchH)
-	switch:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.pad, 0)
+	switch:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 
 	local track = switch:CreateTexture(nil, "BACKGROUND")
 	track:SetAllPoints()
@@ -325,6 +342,12 @@ local function createToggleRow()
 			row.onToggle()
 		end
 	end)
+	switch:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	switch:SetScript("OnLeave", hideTooltip)
+
+	row.label:SetPoint("RIGHT", switch, "LEFT", -8, 0)
 
 	row.switch = switch
 	return row
@@ -335,7 +358,7 @@ local function createRangeRow()
 
 	local valueText = row:CreateFontString(nil, "OVERLAY")
 	setFont(valueText, Theme.size.value)
-	valueText:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.pad, 0)
+	valueText:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 	valueText:SetWidth(50)
 	valueText:SetJustifyH("RIGHT")
 	setTextColor(valueText, Theme.color.text)
@@ -344,7 +367,7 @@ local function createRangeRow()
 	local slider = CreateFrame("Slider", nil, row)
 	slider:SetOrientation("HORIZONTAL")
 	slider:SetHeight(Theme.geometry.thumb)
-	slider:SetWidth(Theme.geometry.control - 58)
+	slider:SetWidth(Theme.geometry.cellControl - 58)
 	slider:SetPoint("RIGHT", valueText, "LEFT", -8, 0)
 	slider:SetObeyStepOnDrag(true)
 	slider:EnableMouseWheel(false)
@@ -372,6 +395,12 @@ local function createRangeRow()
 		unblockRender(self)
 		requestRender()
 	end)
+	slider:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	slider:SetScript("OnLeave", hideTooltip)
+
+	row.label:SetPoint("RIGHT", slider, "LEFT", -8, 0)
 
 	row.slider = slider
 	return row
@@ -381,8 +410,8 @@ local function createSelectRow()
 	local row = newRowBase()
 
 	local button = CreateFrame("Button", nil, row)
-	button:SetSize(Theme.geometry.control, Theme.geometry.field)
-	button:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.pad, 0)
+	button:SetSize(Theme.geometry.cellControl, Theme.geometry.field)
+	button:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 
 	local buttonBg = button:CreateTexture(nil, "BACKGROUND")
 	buttonBg:SetAllPoints()
@@ -400,6 +429,12 @@ local function createSelectRow()
 			row.onOpen()
 		end
 	end)
+	button:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	button:SetScript("OnLeave", hideTooltip)
+
+	row.label:SetPoint("RIGHT", button, "LEFT", -8, 0)
 
 	row.button = button
 	return row
@@ -410,8 +445,8 @@ local function createInputRow()
 
 	local edit = CreateFrame("EditBox", nil, row)
 	edit:SetAutoFocus(false)
-	edit:SetSize(Theme.geometry.control, Theme.geometry.field)
-	edit:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.pad, 0)
+	edit:SetSize(Theme.geometry.cellControl, Theme.geometry.field)
+	edit:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 	setFont(edit, Theme.size.value)
 	edit:SetTextInsets(6, 6, 0, 0)
 
@@ -444,6 +479,12 @@ local function createInputRow()
 		end
 		unblockRender(self)
 	end)
+	edit:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	edit:SetScript("OnLeave", hideTooltip)
+
+	row.label:SetPoint("RIGHT", edit, "LEFT", -8, 0)
 
 	row.edit = edit
 	return row
@@ -453,8 +494,8 @@ local function createExecuteRow()
 	local row = newRowBase()
 
 	local button = CreateFrame("Button", nil, row)
-	button:SetSize(Theme.geometry.control, Theme.geometry.field)
-	button:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.pad, 0)
+	button:SetSize(Theme.geometry.cellControl, Theme.geometry.field)
+	button:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 
 	local buttonBg = button:CreateTexture(nil, "BACKGROUND")
 	buttonBg:SetAllPoints()
@@ -469,15 +510,19 @@ local function createExecuteRow()
 
 	button:SetScript("OnEnter", function()
 		setColor(buttonBg, Theme.color.buttonHover)
+		showTooltip(row)
 	end)
 	button:SetScript("OnLeave", function()
 		setColor(buttonBg, Theme.color.button)
+		hideTooltip()
 	end)
 	button:SetScript("OnClick", function()
 		if row.onExecute then
 			row.onExecute()
 		end
 	end)
+
+	row.label:SetPoint("RIGHT", button, "LEFT", -8, 0)
 
 	row.button = button
 	return row
@@ -493,8 +538,8 @@ local function createDescriptionRow()
 
 	local text = row:CreateFontString(nil, "OVERLAY")
 	setFont(text, Theme.size.desc)
-	text:SetPoint("TOPLEFT", row, "TOPLEFT", Theme.geometry.pad, 0)
-	text:SetWidth(CONTENT_W - 2 * Theme.geometry.pad)
+	text:SetPoint("TOPLEFT", row, "TOPLEFT", Theme.geometry.inset, -Theme.geometry.descPad)
+	text:SetWidth(INNER_W - 2 * Theme.geometry.inset)
 	text:SetJustifyH("LEFT")
 	setTextColor(text, Theme.color.textDim)
 	row.text = text
@@ -504,7 +549,7 @@ end
 
 local function createSectionRow()
 	local row = CreateFrame("Frame", nil, contentChild)
-	row:SetHeight(Theme.geometry.row)
+	row:SetHeight(Theme.geometry.section)
 
 	local bg = row:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints()
@@ -512,8 +557,8 @@ local function createSectionRow()
 
 	local text = row:CreateFontString(nil, "OVERLAY")
 	setFont(text, Theme.size.section)
-	text:SetPoint("TOPLEFT", row, "TOPLEFT", Theme.geometry.pad, 0)
-	text:SetWidth(CONTENT_W - 2 * Theme.geometry.pad)
+	text:SetPoint("LEFT", row, "LEFT", Theme.geometry.inset, 0)
+	text:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 	text:SetJustifyH("LEFT")
 	setTextColor(text, Theme.color.section)
 	row.text = text
@@ -531,8 +576,8 @@ local function createUnsupportedRow()
 
 	local text = row:CreateFontString(nil, "OVERLAY")
 	setFont(text, Theme.size.label)
-	text:SetPoint("TOPLEFT", row, "TOPLEFT", Theme.geometry.pad, 0)
-	text:SetWidth(CONTENT_W - 2 * Theme.geometry.pad)
+	text:SetPoint("LEFT", row, "LEFT", Theme.geometry.inset, 0)
+	text:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
 	text:SetJustifyH("LEFT")
 	setTextColor(text, Theme.color.textDim)
 	row.text = text
@@ -583,6 +628,7 @@ local function configureToggle(row, path)
 	local name, desc = commonInfo(path)
 	local disabled = isRowDisabled(path)
 	applyBase(row, name, desc, disabled)
+	row.switch:SetSize(Theme.geometry.switchW, Theme.geometry.switchH)
 
 	if disabled then
 		row.switch:Disable()
@@ -617,10 +663,11 @@ local function configureToggle(row, path)
 	end
 end
 
-local function configureRange(row, path)
+local function configureRange(row, path, controlWidth)
 	local name, desc = commonInfo(path)
 	local disabled = isRowDisabled(path)
 	applyBase(row, name, desc, disabled)
+	row.slider:SetWidth(controlWidth - 58)
 
 	local okMin, min = pcall(L.Value, root, path, "min", appName)
 	if not okMin or type(min) ~= "number" then
@@ -676,10 +723,11 @@ local function configureRange(row, path)
 	end
 end
 
-local function configureSelect(row, path)
+local function configureSelect(row, path, controlWidth)
 	local name, desc = commonInfo(path)
 	local disabled = isRowDisabled(path)
 	applyBase(row, name, desc, disabled)
+	row.button:SetSize(controlWidth, Theme.geometry.field)
 
 	if disabled then
 		row.button:Disable()
@@ -710,10 +758,11 @@ local function configureSelect(row, path)
 	end
 end
 
-local function configureInput(row, path)
+local function configureInput(row, path, controlWidth)
 	local name, desc = commonInfo(path)
 	local disabled = isRowDisabled(path)
 	applyBase(row, name, desc, disabled)
+	row.edit:SetSize(controlWidth, Theme.geometry.field)
 
 	if disabled then
 		row.edit:Disable()
@@ -758,10 +807,11 @@ local function configureInput(row, path)
 	end
 end
 
-local function configureExecute(row, path)
+local function configureExecute(row, path, controlWidth)
 	local name, desc = commonInfo(path)
 	local disabled = isRowDisabled(path)
 	applyBase(row, name, desc, disabled)
+	row.button:SetSize(controlWidth, Theme.geometry.field)
 	row.button.text:SetText(name)
 
 	if disabled then
@@ -786,6 +836,9 @@ end
 local function configureDescription(row, path)
 	local name = commonInfo(path)
 	row.text:SetText(name)
+	row:SetWidth(INNER_W)
+	local height = math.ceil(row.text:GetStringHeight()) + 2 * Theme.geometry.descPad
+	row.measuredHeight = math.max(Theme.geometry.row, height)
 end
 
 local function configureSection(row, path)
@@ -861,11 +914,12 @@ function openDropdown(anchor, path, values)
 		visible = 1
 	end
 	local listHeight = visible * Theme.geometry.dropItem
+	local width = anchor:GetWidth()
 
 	dropdownOverlay:ClearAllPoints()
 	dropdownOverlay:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
-	dropdownOverlay:SetSize(Theme.geometry.control, listHeight)
-	dropdownChild:SetSize(Theme.geometry.control, math.max(count, 1) * Theme.geometry.dropItem)
+	dropdownOverlay:SetSize(width, listHeight)
+	dropdownChild:SetSize(width, math.max(count, 1) * Theme.geometry.dropItem)
 	dropdownScroll:SetVerticalScroll(0)
 
 	local fontList = isFontSelect(path)
@@ -873,7 +927,7 @@ function openDropdown(anchor, path, values)
 
 	for i, key in ipairs(keys) do
 		local item = pools.dropItem.acquire()
-		item:SetSize(Theme.geometry.control, Theme.geometry.dropItem)
+		item:SetSize(width, Theme.geometry.dropItem)
 		item:ClearAllPoints()
 		item:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -(i - 1) * Theme.geometry.dropItem)
 		if fontList then
@@ -915,7 +969,7 @@ function closeDropdown()
 	end
 end
 
-function renderRow(rowSpec, offset, visibleIndex)
+function configureCell(rowSpec, controlWidth)
 	local kind = rowSpec.kind
 	local path = rowSpec.path
 	local row
@@ -925,16 +979,16 @@ function renderRow(rowSpec, offset, visibleIndex)
 		configureToggle(row, path)
 	elseif kind == "range" then
 		row = pools.range.acquire()
-		configureRange(row, path)
+		configureRange(row, path, controlWidth)
 	elseif kind == "select" then
 		row = pools.select.acquire()
-		configureSelect(row, path)
+		configureSelect(row, path, controlWidth)
 	elseif kind == "input" then
 		row = pools.input.acquire()
-		configureInput(row, path)
+		configureInput(row, path, controlWidth)
 	elseif kind == "execute" then
 		row = pools.execute.acquire()
-		configureExecute(row, path)
+		configureExecute(row, path, controlWidth)
 	elseif kind == "description" then
 		row = pools.description.acquire()
 		configureDescription(row, path)
@@ -946,20 +1000,7 @@ function renderRow(rowSpec, offset, visibleIndex)
 		configureUnsupported(row, path, kind)
 	end
 
-	row:ClearAllPoints()
-	row:SetPoint("TOPLEFT", contentChild, "TOPLEFT", 0, -offset)
-	row:SetPoint("TOPRIGHT", contentChild, "TOPRIGHT", 0, -offset)
-
-	if kind == "section" or kind == "header" then
-		row.bg:Hide()
-	else
-		row.bg:Show()
-		if visibleIndex % 2 == 1 then
-			setColor(row.bg, Theme.color.rowA)
-		else
-			setColor(row.bg, Theme.color.rowB)
-		end
-	end
+	return row
 end
 
 function renderSidebar()
@@ -1008,21 +1049,84 @@ function renderContentRows(page)
 		rowList = {}
 	end
 
+	local spans = {}
+	for i = 1, #rowList do
+		spans[i] = L.Span(root, rowList[i], appName)
+	end
+	local placements, lineCount = L.Grid(spans, Theme.geometry.columns)
+
 	releaseContentRows()
 
-	local heights = {}
-	for i = 1, #rowList do
-		heights[i] = Theme.geometry.row
+	local rows = {}
+	for i, rowSpec in ipairs(rowList) do
+		local controlWidth = (spans[i] == 2) and Theme.geometry.control or Theme.geometry.cellControl
+		local ok, cell = pcall(configureCell, rowSpec, controlWidth)
+		if ok then
+			rows[i] = cell
+		else
+			setFooterError(cell)
+		end
 	end
-	local offsets, total = L.Stack(heights, Theme.geometry.gap)
+
+	local lineHeights = {}
+	for i, rowSpec in ipairs(rowList) do
+		local placement = placements[i]
+		if placement and rows[i] then
+			local height
+			if rowSpec.kind == "section" or rowSpec.kind == "header" then
+				height = Theme.geometry.section
+			elseif rowSpec.kind == "description" then
+				height = rows[i].measuredHeight or Theme.geometry.row
+			else
+				height = Theme.geometry.row
+			end
+			local line = placement.row
+			if not lineHeights[line] or height > lineHeights[line] then
+				lineHeights[line] = height
+			end
+		end
+	end
+	for line = 1, lineCount do
+		lineHeights[line] = lineHeights[line] or Theme.geometry.row
+	end
+
+	local offsets, total = L.Stack(lineHeights, Theme.geometry.gap)
 	contentChild:SetHeight(math.max(total, CONTENT_H))
 
 	for i, rowSpec in ipairs(rowList) do
-		local ok, err = pcall(renderRow, rowSpec, offsets[i], i)
-		if not ok then
-			setFooterError(err)
+		local placement = placements[i]
+		local row = rows[i]
+		if placement and row then
+			local line, col = placement.row, placement.col
+			local width
+			local x
+			if spans[i] == 2 then
+				width = INNER_W
+				x = Theme.geometry.pad
+			else
+				width = CELL_W
+				x = Theme.geometry.pad + (col - 1) * (CELL_W + Theme.geometry.colGap)
+			end
+
+			row:ClearAllPoints()
+			row:SetSize(width, lineHeights[line])
+			row:SetPoint("TOPLEFT", contentChild, "TOPLEFT", x, -offsets[line])
+
+			if rowSpec.kind == "section" or rowSpec.kind == "header" then
+				row.bg:Hide()
+			else
+				row.bg:Show()
+				if line % 2 == 1 then
+					setColor(row.bg, Theme.color.rowA)
+				else
+					setColor(row.bg, Theme.color.rowB)
+				end
+			end
 		end
 	end
+
+	gridLines = lineCount
+	gridCells = #rowList
 
 	local maxOffset = math.max(0, total - CONTENT_H)
 	if contentScrollOffset > maxOffset then
@@ -1037,6 +1141,8 @@ function clearContentRows()
 	contentChild:SetHeight(CONTENT_H)
 	contentScrollOffset = 0
 	contentScroll:SetVerticalScroll(0)
+	gridLines = 0
+	gridCells = 0
 end
 
 function renderNow()
@@ -1408,6 +1514,15 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 			name = "shown",
 			run = function()
 				return "INFO", frame ~= nil and frame:IsShown() == true
+			end,
+		},
+		{
+			name = "grid",
+			run = function()
+				if not frame then
+					return "SKIP", "not built"
+				end
+				return "INFO", Theme.geometry.columns, gridLines, gridCells
 			end,
 		},
 	}

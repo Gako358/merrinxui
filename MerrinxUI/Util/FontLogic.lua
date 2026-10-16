@@ -39,6 +39,32 @@ local function normalize(path)
 	return path:lower():gsub("/", "\\")
 end
 
+function FontLogic.CanonicalAddOnsPath(path)
+	if type(path) ~= "string" or path == "" then
+		return nil
+	end
+	local interface, addons, remainder = path:match("^([^\\/]*)[\\/]([^\\/]*)[\\/](.*)$")
+	if interface == nil or remainder == "" then
+		return nil
+	end
+	if interface:lower() ~= "interface" or addons:lower() ~= "addons" then
+		return nil
+	end
+	return "Interface\\AddOns\\" .. remainder:gsub("/", "\\")
+end
+
+function FontLogic.IsAddonPath(path)
+	return FontLogic.CanonicalAddOnsPath(path) ~= nil
+end
+
+function FontLogic.AddonFolder(path)
+	local canonical = FontLogic.CanonicalAddOnsPath(path)
+	if canonical == nil then
+		return nil
+	end
+	return canonical:match("^Interface\\AddOns\\([^\\]*)")
+end
+
 function FontLogic.Migrate(value, hash, default)
 	if type(value) ~= "string" or value == "" then
 		return default

@@ -4,7 +4,7 @@ local L = {}
 ns.OptionsLogic = L
 
 L.INHERITED = { set = true, get = true, func = true, confirm = true, validate = true, disabled = true, hidden = true }
-L.STRING_LITERAL = { name = true, desc = true, usage = true }
+L.STRING_LITERAL = { name = true, desc = true, usage = true, width = true }
 L.SUPPORTED = {
 	group = true,
 	toggle = true,
@@ -327,4 +327,37 @@ function L.Stack(heights, gap)
 		total = pos - gap
 	end
 	return offsets, total
+end
+
+local WIDE_KIND = { section = true, header = true, description = true, unsupported = true }
+
+function L.Span(root, rowSpec, appName)
+	if WIDE_KIND[rowSpec.kind] then
+		return 2
+	end
+	local ok, w = pcall(L.Value, root, rowSpec.path, "width", appName)
+	if ok and (w == "full" or w == "double" or (type(w) == "number" and w > 1)) then
+		return 2
+	end
+	return 1
+end
+
+function L.Grid(spans, columns)
+	local placements = {}
+	local row, col = 0, columns + 1
+	for i, span in ipairs(spans) do
+		if span >= columns then
+			row = row + 1
+			placements[i] = { row = row, col = 1 }
+			col = columns + 1
+		else
+			if col + span - 1 > columns then
+				row = row + 1
+				col = 1
+			end
+			placements[i] = { row = row, col = col }
+			col = col + span
+		end
+	end
+	return placements, row
 end

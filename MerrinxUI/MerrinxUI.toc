@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.17.0
+## Version: 0.19.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -28,7 +28,23 @@ Modules\NameplateLogic.lua
 Modules\Nameplates.lua
 Modules\EnemyCooldownLogic.lua
 Modules\EnemyCooldowns.lua
+Modules\CooldownVoiceLogic.lua
+Modules\CooldownVoice.lua
 Modules\ActionBarLogic.lua
 Modules\ActionBars.lua
 Modules\DamageMeterLogic.lua
 Modules\DamageMeter.lua
+Modules\ProfessionLogic.lua
+Modules\ProfessionData\Alchemy.lua
+Modules\ProfessionData\Blacksmithing.lua
+Modules\ProfessionData\Enchanting.lua
+Modules\ProfessionData\Engineering.lua
+Modules\ProfessionData\Leatherworking.lua
+Modules\ProfessionData\Tailoring.lua
+Modules\ProfessionData\Cooking.lua
+Modules\ProfessionData\FirstAid.lua
+Modules\ProfessionData\Fishing.lua
+Modules\ProfessionData\Herbalism.lua
+Modules\ProfessionData\Mining.lua
+Modules\ProfessionData\Skinning.lua
+Modules\Professions.lua
