@@ -19,6 +19,8 @@ local defaults = {
 		fontSize = 11,
 		font = "Arial Narrow",
 		barTexture = "Solid",
+		bgOpacity = 75,
+		headerOpacity = 100,
 		position = { point = "CENTER", x = 400, y = -200 },
 	},
 }
@@ -63,7 +65,7 @@ function DamageMeter:OnInitialize()
 	bg:SetAllPoints()
 	bg:SetTexture(TEXTURE)
 	bg:SetVertexColor(0, 0, 0, 1)
-	bg:SetAlpha(0.75)
+	self.bg = bg
 
 	local header = CreateFrame("Frame", nil, frame)
 	header:SetHeight(HEADER_HEIGHT)
@@ -74,6 +76,7 @@ function DamageMeter:OnInitialize()
 	headerBg:SetAllPoints()
 	headerBg:SetTexture(TEXTURE)
 	headerBg:SetVertexColor(27 / 255, 27 / 255, 27 / 255, 1)
+	self.headerBg = headerBg
 
 	local title = header:CreateFontString(nil, "OVERLAY")
 	title:SetFont(FONT, 11, "")
@@ -360,6 +363,9 @@ function DamageMeter:Layout()
 
 	frame:SetSize(profile.width, L.WindowHeight(profile.rows, profile.rowHeight, ROW_SPACING, HEADER_HEIGHT))
 
+	self.bg:SetAlpha(profile.bgOpacity / 100)
+	self.headerBg:SetAlpha(profile.headerOpacity / 100)
+
 	ns.Media:SetFont(self.title, profile.font, 11, "")
 	ns.Media:SetFont(self.resetButton.text, profile.font, 11, "")
 	ns.Media:SetFont(self.typeButton.text, profile.font, 11, "")
@@ -605,10 +611,40 @@ function DamageMeter:GetOptions()
 					self:Refresh()
 				end,
 			},
+			bgOpacity = {
+				type = "range",
+				name = "Background opacity",
+				order = 10,
+				min = 0,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.bgOpacity
+				end,
+				set = function(_, value)
+					self.db.profile.bgOpacity = value
+					self:Refresh()
+				end,
+			},
+			headerOpacity = {
+				type = "range",
+				name = "Header opacity",
+				order = 11,
+				min = 0,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.headerOpacity
+				end,
+				set = function(_, value)
+					self.db.profile.headerOpacity = value
+					self:Refresh()
+				end,
+			},
 			reset = {
 				type = "execute",
 				name = "Reset",
-				order = 10,
+				order = 12,
 				confirm = true,
 				func = function()
 					C_DamageMeter.ResetAllCombatSessions()
@@ -955,6 +991,26 @@ function DamageMeter:GetDebugChecks()
 			name = "redraw",
 			run = function()
 				return "INFO", self.redraws, self.redrawPending
+			end,
+		},
+		{
+			name = "background",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local profile = self.db.profile
+				local bgAlpha = self.bg:GetAlpha()
+				local headerAlpha = self.headerBg:GetAlpha()
+
+				if issecretvalue(bgAlpha) or issecretvalue(headerAlpha) then
+					return "INFO", "secret"
+				end
+
+				local ok = math.abs(bgAlpha - profile.bgOpacity / 100) <= 0.01
+					and math.abs(headerAlpha - profile.headerOpacity / 100) <= 0.01
+				return ok and "PASS" or "FAIL", bgAlpha, headerAlpha
 			end,
 		},
 	}

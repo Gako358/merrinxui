@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.19.0
+## Version: 0.20.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml

@@ -84,6 +84,11 @@ read_globals = {
 	"C_VoiceChat",
 }
 
+globals = {
+	"BINDING_HEADER_MERRINXUI",
+	"BINDING_NAME_MERRINXUI_TOGGLEBARS",
+}
+
 files["spec"] = {
 	std = "+busted",
 }

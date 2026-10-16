@@ -77,3 +77,23 @@ function L.BindingPrefix(bar)
 	end
 	return nil
 end
+
+function L.VisibilityDriver(b, hideInCombat)
+	if b == 1 then
+		if hideInCombat then
+			return "[overridebar][vehicleui][petbattle] hide; [combat] hide; show"
+		end
+		return "[overridebar][vehicleui][petbattle] hide; show"
+	end
+	if hideInCombat then
+		return "[combat] hide; show"
+	end
+	return "show"
+end
+
+function L.BarAlpha(opacity, mouseover, hovered, unlocked)
+	if mouseover and not hovered and not unlocked then
+		return 0
+	end
+	return opacity / 100
+end

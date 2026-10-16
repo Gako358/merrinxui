@@ -2,6 +2,9 @@ local addonName, ns = ...
 
 local L = ns.ActionBarLogic
 
+BINDING_HEADER_MERRINXUI = "MerrinxUI"
+BINDING_NAME_MERRINXUI_TOGGLEBARS = "Toggle action bars"
+
 local ActionBars = ns.addon:NewModule("ActionBars", "AceEvent-3.0")
 
 local defaults = { profile = { enabled = false, bars = {} } }
@@ -12,6 +15,10 @@ for b = 1, 8 do
 		size = 36,
 		spacing = 2,
 		position = L.DefaultPosition(b),
+		opacity = 100,
+		mouseover = false,
+		hideInCombat = false,
+		keyToggle = false,
 	}
 end
 
@@ -22,10 +29,18 @@ function ActionBars:OnInitialize()
 	self.buttons = {}
 	self.bindingOwner = CreateFrame("Frame")
 	self.bindingApplies = 0
+	self.alphas = {}
+	self.visDrivers = {}
+	self.fader = CreateFrame("Frame")
+	self.fader:Hide()
+	self.fader:SetScript("OnUpdate", function()
+		self:UpdateAlphas()
+	end)
 end
 
 function ActionBars:OnEnable()
 	self:RegisterEvent("UPDATE_BINDINGS", "OnUpdateBindings")
+	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "UpdateAlphas")
 	self:QueueApply()
 end
 
@@ -66,6 +81,17 @@ function ActionBars:CreateBar(b)
 	if b == 1 then
 		h:SetAttribute("_onstate-page", [[ self:ChildUpdate("actionpage", newstate) ]])
 	end
+
+	h:SetAttribute(
+		"_onstate-vis",
+		[[
+		if newstate == "show" and not self:GetAttribute("userhidden") then
+			self:Show()
+		else
+			self:Hide()
+		end
+	]]
+	)
 
 	local buttons = {}
 	self.buttons[b] = buttons
@@ -128,6 +154,31 @@ function ActionBars:Apply()
 		ns.addon:GetModule("HideBlizzard"):Ensure("actionBars")
 		self.applied = true
 
+		if not self.toggle then
+			local t = CreateFrame("Button", "MerrinxUIBarToggle", UIParent, "SecureHandlerClickTemplate")
+			t:RegisterForClicks("AnyDown")
+			t:SetAttribute(
+				"_onclick",
+				[[
+				local hidden = not self:GetAttribute("barshidden")
+				self:SetAttribute("barshidden", hidden)
+				for b = 1, 8 do
+					local h = self:GetFrameRef("bar" .. b)
+					if h and h:GetAttribute("keytoggle") then
+						h:SetAttribute("userhidden", hidden)
+						if h:GetAttribute("state-vis") == "show" and not hidden then
+							h:Show()
+						else
+							h:Hide()
+						end
+					end
+				end
+			]]
+			)
+			self.toggle = t
+		end
+		local barsHidden = self.toggle:GetAttribute("barshidden") == true
+
 		for b = 1, 8 do
 			local barProfile = profile.bars[b]
 			if barProfile.enabled then
@@ -147,13 +198,22 @@ function ActionBars:Apply()
 					end
 					self.pagingDriver = L.PagingDriver(o, v, t)
 					RegisterStateDriver(h, "page", self.pagingDriver)
-					RegisterStateDriver(h, "visibility", "[overridebar][vehicleui][petbattle] hide; show")
 				else
 					local buttons = self.buttons[b]
 					for i = 1, 12 do
 						buttons[i]:SetAttribute("action", L.Slot(L.PAGES[b], i))
 					end
+				end
+
+				self.toggle:SetFrameRef("bar" .. b, h)
+				h:SetAttribute("keytoggle", barProfile.keyToggle)
+				h:SetAttribute("userhidden", barProfile.keyToggle and barsHidden)
+				self.visDrivers[b] = L.VisibilityDriver(b, barProfile.hideInCombat)
+				RegisterStateDriver(h, "vis", self.visDrivers[b])
+				if h:GetAttribute("state-vis") == "show" and not h:GetAttribute("userhidden") then
 					h:Show()
+				else
+					h:Hide()
 				end
 
 				ns.Mover:Apply(h)
@@ -165,7 +225,9 @@ function ActionBars:Apply()
 				local h = self.headers[b]
 				if h then
 					UnregisterStateDriver(h, "page")
-					UnregisterStateDriver(h, "visibility")
+					UnregisterStateDriver(h, "vis")
+					h:SetAttribute("keytoggle", false)
+					self.visDrivers[b] = nil
 					h:Hide()
 					if b == 1 then
 						self.pagingDriver = nil
@@ -173,6 +235,20 @@ function ActionBars:Apply()
 				end
 			end
 		end
+
+		local anyMouseover = false
+		for b = 1, 8 do
+			if profile.bars[b].enabled and profile.bars[b].mouseover then
+				anyMouseover = true
+				break
+			end
+		end
+		if anyMouseover then
+			self.fader:Show()
+		else
+			self.fader:Hide()
+		end
+		self:UpdateAlphas()
 
 		if not self.petBattleOwner then
 			local pb = CreateFrame("Frame", nil, UIParent, "SecureHandlerStateTemplate")
@@ -200,13 +276,16 @@ function ActionBars:Apply()
 			local h = self.headers[b]
 			if h then
 				UnregisterStateDriver(h, "page")
-				UnregisterStateDriver(h, "visibility")
+				UnregisterStateDriver(h, "vis")
+				h:SetAttribute("keytoggle", false)
+				self.visDrivers[b] = nil
 				h:Hide()
 				if b == 1 then
 					self.pagingDriver = nil
 				end
 			end
 		end
+		self.fader:Hide()
 
 		ClearOverrideBindings(self.bindingOwner)
 
@@ -247,11 +326,36 @@ function ActionBars:ApplyBindings()
 				end
 			end
 		end
+
+		if self.toggle then
+			for _, key in ipairs({ GetBindingKey("MERRINXUI_TOGGLEBARS") }) do
+				SetOverrideBindingClick(self.bindingOwner, false, key, "MerrinxUIBarToggle", "LeftButton")
+			end
+		end
 	end
 
 	self.applyingBindings = nil
 	self.bindingApplies = self.bindingApplies + 1
 	ns.Debug:Log("ActionBars", "bindings", count)
+end
+
+function ActionBars:UpdateAlphas()
+	local unlocked = ns.Mover:IsUnlocked()
+	for b = 1, 8 do
+		local h = self.headers[b]
+		local p = self.db.profile.bars[b]
+		if h and p.enabled then
+			local over = h:IsMouseOver()
+			if issecretvalue(over) then
+				over = true
+			end
+			local alpha = L.BarAlpha(p.opacity, p.mouseover, over, unlocked)
+			if alpha ~= self.alphas[b] then
+				h:SetAlpha(alpha)
+				self.alphas[b] = alpha
+			end
+		end
+	end
 end
 
 function ActionBars:GetOptions()
@@ -324,6 +428,62 @@ function ActionBars:GetOptions()
 					end,
 					set = function(_, value)
 						self.db.profile.bars[b].spacing = value
+						self:Refresh()
+					end,
+				},
+				opacity = {
+					type = "range",
+					name = "Opacity",
+					order = 5,
+					min = 0,
+					max = 100,
+					step = 5,
+					disabled = barDisabled(b),
+					get = function()
+						return self.db.profile.bars[b].opacity
+					end,
+					set = function(_, value)
+						self.db.profile.bars[b].opacity = value
+						self:Refresh()
+					end,
+				},
+				mouseover = {
+					type = "toggle",
+					name = "Show on mouseover",
+					order = 6,
+					disabled = barDisabled(b),
+					get = function()
+						return self.db.profile.bars[b].mouseover
+					end,
+					set = function(_, value)
+						self.db.profile.bars[b].mouseover = value
+						self:Refresh()
+					end,
+				},
+				hideInCombat = {
+					type = "toggle",
+					name = "Hide in combat",
+					order = 7,
+					disabled = barDisabled(b),
+					get = function()
+						return self.db.profile.bars[b].hideInCombat
+					end,
+					set = function(_, value)
+						self.db.profile.bars[b].hideInCombat = value
+						self:Refresh()
+					end,
+				},
+				keyToggle = {
+					type = "toggle",
+					name = "Hide with key toggle",
+					order = 8,
+					desc = "Bind the key under Key Bindings > AddOns > MerrinxUI.",
+					disabled = barDisabled(b),
+					get = function()
+						return self.db.profile.bars[b].keyToggle
+					end,
+					set = function(_, value)
+						self.db.profile.bars[b].keyToggle = value
 						self:Refresh()
 					end,
 				},
@@ -567,6 +727,42 @@ function ActionBars:GetDebugChecks()
 				return "INFO", C_CVar.GetCVar("ActionButtonUseKeyDown")
 			end,
 		},
+		{
+			name = "toggle",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not self.toggle then
+					return "FAIL", "no toggle button"
+				end
+
+				local barsHidden = self.toggle:GetAttribute("barshidden") == true
+				local ok, total = 0, 0
+				local secret = false
+				for _, key in ipairs({ GetBindingKey("MERRINXUI_TOGGLEBARS") }) do
+					if issecretvalue(key) then
+						secret = true
+					else
+						total = total + 1
+						local action = GetBindingAction(key, true)
+						if issecretvalue(action) then
+							secret = true
+						elseif action == "CLICK MerrinxUIBarToggle:LeftButton" then
+							ok = ok + 1
+						end
+					end
+				end
+
+				if secret then
+					return "INFO", "secret"
+				end
+				if total == 0 then
+					return "INFO", "no keys bound", barsHidden
+				end
+				return (ok == total) and "PASS" or "FAIL", ok, total, barsHidden
+			end,
+		},
 	}
 
 	for b = 1, 8 do
@@ -632,6 +828,54 @@ function ActionBars:GetDebugChecks()
 						return "PASS", detailScale, w, ht, "points restricted"
 					end
 					return "PASS", detailScale, w, ht
+				end,
+			})
+
+			table.insert(checks, {
+				name = "visibility " .. b,
+				run = function(ctx)
+					if ctx.enabled == false then
+						return "SKIP", "module disabled"
+					end
+
+					local p = self.db.profile.bars[b]
+					local h = self.headers[b]
+					local state = h:GetAttribute("state-vis")
+					local userhidden = h:GetAttribute("userhidden")
+					local shown = h:IsShown()
+
+					if issecretvalue(state) or issecretvalue(userhidden) or issecretvalue(shown) then
+						return "INFO", "secret"
+					end
+
+					local ok = self.visDrivers[b] == L.VisibilityDriver(b, p.hideInCombat)
+						and (h:GetAttribute("keytoggle") == true) == p.keyToggle
+						and shown == (state == "show" and not userhidden)
+
+					return ok and "PASS" or "FAIL", state, userhidden == true, shown
+				end,
+			})
+
+			table.insert(checks, {
+				name = "alpha " .. b,
+				run = function(ctx)
+					if ctx.enabled == false then
+						return "SKIP", "module disabled"
+					end
+
+					local p = self.db.profile.bars[b]
+					local h = self.headers[b]
+					local over = h:IsMouseOver()
+					local unlocked = ns.Mover:IsUnlocked()
+					local alpha = h:GetAlpha()
+
+					if issecretvalue(over) or issecretvalue(unlocked) or issecretvalue(alpha) then
+						return "INFO", "secret"
+					end
+
+					local expected = L.BarAlpha(p.opacity, p.mouseover, over, unlocked)
+					local ok = math.abs(alpha - expected) <= 0.01
+					return ok and "PASS" or "FAIL", alpha, expected
 				end,
 			})
 		end

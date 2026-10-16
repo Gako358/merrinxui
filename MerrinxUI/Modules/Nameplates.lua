@@ -13,6 +13,7 @@ local defaults = {
 		nameSize = 10,
 		font = FontLogic.GLOBAL,
 		barTexture = FontLogic.GLOBAL,
+		bgOpacity = 80,
 		castBar = true,
 		healthText = "percent",
 		powerBar = false,
@@ -469,7 +470,7 @@ function Nameplates:CreateStyledFrame(plate)
 	local bg = healthBar:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints(healthBar)
 	bg:SetTexture(BAR_TEXTURE)
-	bg:SetVertexColor(0.1, 0.1, 0.1, 0.8)
+	bg:SetVertexColor(0.1, 0.1, 0.1, 1)
 
 	local healthText = healthBar:CreateFontString(nil, "OVERLAY")
 	healthText:SetPoint("CENTER", healthBar)
@@ -497,7 +498,7 @@ function Nameplates:CreateStyledFrame(plate)
 	local powerBg = powerBar:CreateTexture(nil, "BACKGROUND")
 	powerBg:SetAllPoints(powerBar)
 	powerBg:SetTexture(BAR_TEXTURE)
-	powerBg:SetVertexColor(0.1, 0.1, 0.1, 0.8)
+	powerBg:SetVertexColor(0.1, 0.1, 0.1, 1)
 
 	local powerText = powerBar:CreateFontString(nil, "OVERLAY")
 	powerText:SetPoint("RIGHT", powerBar, "RIGHT", -2, 0)
@@ -511,7 +512,7 @@ function Nameplates:CreateStyledFrame(plate)
 	local castBg = castBar:CreateTexture(nil, "BACKGROUND")
 	castBg:SetAllPoints(castBar)
 	castBg:SetTexture(BAR_TEXTURE)
-	castBg:SetVertexColor(0.1, 0.1, 0.1, 0.8)
+	castBg:SetVertexColor(0.1, 0.1, 0.1, 1)
 
 	local castText = castBar:CreateFontString(nil, "OVERLAY")
 	castText:SetPoint("CENTER", castBar)
@@ -523,13 +524,16 @@ function Nameplates:CreateStyledFrame(plate)
 	castShield:SetAlpha(0)
 
 	frame.healthBar = healthBar
+	frame.healthBg = bg
 	frame.healthText = healthText
 	frame.levelText = levelText
 	frame.highlight = highlight
 	frame.nameText = nameText
 	frame.powerBar = powerBar
+	frame.powerBg = powerBg
 	frame.powerText = powerText
 	frame.castBar = castBar
+	frame.castBg = castBg
 	frame.castText = castText
 	frame.castShield = castShield
 
@@ -568,6 +572,9 @@ end
 function Nameplates:ApplySize(frame)
 	local profile = self.db.profile
 	frame:SetSize(profile.width, profile.height)
+	frame.healthBg:SetAlpha(profile.bgOpacity / 100)
+	frame.powerBg:SetAlpha(profile.bgOpacity / 100)
+	frame.castBg:SetAlpha(profile.bgOpacity / 100)
 	local _, namePath = ns.Media:SetFont(frame.nameText, profile.font, profile.nameSize, "OUTLINE")
 	self.appliedFont = namePath
 	ns.Media:SetFont(frame.healthText, profile.font, profile.nameSize - 1, "OUTLINE")
@@ -1348,6 +1355,21 @@ function Nameplates:GetOptions()
 				end,
 				set = function(_, value)
 					self.db.profile.barTexture = value
+					self:Refresh()
+				end,
+			},
+			bgOpacity = {
+				type = "range",
+				name = "Background opacity",
+				order = 23,
+				min = 0,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.bgOpacity
+				end,
+				set = function(_, value)
+					self.db.profile.bgOpacity = value
 					self:Refresh()
 				end,
 			},
@@ -2272,6 +2294,40 @@ function Nameplates:GetDebugChecks()
 					frame.healthBar:GetStatusBarTexture():GetTexture(),
 					ns.Media:Resolve("statusbar", profile.barTexture),
 					frame.barPath
+			end,
+		},
+		{
+			name = "background",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local frame
+				for _, plateFrame in pairs(self.plateFrames) do
+					if plateFrame:IsShown() then
+						frame = plateFrame
+						break
+					end
+				end
+				if not frame then
+					return "SKIP", "no plates"
+				end
+
+				local healthAlpha = frame.healthBg:GetAlpha()
+				local powerAlpha = frame.powerBg:GetAlpha()
+				local castAlpha = frame.castBg:GetAlpha()
+
+				if issecretvalue(healthAlpha) or issecretvalue(powerAlpha) or issecretvalue(castAlpha) then
+					return "INFO", "secret"
+				end
+
+				local expected = self.db.profile.bgOpacity / 100
+				local ok = math.abs(healthAlpha - expected) <= 0.01
+					and math.abs(powerAlpha - expected) <= 0.01
+					and math.abs(castAlpha - expected) <= 0.01
+
+				return ok and "PASS" or "FAIL", healthAlpha, powerAlpha, castAlpha
 			end,
 		},
 	}

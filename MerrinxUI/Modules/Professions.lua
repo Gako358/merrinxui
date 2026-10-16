@@ -19,6 +19,8 @@ local defaults = {
 		enabled = false,
 		fontSize = 12,
 		font = "*",
+		bgOpacity = 75,
+		headerOpacity = 100,
 		position = { point = "CENTER", x = -400, y = 0 },
 	},
 	char = {
@@ -68,7 +70,7 @@ function Professions:OnInitialize()
 	bg:SetAllPoints()
 	bg:SetTexture(TEXTURE)
 	bg:SetVertexColor(0, 0, 0, 1)
-	bg:SetAlpha(0.75)
+	self.bg = bg
 
 	local header = CreateFrame("Frame", nil, frame)
 	header:SetHeight(HEADER_HEIGHT)
@@ -79,6 +81,7 @@ function Professions:OnInitialize()
 	headerBg:SetAllPoints()
 	headerBg:SetTexture(TEXTURE)
 	headerBg:SetVertexColor(27 / 255, 27 / 255, 27 / 255, 1)
+	self.headerBg = headerBg
 
 	local title = header:CreateFontString(nil, "OVERLAY")
 	title:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3], ACCENT[4])
@@ -209,6 +212,9 @@ function Professions:Layout()
 	local footerHeight = footerSize + 6
 
 	frame:SetSize(WIDTH, HEADER_HEIGHT + lineHeight * BODY_LINES + footerHeight)
+
+	self.bg:SetAlpha(profile.bgOpacity / 100)
+	self.headerBg:SetAlpha(profile.headerOpacity / 100)
 
 	ns.Media:SetFont(self.title, profile.font, 11, "")
 	ns.Media:SetFont(self.menuButton.text, profile.font, 11, "")
@@ -406,6 +412,36 @@ function Professions:GetOptions()
 					self:Refresh()
 				end,
 			},
+			bgOpacity = {
+				type = "range",
+				name = "Background opacity",
+				order = 4,
+				min = 0,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.bgOpacity
+				end,
+				set = function(_, value)
+					self.db.profile.bgOpacity = value
+					self:Refresh()
+				end,
+			},
+			headerOpacity = {
+				type = "range",
+				name = "Header opacity",
+				order = 5,
+				min = 0,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.headerOpacity
+				end,
+				set = function(_, value)
+					self.db.profile.headerOpacity = value
+					self:Refresh()
+				end,
+			},
 		},
 	}
 end
@@ -507,6 +543,26 @@ function Professions:GetDebugChecks()
 				local text = fs and fs:GetText()
 				local ok = self.frame:IsShown() and type(text) == "string" and text ~= ""
 				return ok and "PASS" or "FAIL", text
+			end,
+		},
+		{
+			name = "background",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local profile = self.db.profile
+				local bgAlpha = self.bg:GetAlpha()
+				local headerAlpha = self.headerBg:GetAlpha()
+
+				if issecretvalue(bgAlpha) or issecretvalue(headerAlpha) then
+					return "INFO", "secret"
+				end
+
+				local ok = math.abs(bgAlpha - profile.bgOpacity / 100) <= 0.01
+					and math.abs(headerAlpha - profile.headerOpacity / 100) <= 0.01
+				return ok and "PASS" or "FAIL", bgAlpha, headerAlpha
 			end,
 		},
 	}
