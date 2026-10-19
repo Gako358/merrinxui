@@ -74,6 +74,98 @@
             cp ${pkgs.spdx-license-list-data.text}/text/LGPL-2.1-only.txt $out/LibSharedMedia-3.0-LICENSE.txt
           '';
 
+          statusbarTextures = pkgs.writeText "statusbars.py" ''
+            import struct
+            import sys
+
+            W, H = 256, 32
+
+
+            def smooth(x, y):
+                return 1.0 - 0.28 * y / (H - 1)
+
+
+            def gloss(x, y):
+                if y < H // 2:
+                    return 1.0 - 0.1 * y / (H // 2 - 1)
+                return 0.78 - 0.08 * (y - H // 2) / (H // 2 - 1)
+
+
+            def matte(x, y):
+                if y == 0:
+                    return 1.0
+                if y == H - 1:
+                    return 0.6
+                return 0.88
+
+
+            def fade(x, y):
+                return 0.7 + 0.3 * x / (W - 1)
+
+
+            def striped(x, y):
+                base = 1.0 if ((x + y) // 8) % 2 == 0 else 0.84
+                return base * (1.0 - 0.15 * y / (H - 1))
+
+
+            def inset(x, y):
+                d = abs(y - (H - 1) / 2) / ((H - 1) / 2)
+                return 1.0 - 0.35 * d * d
+
+
+            def write(path, shade):
+                header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, W, H, 32, 0x28)
+                rows = bytearray()
+                for y in range(H):
+                    for x in range(W):
+                        v = max(0, min(255, round(255 * shade(x, y))))
+                        rows += bytes((v, v, v, 255))
+                with open(path, "wb") as f:
+                    f.write(header + rows)
+
+
+            out = sys.argv[1]
+            for name, shade in [
+                ("Smooth", smooth),
+                ("Gloss", gloss),
+                ("Matte", matte),
+                ("Fade", fade),
+                ("Striped", striped),
+                ("Inset", inset),
+            ]:
+                write(f"{out}/{name}.tga", shade)
+          '';
+
+          addonMedia = pkgs.runCommand "merrinxui-media" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            mkdir -p $out/Fonts $out/Textures
+            truetype() { cp "$1/share/fonts/truetype/$2" $out/Fonts/; }
+            for f in Roboto-Regular Roboto-Medium Roboto-Bold RobotoCondensed-Regular RobotoCondensed-Bold; do
+              truetype ${pkgs.roboto} $f.ttf
+            done
+            for f in FiraSans-Regular FiraSans-Medium FiraSans-Bold FiraSansCondensed-Regular FiraSansCondensed-Medium; do
+              truetype ${pkgs.fira-sans} $f.ttf
+            done
+            for f in Ubuntu-R Ubuntu-M Ubuntu-B Ubuntu-C; do
+              truetype ${pkgs.ubuntu-classic} ubuntu/$f.ttf
+            done
+            for f in Lato-Regular Lato-Bold Lato-Black; do
+              cp ${pkgs.lato}/share/fonts/lato/$f.ttf $out/Fonts/
+            done
+            for f in Poppins-Regular Poppins-SemiBold; do
+              truetype ${pkgs.poppins} $f.ttf
+            done
+            for f in PT_Sans-Web-Regular PT_Sans-Web-Bold; do
+              truetype ${pkgs.paratype-pt-sans} $f.ttf
+            done
+            for f in LiberationSans-Regular LiberationSans-Bold; do
+              truetype ${pkgs.liberation_ttf} $f.ttf
+            done
+            cp ${pkgs.spdx-license-list-data.text}/text/OFL-1.1.txt $out/Fonts/OFL-1.1-LICENSE.txt
+            cp ${pkgs.spdx-license-list-data.text}/text/Ubuntu-font-1.0.txt $out/Fonts/Ubuntu-font-1.0-LICENSE.txt
+
+            python3 ${statusbarTextures} $out/Textures
+          '';
+
           luarc = pkgs.writeText "luarc.json" (
             builtins.toJSON {
               runtime.version = "Lua 5.1";
@@ -91,6 +183,7 @@
             mkdir -p "$out/MerrinxUI"
             cp -r ${./MerrinxUI}/. "$out/MerrinxUI"/
             cp -r ${addonLibs} "$out/MerrinxUI/Libs"
+            cp -r ${addonMedia} "$out/MerrinxUI/Media"
             chmod -R u+w "$out/MerrinxUI"
 
             toc="$out/MerrinxUI/MerrinxUI.toc"
@@ -115,6 +208,14 @@
                 exit 1
               fi
             done < <(grep -o 'file="[^"]*"' "$embeds" | sed 's/^file="//; s/"$//')
+
+            while IFS= read -r ref; do
+              rel=$(printf '%s' "$ref" | sed 's/\\\\/\//g')
+              if [ ! -e "$out/MerrinxUI/Media/$rel" ]; then
+                echo "missing: Media/$rel"
+                exit 1
+              fi
+            done < <(grep -oE '"(Fonts|Textures)\\\\[^"]+"' "$out/MerrinxUI/Util/Media.lua" | tr -d '"')
           '';
 
           lua-syntax = pkgs.runCommand "merrinxui-lua-syntax" { nativeBuildInputs = [ pkgs.lua5_1 ]; } ''

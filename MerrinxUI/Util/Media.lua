@@ -59,6 +59,51 @@ end
 hooksecurefunc(LSM, "Register", onRegister)
 Media.hookedRegister = LSM.Register
 
+Media.bundled = {
+	font = {
+		["Roboto"] = "Fonts\\Roboto-Regular.ttf",
+		["Roboto Medium"] = "Fonts\\Roboto-Medium.ttf",
+		["Roboto Bold"] = "Fonts\\Roboto-Bold.ttf",
+		["Roboto Condensed"] = "Fonts\\RobotoCondensed-Regular.ttf",
+		["Roboto Condensed Bold"] = "Fonts\\RobotoCondensed-Bold.ttf",
+		["Fira Sans"] = "Fonts\\FiraSans-Regular.ttf",
+		["Fira Sans Medium"] = "Fonts\\FiraSans-Medium.ttf",
+		["Fira Sans Bold"] = "Fonts\\FiraSans-Bold.ttf",
+		["Fira Sans Condensed"] = "Fonts\\FiraSansCondensed-Regular.ttf",
+		["Fira Sans Condensed Medium"] = "Fonts\\FiraSansCondensed-Medium.ttf",
+		["Ubuntu"] = "Fonts\\Ubuntu-R.ttf",
+		["Ubuntu Medium"] = "Fonts\\Ubuntu-M.ttf",
+		["Ubuntu Bold"] = "Fonts\\Ubuntu-B.ttf",
+		["Ubuntu Condensed"] = "Fonts\\Ubuntu-C.ttf",
+		["Lato"] = "Fonts\\Lato-Regular.ttf",
+		["Lato Bold"] = "Fonts\\Lato-Bold.ttf",
+		["Lato Black"] = "Fonts\\Lato-Black.ttf",
+		["Poppins"] = "Fonts\\Poppins-Regular.ttf",
+		["Poppins SemiBold"] = "Fonts\\Poppins-SemiBold.ttf",
+		["PT Sans"] = "Fonts\\PT_Sans-Web-Regular.ttf",
+		["PT Sans Bold"] = "Fonts\\PT_Sans-Web-Bold.ttf",
+		["Liberation Sans"] = "Fonts\\LiberationSans-Regular.ttf",
+		["Liberation Sans Bold"] = "Fonts\\LiberationSans-Bold.ttf",
+	},
+	statusbar = {
+		["MerrinxUI Smooth"] = "Textures\\Smooth.tga",
+		["MerrinxUI Gloss"] = "Textures\\Gloss.tga",
+		["MerrinxUI Matte"] = "Textures\\Matte.tga",
+		["MerrinxUI Fade"] = "Textures\\Fade.tga",
+		["MerrinxUI Striped"] = "Textures\\Striped.tga",
+		["MerrinxUI Inset"] = "Textures\\Inset.tga",
+	},
+}
+
+do
+	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
+	for mediatype, entries in pairs(Media.bundled) do
+		for key, file in pairs(entries) do
+			LSM:Register(mediatype, key, root .. file)
+		end
+	end
+end
+
 local defaults = {
 	profile = {
 		font = "Friz Quadrata TT",
@@ -415,6 +460,26 @@ function Media:GetDebugChecks()
 				end
 				table.sort(failedKeys)
 				return "INFO", total, probedOk, probedFailed, flaky, unusable, failedKeys[1]
+			end,
+		},
+		{
+			name = "bundled",
+			run = function()
+				local counts = {}
+				local complete = true
+				for _, mediatype in ipairs({ "font", "statusbar" }) do
+					local hash = LSM:HashTable(mediatype)
+					local total, stored = 0, 0
+					for key in pairs(Media.bundled[mediatype]) do
+						total = total + 1
+						if hash and hash[key] ~= nil then
+							stored = stored + 1
+						end
+					end
+					complete = complete and stored == total
+					counts[#counts + 1] = stored .. "/" .. total
+				end
+				return complete and "PASS" or "FAIL", unpack(counts)
 			end,
 		},
 	}
