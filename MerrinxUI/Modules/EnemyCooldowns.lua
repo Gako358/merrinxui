@@ -16,6 +16,7 @@ local defaults = {
 		anchor = "TOP",
 		x = 0,
 		y = 2,
+		sound = "None",
 	},
 }
 
@@ -198,6 +199,7 @@ function EnemyCooldowns:OnSpellcastSucceeded(_, unit, _, spellID)
 
 	L.Record(self.state, key, entry, GetTime())
 	ns.Debug:Log("EnemyCooldowns", "hit", unit, spellID, name, entry.cd)
+	ns.Media:PlaySound(self.db.profile.sound)
 	self:Render(unit)
 end
 
@@ -387,6 +389,29 @@ function EnemyCooldowns:GetOptions()
 					self:Refresh()
 				end,
 			},
+			sound = {
+				type = "select",
+				name = "Alert sound",
+				order = 7,
+				values = function()
+					return ns.Media:SoundValues()
+				end,
+				get = function()
+					return self.db.profile.sound
+				end,
+				set = function(_, value)
+					self.db.profile.sound = value
+					ns.Media:PlaySound(value)
+				end,
+			},
+			testSound = {
+				type = "execute",
+				name = "Test sound",
+				order = 8,
+				func = function()
+					ns.Media:PlaySound(self.db.profile.sound)
+				end,
+			},
 		},
 	}
 end
@@ -492,6 +517,13 @@ function EnemyCooldowns:GetDebugChecks()
 					stateCount = stateCount + 1
 				end
 				return "INFO", unitCount, stateCount
+			end,
+		},
+		{
+			name = "sound",
+			run = function()
+				local key = self.db.profile.sound
+				return "INFO", key, ns.Media:SoundPath(key)
 			end,
 		},
 	}

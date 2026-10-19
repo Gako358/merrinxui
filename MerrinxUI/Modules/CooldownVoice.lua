@@ -11,6 +11,8 @@ local defaults = {
 		voice = nil,
 		rate = 0,
 		volume = 100,
+		alert = "voice",
+		sound = "MerrinxUI Chime",
 	},
 }
 
@@ -139,7 +141,7 @@ function CooldownVoice:Scan(fromEvent)
 	end
 
 	if #names > 0 then
-		self:Speak(L.Message(names))
+		self:Announce(names)
 		self.spoken = self.spoken + #names
 	end
 
@@ -154,6 +156,18 @@ function CooldownVoice:OnSpellUpdateCooldown()
 	self:Scan(true)
 end
 
+function CooldownVoice:UsesSound()
+	return self.db.profile.alert == "sound"
+end
+
+function CooldownVoice:Announce(names)
+	if self:UsesSound() then
+		ns.Media:PlaySound(self.db.profile.sound)
+	else
+		self:Speak(L.Message(names))
+	end
+end
+
 function CooldownVoice:Speak(text)
 	local voice = L.ResolveVoice(self.db.profile.voice, C_VoiceChat.GetTtsVoices())
 	if voice == nil then
@@ -163,6 +177,13 @@ function CooldownVoice:Speak(text)
 end
 
 function CooldownVoice:GetOptions()
+	local function usesSound()
+		return self:UsesSound()
+	end
+	local function usesVoice()
+		return not self:UsesSound()
+	end
+
 	return {
 		type = "group",
 		name = "CooldownVoice",
@@ -208,6 +229,7 @@ function CooldownVoice:GetOptions()
 				type = "select",
 				name = "Voice",
 				order = 3,
+				disabled = usesSound,
 				values = function()
 					local values = {}
 					local voices = C_VoiceChat.GetTtsVoices()
@@ -230,6 +252,7 @@ function CooldownVoice:GetOptions()
 				type = "range",
 				name = "Rate",
 				order = 4,
+				disabled = usesSound,
 				min = -10,
 				max = 10,
 				step = 1,
@@ -245,6 +268,7 @@ function CooldownVoice:GetOptions()
 				type = "range",
 				name = "Volume",
 				order = 5,
+				disabled = usesSound,
 				min = 0,
 				max = 100,
 				step = 5,
@@ -260,8 +284,49 @@ function CooldownVoice:GetOptions()
 				type = "execute",
 				name = "Test voice",
 				order = 6,
+				disabled = usesSound,
 				func = function()
 					self:Speak("MerrinxUI voice test")
+				end,
+			},
+			alert = {
+				type = "select",
+				name = "Alert",
+				order = 7,
+				values = {
+					voice = "Speak spell names",
+					sound = "Play sound",
+				},
+				get = function()
+					return self.db.profile.alert
+				end,
+				set = function(_, value)
+					self.db.profile.alert = value
+				end,
+			},
+			sound = {
+				type = "select",
+				name = "Sound",
+				order = 8,
+				disabled = usesVoice,
+				values = function()
+					return ns.Media:SoundValues()
+				end,
+				get = function()
+					return self.db.profile.sound
+				end,
+				set = function(_, value)
+					self.db.profile.sound = value
+					ns.Media:PlaySound(value)
+				end,
+			},
+			testSound = {
+				type = "execute",
+				name = "Test sound",
+				order = 9,
+				disabled = usesVoice,
+				func = function()
+					ns.Media:PlaySound(self.db.profile.sound)
 				end,
 			},
 		},
@@ -368,6 +433,17 @@ function CooldownVoice:GetDebugChecks()
 			name = "spoken",
 			run = function()
 				return "INFO", self.spoken
+			end,
+		},
+		{
+			name = "alert",
+			run = function()
+				local profile = self.db.profile
+				local path = ns.Media:SoundPath(profile.sound)
+				if self:UsesSound() then
+					return (path ~= nil) and "PASS" or "FAIL", profile.alert, profile.sound, path
+				end
+				return "INFO", profile.alert, profile.sound, path
 			end,
 		},
 	}

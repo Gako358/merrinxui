@@ -82,6 +82,7 @@ read_globals = {
 	"UnitLevel",
 	"GameTooltip",
 	"C_VoiceChat",
+	"PlaySoundFile",
 }
 
 globals = {

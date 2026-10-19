@@ -84,6 +84,19 @@ Media.bundled = {
 		["PT Sans Bold"] = "Fonts\\PT_Sans-Web-Bold.ttf",
 		["Liberation Sans"] = "Fonts\\LiberationSans-Regular.ttf",
 		["Liberation Sans Bold"] = "Fonts\\LiberationSans-Bold.ttf",
+		["PT Sans Narrow"] = "Fonts\\PT_Sans-Narrow-Web-Regular.ttf",
+		["PT Sans Narrow Bold"] = "Fonts\\PT_Sans-Narrow-Web-Bold.ttf",
+		["Russo One"] = "Fonts\\RussoOne-Regular.ttf",
+		["Changa"] = "Fonts\\Changa-Regular.ttf",
+		["Changa Bold"] = "Fonts\\Changa-Bold.ttf",
+		["Cinzel Decorative"] = "Fonts\\CinzelDecorative-Regular.ttf",
+		["Cinzel Decorative Bold"] = "Fonts\\CinzelDecorative-Bold.ttf",
+		["Exo"] = "Fonts\\Exo-Regular.ttf",
+		["Exo Bold"] = "Fonts\\Exo-Bold.ttf",
+		["Barlow Condensed"] = "Fonts\\BarlowCondensed-Regular.ttf",
+		["Barlow Condensed Medium"] = "Fonts\\BarlowCondensed-Medium.ttf",
+		["Barlow Condensed SemiBold"] = "Fonts\\BarlowCondensed-SemiBold.ttf",
+		["Barlow Condensed Bold"] = "Fonts\\BarlowCondensed-Bold.ttf",
 	},
 	statusbar = {
 		["MerrinxUI Smooth"] = "Textures\\Smooth.tga",
@@ -92,6 +105,25 @@ Media.bundled = {
 		["MerrinxUI Fade"] = "Textures\\Fade.tga",
 		["MerrinxUI Striped"] = "Textures\\Striped.tga",
 		["MerrinxUI Inset"] = "Textures\\Inset.tga",
+		["MerrinxUI Minimal"] = "Textures\\Minimal.tga",
+		["MerrinxUI Soft"] = "Textures\\Soft.tga",
+		["MerrinxUI Glass"] = "Textures\\Glass.tga",
+		["MerrinxUI Gradient Down"] = "Textures\\GradientDown.tga",
+		["MerrinxUI Gradient Up"] = "Textures\\GradientUp.tga",
+		["MerrinxUI Gradient Right"] = "Textures\\GradientRight.tga",
+		["MerrinxUI Gradient Left"] = "Textures\\GradientLeft.tga",
+		["MerrinxUI Sharp"] = "Textures\\Sharp.tga",
+		["MerrinxUI Diamonds"] = "Textures\\Diamonds.tga",
+		["MerrinxUI Plating"] = "Textures\\Plating.tga",
+		["MerrinxUI Divide"] = "Textures\\Divide.tga",
+		["MerrinxUI Sheer"] = "Textures\\Sheer.tga",
+	},
+	sound = {
+		["MerrinxUI Chime"] = "Sounds\\Chime.ogg",
+		["MerrinxUI Ding"] = "Sounds\\Ding.ogg",
+		["MerrinxUI Bell"] = "Sounds\\Bell.ogg",
+		["MerrinxUI Alert"] = "Sounds\\Alert.ogg",
+		["MerrinxUI Blip"] = "Sounds\\Blip.ogg",
 	},
 }
 
@@ -184,6 +216,27 @@ function Media:SetStatusBarTexture(bar, key)
 	local path = self:Fetch("statusbar", key) or LSM:Fetch("statusbar", "Solid", true) or "Interface\\Buttons\\WHITE8X8"
 	bar:SetStatusBarTexture(path)
 	return path
+end
+
+Media.NO_SOUND = "None"
+
+function Media:SoundValues()
+	return FontLogic.Values(LSM:HashTable("sound"))
+end
+
+function Media:SoundPath(key)
+	if key == nil or key == Media.NO_SOUND then
+		return nil
+	end
+	return LSM:Fetch("sound", key, true)
+end
+
+function Media:PlaySound(key)
+	local path = self:SoundPath(key)
+	if path == nil then
+		return false
+	end
+	return PlaySoundFile(path, "Master") and true or false
 end
 
 -- SetFont raises instead of returning false for some files the client doesn't know.
@@ -460,6 +513,12 @@ function Media:GetDebugChecks()
 				end
 				table.sort(failedKeys)
 				return "INFO", total, probedOk, probedFailed, flaky, unusable, failedKeys[1]
+			end,
+		},
+		{
+			name = "sounds",
+			run = function()
+				return "INFO", #LSM:List("sound")
 			end,
 		},
 		{

@@ -74,7 +74,52 @@
             cp ${pkgs.spdx-license-list-data.text}/text/LGPL-2.1-only.txt $out/LibSharedMedia-3.0-LICENSE.txt
           '';
 
+          googleFont =
+            path: hash:
+            pkgs.fetchurl {
+              url = "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/${path}";
+              name = builtins.replaceStrings [ "/" "%5B" "%5D" ] [ "-" "" "" ] path;
+              inherit hash;
+            };
+
+          googleFonts = {
+            "PT_Sans-Narrow-Web-Regular.ttf" =
+              googleFont "ptsansnarrow/PT_Sans-Narrow-Web-Regular.ttf" "sha256-QQLt2gMFkWN3GGnSWN9UrIVjxAj6bp73Wy3cheq+pvQ=";
+            "PT_Sans-Narrow-Web-Bold.ttf" =
+              googleFont "ptsansnarrow/PT_Sans-Narrow-Web-Bold.ttf" "sha256-5p2DvPW9ZHiStOKyL1CY2r1VyYlBNRMZdyL8FW+58A4=";
+            "PTSansNarrow-OFL.txt" =
+              googleFont "ptsansnarrow/OFL.txt" "sha256-J1jPeocoJ/OWYc+MwkGIETwDBEeu+1ynFFmTZQB2yow=";
+            "RussoOne-Regular.ttf" =
+              googleFont "russoone/RussoOne-Regular.ttf" "sha256-vAq8xmC9i3rTAA7LKJiifFiimlD37IFlL6EudRSNCd8=";
+            "RussoOne-OFL.txt" =
+              googleFont "russoone/OFL.txt" "sha256-OsEwFUlSPZhh/tyhKHHyTldfvSbVIGMvwAuoSbRx0nU=";
+            "Changa-VF.ttf" =
+              googleFont "changa/Changa%5Bwght%5D.ttf" "sha256-fE96FNS3CsiBbqjfOgsSeu5MX1r3I5rKKv7MhN3H9NM=";
+            "Changa-OFL.txt" =
+              googleFont "changa/OFL.txt" "sha256-axLI1Be7dm+gF9EWHHygUDkoF6fuy/MRD8KoYWVkuVY=";
+            "CinzelDecorative-Regular.ttf" =
+              googleFont "cinzeldecorative/CinzelDecorative-Regular.ttf" "sha256-W4Yr4ykQOtKHoQ8KU+J6QOjMUZmZJT8aAiPi3DMLELg=";
+            "CinzelDecorative-Bold.ttf" =
+              googleFont "cinzeldecorative/CinzelDecorative-Bold.ttf" "sha256-6FTmijiKpQ10KkQVwa5cF6YX73lWyVpwAh0KSkTyBRg=";
+            "CinzelDecorative-OFL.txt" =
+              googleFont "cinzeldecorative/OFL.txt" "sha256-Hl1mYDZt3Pyk8vwQ4qz7qfpNl9QK7IDX2/1B1zCkIK4=";
+            "Exo-VF.ttf" =
+              googleFont "exo/Exo%5Bwght%5D.ttf" "sha256-Lwj4GPETWsV5gDDAvKJSwIRa9cVN/hcqXHT73WiENEU=";
+            "Exo-OFL.txt" = googleFont "exo/OFL.txt" "sha256-EVnqcu0ffnVBzqNaDezkjSq7AxfXxw91pIL5STI4Knc=";
+            "BarlowCondensed-Regular.ttf" =
+              googleFont "barlowcondensed/BarlowCondensed-Regular.ttf" "sha256-WDzsXaO4S8TcfJxy4qVlyU005DFRixnX4lC3gwrV+ZY=";
+            "BarlowCondensed-Medium.ttf" =
+              googleFont "barlowcondensed/BarlowCondensed-Medium.ttf" "sha256-JivRQyks5HnuDNCaQrR6sXP8qOnG617QtcioRbw3HRc=";
+            "BarlowCondensed-SemiBold.ttf" =
+              googleFont "barlowcondensed/BarlowCondensed-SemiBold.ttf" "sha256-e2GdFLwjJ1CanvMrCJD3CWJvfsyf9hGRwqQxTFSZ0tk=";
+            "BarlowCondensed-Bold.ttf" =
+              googleFont "barlowcondensed/BarlowCondensed-Bold.ttf" "sha256-5HZWLsnB4WzxZHWJW1EfCMgE9DjMmp+ApE6lCg7rW2U=";
+            "BarlowCondensed-OFL.txt" =
+              googleFont "barlowcondensed/OFL.txt" "sha256-GG11DrSWpMF6djhfgr5q6irBzy3gdKgR1jeGzzdOpz8=";
+          };
+
           statusbarTextures = pkgs.writeText "statusbars.py" ''
+            import math
             import struct
             import sys
 
@@ -113,13 +158,73 @@
                 return 1.0 - 0.35 * d * d
 
 
+            def minimal(x, y):
+                if y == H - 1:
+                    return 0.7
+                return 0.97 - 0.07 * y / (H - 1)
+
+
+            def soft(x, y):
+                return 0.72 + 0.28 * math.cos(math.pi * (y / (H - 1) - 0.5))
+
+
+            def glass(x, y):
+                if y == 0:
+                    return 1.0
+                if y < H // 2:
+                    return 0.98 - 0.12 * y / (H // 2 - 1)
+                return 0.8 + 0.08 * (y - H // 2) / (H // 2 - 1)
+
+
+            def gradient_down(x, y):
+                return 1.0 - 0.55 * y / (H - 1)
+
+
+            def gradient_up(x, y):
+                return 0.45 + 0.55 * y / (H - 1)
+
+
+            def gradient_right(x, y):
+                return 0.45 + 0.55 * x / (W - 1)
+
+
+            def gradient_left(x, y):
+                return 1.0 - 0.55 * x / (W - 1)
+
+
+            def sharp(x, y):
+                return 1.0 if y < H * 0.4 else 0.72
+
+
+            def diamonds(x, y):
+                d = abs(x % 16 - 8) + abs(y % 16 - 8)
+                return 1.0 if d < 6 else 0.82
+
+
+            def plating(x, y):
+                noise = ((x * 1103515245 + 12345) >> 8 & 255) / 255
+                return (0.84 + 0.1 * noise) * (1.0 - 0.12 * y / (H - 1))
+
+
+            def divide(x, y):
+                if x % 32 == 0:
+                    return 0.55
+                return 0.92 - 0.1 * y / (H - 1)
+
+
+            def sheer(x, y):
+                return 1.0, 0.55
+
+
             def write(path, shade):
                 header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, W, H, 32, 0x28)
                 rows = bytearray()
                 for y in range(H):
                     for x in range(W):
-                        v = max(0, min(255, round(255 * shade(x, y))))
-                        rows += bytes((v, v, v, 255))
+                        s = shade(x, y)
+                        v, a = s if isinstance(s, tuple) else (s, 1.0)
+                        v = max(0, min(255, round(255 * v)))
+                        rows += bytes((v, v, v, round(255 * a)))
                 with open(path, "wb") as f:
                     f.write(header + rows)
 
@@ -132,39 +237,141 @@
                 ("Fade", fade),
                 ("Striped", striped),
                 ("Inset", inset),
+                ("Minimal", minimal),
+                ("Soft", soft),
+                ("Glass", glass),
+                ("GradientDown", gradient_down),
+                ("GradientUp", gradient_up),
+                ("GradientRight", gradient_right),
+                ("GradientLeft", gradient_left),
+                ("Sharp", sharp),
+                ("Diamonds", diamonds),
+                ("Plating", plating),
+                ("Divide", divide),
+                ("Sheer", sheer),
             ]:
                 write(f"{out}/{name}.tga", shade)
           '';
 
-          addonMedia = pkgs.runCommand "merrinxui-media" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-            mkdir -p $out/Fonts $out/Textures
-            truetype() { cp "$1/share/fonts/truetype/$2" $out/Fonts/; }
-            for f in Roboto-Regular Roboto-Medium Roboto-Bold RobotoCondensed-Regular RobotoCondensed-Bold; do
-              truetype ${pkgs.roboto} $f.ttf
-            done
-            for f in FiraSans-Regular FiraSans-Medium FiraSans-Bold FiraSansCondensed-Regular FiraSansCondensed-Medium; do
-              truetype ${pkgs.fira-sans} $f.ttf
-            done
-            for f in Ubuntu-R Ubuntu-M Ubuntu-B Ubuntu-C; do
-              truetype ${pkgs.ubuntu-classic} ubuntu/$f.ttf
-            done
-            for f in Lato-Regular Lato-Bold Lato-Black; do
-              cp ${pkgs.lato}/share/fonts/lato/$f.ttf $out/Fonts/
-            done
-            for f in Poppins-Regular Poppins-SemiBold; do
-              truetype ${pkgs.poppins} $f.ttf
-            done
-            for f in PT_Sans-Web-Regular PT_Sans-Web-Bold; do
-              truetype ${pkgs.paratype-pt-sans} $f.ttf
-            done
-            for f in LiberationSans-Regular LiberationSans-Bold; do
-              truetype ${pkgs.liberation_ttf} $f.ttf
-            done
-            cp ${pkgs.spdx-license-list-data.text}/text/OFL-1.1.txt $out/Fonts/OFL-1.1-LICENSE.txt
-            cp ${pkgs.spdx-license-list-data.text}/text/Ubuntu-font-1.0.txt $out/Fonts/Ubuntu-font-1.0-LICENSE.txt
+          soundEffects = pkgs.writeText "sounds.py" ''
+            import math
+            import struct
+            import sys
+            import wave
 
-            python3 ${statusbarTextures} $out/Textures
+            RATE = 44100
+
+
+            def tone(freq, length, decay, partials=((1.0, 1.0),)):
+                samples = []
+                for i in range(int(RATE * length)):
+                    t = i / RATE
+                    env = math.exp(-t / decay) * min(1.0, t / 0.005)
+                    v = sum(a * math.sin(2 * math.pi * freq * r * t) for r, a in partials)
+                    samples.append(env * v)
+                return samples
+
+
+            def silence(length):
+                return [0.0] * int(RATE * length)
+
+
+            def chime():
+                return tone(659.25, 0.18, 0.08, ((1, 1), (2, 0.3))) + tone(880.0, 0.5, 0.15, ((1, 1), (2, 0.3)))
+
+
+            def ding():
+                return tone(1046.5, 0.7, 0.18, ((1, 1), (2, 0.2), (3, 0.08)))
+
+
+            def bell():
+                return tone(523.25, 1.4, 0.4, ((1, 1), (2.0, 0.5), (2.76, 0.35), (5.4, 0.15)))
+
+
+            def alert():
+                beep = tone(880.0, 0.08, 1.0, ((1, 1), (3, 0.25)))
+                return beep + silence(0.06) + beep + silence(0.06) + beep
+
+
+            def blip():
+                return tone(1318.5, 0.09, 0.04)
+
+
+            def write(path, samples):
+                peak = max(abs(s) for s in samples) or 1.0
+                frames = b"".join(struct.pack("<h", int(32767 * 0.8 * s / peak)) for s in samples)
+                with wave.open(path, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(RATE)
+                    w.writeframes(frames)
+
+
+            out = sys.argv[1]
+            for name, make in [
+                ("Chime", chime),
+                ("Ding", ding),
+                ("Bell", bell),
+                ("Alert", alert),
+                ("Blip", blip),
+            ]:
+                write(f"{out}/{name}.wav", make())
           '';
+
+          addonMedia =
+            pkgs.runCommand "merrinxui-media"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.python3Packages.fonttools
+                  pkgs.vorbis-tools
+                ];
+              }
+              ''
+                mkdir -p $out/Fonts $out/Textures $out/Sounds
+                truetype() { cp "$1/share/fonts/truetype/$2" $out/Fonts/; }
+                for f in Roboto-Regular Roboto-Medium Roboto-Bold RobotoCondensed-Regular RobotoCondensed-Bold; do
+                  truetype ${pkgs.roboto} $f.ttf
+                done
+                for f in FiraSans-Regular FiraSans-Medium FiraSans-Bold FiraSansCondensed-Regular FiraSansCondensed-Medium; do
+                  truetype ${pkgs.fira-sans} $f.ttf
+                done
+                for f in Ubuntu-R Ubuntu-M Ubuntu-B Ubuntu-C; do
+                  truetype ${pkgs.ubuntu-classic} ubuntu/$f.ttf
+                done
+                for f in Lato-Regular Lato-Bold Lato-Black; do
+                  cp ${pkgs.lato}/share/fonts/lato/$f.ttf $out/Fonts/
+                done
+                for f in Poppins-Regular Poppins-SemiBold; do
+                  truetype ${pkgs.poppins} $f.ttf
+                done
+                for f in PT_Sans-Web-Regular PT_Sans-Web-Bold; do
+                  truetype ${pkgs.paratype-pt-sans} $f.ttf
+                done
+                for f in LiberationSans-Regular LiberationSans-Bold; do
+                  truetype ${pkgs.liberation_ttf} $f.ttf
+                done
+                cp ${pkgs.spdx-license-list-data.text}/text/OFL-1.1.txt $out/Fonts/OFL-1.1-LICENSE.txt
+                cp ${pkgs.spdx-license-list-data.text}/text/Ubuntu-font-1.0.txt $out/Fonts/Ubuntu-font-1.0-LICENSE.txt
+                ${lib.concatStrings (
+                  lib.mapAttrsToList (name: src: ''
+                    cp ${src} "$out/Fonts/${name}"
+                  '') googleFonts
+                )}
+                for family in Changa Exo; do
+                  fonttools varLib.instancer -q -o "$out/Fonts/$family-Regular.ttf" "$out/Fonts/$family-VF.ttf" wght=400
+                  fonttools varLib.instancer -q -o "$out/Fonts/$family-Bold.ttf" "$out/Fonts/$family-VF.ttf" wght=700
+                  rm "$out/Fonts/$family-VF.ttf"
+                done
+
+                python3 ${statusbarTextures} $out/Textures
+
+                mkdir wav
+                python3 ${soundEffects} wav
+                for f in wav/*.wav; do
+                  oggenc -Q -s 1 -q 5 -o "$out/Sounds/$(basename "$f" .wav).ogg" "$f"
+                done
+              '';
 
           luarc = pkgs.writeText "luarc.json" (
             builtins.toJSON {
@@ -215,7 +422,7 @@
                 echo "missing: Media/$rel"
                 exit 1
               fi
-            done < <(grep -oE '"(Fonts|Textures)\\\\[^"]+"' "$out/MerrinxUI/Util/Media.lua" | tr -d '"')
+            done < <(grep -oE '"(Fonts|Textures|Sounds)\\\\[^"]+"' "$out/MerrinxUI/Util/Media.lua" | tr -d '"')
           '';
 
           lua-syntax = pkgs.runCommand "merrinxui-lua-syntax" { nativeBuildInputs = [ pkgs.lua5_1 ]; } ''
