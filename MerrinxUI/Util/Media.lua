@@ -127,6 +127,8 @@ Media.bundled = {
 	},
 }
 
+Media.preload = { ok = 0, fail = 0, error = 0, failed = {} }
+
 do
 	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
 	for mediatype, entries in pairs(Media.bundled) do
@@ -134,6 +136,26 @@ do
 			LSM:Register(mediatype, key, root .. file)
 		end
 	end
+
+	-- Addon font files that are first requested after the loading screen fail SetFont,
+	-- so every bundled font is requested here while the addon loads.
+	local holder = CreateFrame("Frame")
+	holder:Hide()
+	local preload = Media.preload
+	for key, file in pairs(Media.bundled.font) do
+		local fs = holder:CreateFontString()
+		local ok, loaded = pcall(fs.SetFont, fs, root .. file, 12, "")
+		if not ok then
+			preload.error = preload.error + 1
+			preload.failed[#preload.failed + 1] = key
+		elseif loaded then
+			preload.ok = preload.ok + 1
+		else
+			preload.fail = preload.fail + 1
+			preload.failed[#preload.failed + 1] = key
+		end
+	end
+	table.sort(preload.failed)
 end
 
 local defaults = {
@@ -513,6 +535,13 @@ function Media:GetDebugChecks()
 				end
 				table.sort(failedKeys)
 				return "INFO", total, probedOk, probedFailed, flaky, unusable, failedKeys[1]
+			end,
+		},
+		{
+			name = "font preload",
+			run = function()
+				local preload = Media.preload
+				return "INFO", preload.ok, preload.fail, preload.error, preload.failed[1]
 			end,
 		},
 		{
