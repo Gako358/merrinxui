@@ -37,15 +37,21 @@
 | S24     | Nameplates: keep Blizzard plate hidden, unit token fix, 0.15.0 | PASSED | S22 (D-51) | S25 |
 | S25     | Nameplates: debuffs via AuraContainer in and out of combat (0.15.0, D-55) | PASSED (conditional on G-FU-NP, D-61) | S24 (D-51) | S23 |
 | S26     | RangeText: hide unusable LSM fonts (requires Q-11) | PASSED | S22, Q-11 | -    |
-| S27     | Nameplates: level text right of the health bar, 0.16.0 | IN_PROGRESS | S25, S26 | S28 |
-| S28     | Nameplates: debuff X/Y offsets                | IN_PROGRESS | S27        | S29  |
-| S29     | Nameplates: CC icons, larger, on the left     | IN_PROGRESS | S28        | S31 (D-103) |
-| S30     | CooldownVoice module, release 0.17.0 per D-81 (game gate for S27-S30; G-FU-NP fallback only, D-90) | PENDING | S29 | -  |
-| S31     | Media core: global font/bar texture + per-module override; RangeText adopts, 0.17.0 | IN_PROGRESS | S29 (D-103) | S32 |
-| S32     | Options window: "Use global" and bar-texture previews, window font | IN_PROGRESS | S31 | S33  |
-| S33     | Nameplates: font and bar texture via Media, release 0.17.0 (game gate for S31-S33) | IN_PROGRESS | S32 | S34  |
-| S34     | DamageMeter: font and bar texture via Media (Q-20 yes, D-106) | IN_PROGRESS | S33 | S35 |
-| S35     | Debug: game version log (D-107..D-109)        | IN_PROGRESS | S34        | -    |
+| S27     | Nameplates: level text right of the health bar, 0.16.0 | PASSED (D-112) | S25, S26 | S28 |
+| S28     | Nameplates: debuff X/Y offsets                | PASSED (D-112) | S27        | S29  |
+| S29     | Nameplates: CC icons, larger, on the left     | PASSED (D-112) | S28        | S31 (D-103) |
+| S30     | CooldownVoice module, release 0.17.0 per D-81 (game gate for S27-S30; G-FU-NP fallback only, D-90) | PASSED (D-112) | S29 | -  |
+| S31     | Media core: global font/bar texture + per-module override; RangeText adopts, 0.17.0 | PASSED (D-112) | S29 (D-103) | S32 |
+| S32     | Options window: "Use global" and bar-texture previews, window font | PASSED (D-112) | S31 | S33  |
+| S33     | Nameplates: font and bar texture via Media, release 0.17.0 (game gate for S31-S33) | PASSED (D-112) | S32 | S34  |
+| S34     | DamageMeter: font and bar texture via Media (Q-20 yes, D-106) | PASSED (D-112) | S33 | S35 |
+| S35     | Debug: game version log (D-107..D-109)        | PASSED (D-112) | S34        | -    |
+| S36     | Background opacity: DamageMeter, Professions, Nameplates (0.20.0) | PASSED (code gates; game check rides G-S37-GAME) | - (task edges: none) | S37 |
+| S37     | Action bars: opacity, mouseover, hide in combat, key toggle; release 0.20.0 | PASSED (D-128) | - (task edges: none) | S38  |
+| S38     | Bundled fonts and bar textures registered with LSM (ElvUI style), 0.21.0 | IN_PROGRESS (code gates passed; G-S38-GAME open) | S37 | S39  |
+| S39     | LSM sounds: bundled sounds, CooldownVoice sound alert, EnemyCooldowns alert sound, 0.22.0 | IN_PROGRESS (code gates passed; game check rides G-S38-GAME) | S38 | -    |
+
+S36-S37 come from the request "set transparency on all modules (damage meter, action bars, professions, ...), not the options window, only the backgrounds; and action bar options: mouseover only, hide in combat, hide with a key toggle" (context subsection "Opacity and action bar visibility context (S36-S37)"; user answer: for action bars, transparency is the per-bar opacity of the whole bar, no new background). Unlike S7-S35 they do *not* run one section at a time: all five tasks T-53..T-57 have no depends-on edge and are dispatched in one wave (lead protocol in "S36-S37 lead protocol"). Sections group tasks for resumption only. One release =0.20.0= (T-57 owns the TOC bump), one integrated gate G-S36-37-INT (verifier, then reviewer and security in parallel) and one user game gate G-S37-GAME close both.
 
 S27-S30 come from the "more features" request (context subsection "Level, offsets, CC icons, CooldownVoice and media context (S27-S31)"). They run strictly in order S27 → S28 → S29 → S30 (shared =Nameplates.lua=, TOC and =.luacheckrc=), ship as one release =v0.16.0-s30.1=, and are closed together by G-S30-GAME, which also carries the open G-FU-NP steps (D-69) only if G-S9-GAME left them unanswered (D-90 moved them to G-S9-GAME).
 S31-S33 come from the follow-up "all modules should benefit from a SharedMedia addon" (context subsection "Media for all modules (S31-S33)"; Q-14 answered more broadly than the old optional Nameplates-only S31, which they replace). They run strictly in order after S30, ship as =v0.17.0-s33.1= and are closed together by G-S33-GAME (D-77).
@@ -96,6 +102,9 @@ Modules, in delivery order:
     - CooldownVoice: a new module that speaks "<spell> ready" through the client's text-to-speech when a spell the user typed into its list comes off cooldown, in and out of combat (S30);
     - fonts from SharedMedia-style addons already reach the RangeText Font list without code changes (D-70).
 14. Media for all modules (S31-S33): one global font and one global bar texture (from LibSharedMedia, so any SharedMedia-style addon adds choices) on a "Media" page, and in every module that draws text or bars a per-module Font / Bar texture dropdown that defaults to "Use global". Today that is RangeText (font), Nameplates (font and bar texture) and the options window (font, after =/reload=); later modules (S7 action bars, S9 damage meter) follow the same contract (D-76).
+15. Opacity and action bar visibility (S36-S37):
+    - a "Background opacity" slider (and "Header opacity" where the window has a header) on every module that draws a background: DamageMeter, Professions, Nameplates (bar backgrounds); the options window, Mover overlays and the Debug log window are excluded (S36);
+    - per action bar: "Opacity" (the whole bar), "Show on mouseover" (invisible until hovered), "Hide in combat", and "Hide with key toggle" (one WoW key binding "Toggle action bars" under Key Bindings > AddOns > MerrinxUI hides/shows every opted-in bar, also in combat) (S37).
 
 * Scope
 In scope:
@@ -215,6 +224,18 @@ Every class available on Forever must have working defaults. That class list is 
 | AC-120 | (S9 batch 3) "Meter type" and Session options work; checks =types= (always), =type=, =type counts=, =segments= exist, are read-only and SKIP when the module is disabled; =apis=, =title=, =session=, =sorted= follow the selected type and segment. |
 | AC-121 | (S9 batch 3) busted 174/0/0 (16 in =damagemeter_spec.lua=), luacheck 0/0 in 39 files, stylua, flake check, zip =## Version: 0.16.0=; no "ellesmere" under =MerrinxUI/=; =DamageMeterLogic.lua= free of WoW globals. |
 | AC-116 | (S10) =flake.lock= adds only node =wow-api= (rev =d0b5b51fac4c52c493371b9b18e66ce604ea4326=, narHash =sha256-moaTfFGbW35Pebyn0qKNO+T656dyhk+7yRhyk/p73T4==); =nix develop= writes =.luarc.json= (Lua 5.1, =Annotations/Core= + addonLibs, =checkThirdParty= false); =.luarc.json= is gitignored; nothing new in the release zip. |
+| AC-129 | (S36) DamageMeter: defaults =bgOpacity = 75=, =headerOpacity = 100=; options "Background opacity" (order 10) and "Header opacity" (order 11), range 0..100 step 5; "Reset" moves to order 12. Moving a slider changes the window body / header background alpha at once (in and out of combat) and the value persists across =/reload= and profile switches. With defaults the window looks exactly as in 0.19.0. |
+| AC-130 | (S36) Professions: same keys, defaults, ranges and behaviour as AC-129, options at orders 4 and 5. |
+| AC-131 | (S36) Nameplates: default =bgOpacity = 80=; one "Background opacity" option (order 23) sets the alpha of the health, power and cast bar backgrounds of every styled plate at once; with the default the plates look exactly as in 0.19.0 (background RGB 0.1, effective alpha 0.8). |
+| AC-132 | (S37) =ActionBarLogic.VisibilityDriver= and =ActionBarLogic.BarAlpha= return exactly the values in "Shared interfaces: S36-S37"; the 2 new busted =it= blocks pass; busted total = baseline (E-PLAN-BASE-3) + 2, 0 failures, 0 errors. |
+| AC-133 | (S37) Each bar page in =/mui= → ActionBars → Bar N has "Opacity" (0..100 step 5, default 100, order 5), "Show on mouseover" (order 6), "Hide in combat" (order 7) and "Hide with key toggle" (order 8, desc names the Key Bindings path); all disabled while the bar is off; all persist across =/reload= and profile switches. |
+| AC-134 | (S37) "Opacity" N sets the whole bar (buttons, icons, hotkeys, cooldowns) to N %. "Show on mouseover": the bar is invisible (alpha 0) until the cursor is over its area, then shows at its opacity, and goes invisible again when the cursor leaves (also through the gaps between buttons), in and out of combat; while frames are unlocked (=/mui unlock=) mouseover bars stay visible. |
+| AC-135 | (S37) "Hide in combat": the bar hides on entering combat and returns on leaving it; bar 1 still hides in override bar, vehicle UI and pet battle as before; no =ADDON_ACTION_BLOCKED=. |
+| AC-136 | (S37) Key Bindings > AddOns > MerrinxUI lists "Toggle action bars". One key press hides every enabled bar with "Hide with key toggle" on, the next press shows them again (exactly one toggle per press), out of and in combat. Bars without the option and disabled bars never change. The toggle state resets to "shown" on =/reload=. |
+| AC-137 | (S37) Bars hidden by combat, by the toggle or made invisible by mouseover keep their key bindings (pressing a bound key still uses the action; A-45). |
+| AC-138 | (S36, S37) New read-only checks =DamageMeter/background=, =Professions/background=, =Nameplates/background=, =ActionBars/visibility <b>=, =ActionBars/alpha <b>=, =ActionBars/toggle= exist with the return shapes in "Shared interfaces: S36-S37" and SKIP when their module is disabled; no =SetAlpha=, =Show=, =Hide=, =SetAttribute=, state-driver or override-binding call inside any =GetDebugChecks= body. |
+| AC-139 | (S37) TOC =## Version: 0.20.0=; =MerrinxUI/Bindings.xml= ships in =result/MerrinxUI/= and the release zip; =.luacheckrc= gains a =globals= list with exactly =BINDING_HEADER_MERRINXUI= and =BINDING_NAME_MERRINXUI_TOGGLEBARS=; luacheck 0/0, =stylua --check=, =luac -p=, busted and =nix flake check -L --no-update-lock-file path:/home/merrinx/Projects/merrinxui= all pass on the integrated tree. |
+| AC-140 | (S36-S37 gate) G-S37-GAME pasted with every step answered on 0.20.0; no Lua error, =ADDON_ACTION_*= or MerrinxUI line in =Logs/taint.log=, including the in-combat steps. |
 
 * Non-goals
 - Clients other than Forever: Classic Era, TBC Anniversary, retail. No per-client TOC files.
@@ -285,6 +306,16 @@ Every class available on Forever must have working defaults. That class list is 
   - live font change of an already built options window (it needs =/reload=), a texture preview on the closed select button;
   - honouring or editing LSM's =SetGlobal= override (another addon calling it silently wins inside =LSM:Fetch=, R-59);
   - registering MerrinxUI's own media, a per-text font choice inside one module.
+- In the opacity and bar visibility work (S36-S37):
+  - opacity for the options window (user instruction), Mover overlays and the Debug log window;
+  - a global opacity setting on the Media page or a "Use global" opacity (D-113);
+  - text or icon opacity for RangeText, EnemyCooldowns, nameplate texts or the damage meter bars; background colour pickers;
+  - a new background/backdrop behind action bars (user answer);
+  - fade animations or fade delays for mouseover (the change is instant); showing bars while dragging a spell; "show only in combat"; mouseover for the whole group of bars at once;
+  - saving the key toggle state across =/reload=; per-bar key bindings for the toggle;
+  - hiding bars 2-8 in vehicle UI or pet battles (only bar 1 does so, as before);
+  - hiding cooldown swipe or bling on an invisible bar (R-68);
+  - any change to RangeText, EnemyCooldowns, CooldownVoice, HideBlizzard, Media, OptionsWindow, Core, =flake.nix= or =.github/=.
 
 * Confirmed repository and environment context (observed facts)
 ** This repository
@@ -643,6 +674,29 @@ Observed in this repository (HEAD =f8e30e8=, read-only reads; S27-S30 not yet im
 
 Architect critique (opus, this pass) adopted: the message relay carries the key; consumers re-apply only when the key matters; no Media =Refresh= (profile changes already reach every consumer); count fonts tracked so they follow changes; the cast colour re-applied after a texture swap; the statusbar preview tinted; =#LSM:List(mt)= for counts; a separate release 0.17.0.
 
+** Opacity and action bar visibility context (S36-S37)
+Observed in the repository (planner read, HEAD =14a0c2d=, working tree: only this plan modified, =sharedmedia-fonts-plan.org= untracked):
+- TOC =## Version: 0.19.0=; the Professions module (=Modules/ProfessionLogic.lua=, 12 =Modules/ProfessionData/*.lua=, =Modules/Professions.lua=) shipped in =27e68e8= outside this plan; =spec/debug_coverage_spec.lua= exempts =Modules/ProfessionData/=.
+- =MerrinxUI/Modules/DamageMeter.lua= =OnInitialize=: body background =local bg= (=WHITE8X8=, =SetVertexColor(0, 0, 0, 1)=, =SetAlpha(0.75)=) and header background =local headerBg= (=SetVertexColor(27/255, 27/255, 27/255, 1)=); neither is stored on =self=. =Layout()= runs from =OnEnable=, =Refresh=, =OnMediaChanged=. Options orders: =enabled= 1 .. =font= 8, =barTexture= 9, =reset= 10 (execute). Checks: =apis=, =types=, =type=, =type counts=, =segments=, =blizzard meter=, =window=, =title=, =session=, =rows=, =sorted=, =font=.
+- =MerrinxUI/Modules/Professions.lua=: the same =bg= / =headerBg= pattern (not stored), =Layout()= from =OnEnable= / =Refresh= / =OnMediaChanged=; options =enabled= 1, =fontSize= 2, =font= 3; checks =apis=, =data=, =skills=, =guide=, =window=.
+- =MerrinxUI/Modules/Nameplates.lua= =CreateStyledFrame=: three bar backgrounds (health =bg=, =powerBg=, =castBg=), =BAR_TEXTURE= with =SetVertexColor(0.1, 0.1, 0.1, 0.8)=, not stored on the frame. =ApplySize(frame)= runs for every styled frame from =Refresh= and =OnMediaChanged= (and =StyleUnit=). Options up to order 22 (=font= 21, =barTexture= 22).
+- RangeText, EnemyCooldowns (icon ARTWORK textures only), CooldownVoice and HideBlizzard draw no background. =Options/OptionsWindow.lua= (excluded by the user), =Util/Mover.lua= overlays and the Debug AceGUI window are tooling.
+- =MerrinxUI/Modules/ActionBars.lua=: headers =MerrinxUIBar<b>= (=SecureHandlerStateTemplate=), buttons =MerrinxUIBar<b>Button<i>= (=ActionBarButtonTemplate, SecureActionButtonTemplate=); =Apply()= only through =ns.Combat:Run("ActionBars:Apply", ...)=. Bar 1: =RegisterStateDriver(h, "page", L.PagingDriver(...))= and =RegisterStateDriver(h, "visibility", "[overridebar][vehicleui][petbattle] hide; show")=; bars 2-8: =h:Show()=, no visibility driver. Disabled bars: =UnregisterStateDriver= page and visibility, =h:Hide()=. =ApplyBindings()= clears =self.bindingOwner= and sets =SetOverrideBindingClick(owner, false, key, "MerrinxUIBar"..b.."Button"..i, "LeftButton")= for =GetBindingKey(L.BindingPrefix(b)..i)=; =UPDATE_BINDINGS= → =ns.Combat:Run("ActionBars:Bindings")=. Per-bar options =enabled= 1, =perRow= 2, =size= 3, =spacing= 4 with =disabled = barDisabled(b)=; setters call =self:Refresh()=. =petBattleOwner= (D-93) unchanged by this work.
+- =MerrinxUI/Modules/ActionBarLogic.lua= is pure (=PAGES=, =Slot=, =PagingDriver=, =Layout=, =BarGeometry=, =DefaultPosition=, =ExpectedPage=, =BindingPrefix=); =spec/actionbars_spec.lua= has 11 =it= blocks.
+- =MerrinxUI/Util/Mover.lua= sends =MERRINXUI_LOCK_CHANGED(isUnlocked)= and exposes =ns.Mover:IsUnlocked()=.
+- Options renderer: =range= honours =min=, =max=, =step= through =OptionsLogic.SnapRange= (integer steps, =min = 0= fine); no =isPercent=.
+- =flake.nix= =merrinxui= copies the whole =./MerrinxUI= directory, so a new =MerrinxUI/Bindings.xml= ships with no flake change; the TOC check reads only TOC lines. A git-source flake evaluation only sees tracked files (R-70).
+- =.luacheckrc= has =read_globals= only; no =globals= list yet.
+- =spec/= holds 224 =it(= lines (architect count; the lead takes the real baseline E-PLAN-BASE-3 from =nix develop -c busted spec= before the wave).
+
+External facts (researcher, haiku; warcraft.wiki.gg, UNVERIFIED on Forever until G-S37-GAME):
+- An addon-root =Bindings.xml= is loaded automatically and must not be listed in the TOC; =<Binding name="..." header="...">=; display names come from =_G["BINDING_HEADER_" .. header]= and =_G["BINDING_NAME_" .. name]=. https://warcraft.wiki.gg/wiki/Creating_key_bindings . The =category= attribute was not confirmed for Forever (A-43, R-74).
+- =SecureHandlerClickTemplate= runs =_onclick(self, button, down)= in the restricted environment; =SecureHandlerStateTemplate= runs =_onstate-<id>= whenever attribute =state-<id>= changes, for any identifier. https://warcraft.wiki.gg/wiki/SecureHandlerClickTemplate , https://warcraft.wiki.gg/wiki/SecureHandlerStateTemplate
+- =frame:SetFrameRef(label, ref)= (=SecureHandlerBaseTemplate=) and =handle:GetFrameRef(label)=; handles have =SetAttribute=, =GetAttribute=, =Show=, =Hide=, =IsShown=; =SetAlpha= on handles was not confirmed (the design never calls it in a snippet). https://warcraft.wiki.gg/wiki/SecureHandlers , https://warcraft.wiki.gg/wiki/RestrictedEnvironment
+- =RegisterStateDriver(frame, state, ...)= sets attribute ="state-" .. state=; =[combat]= is a valid conditional. https://warcraft.wiki.gg/wiki/SecureStateDriver , https://warcraft.wiki.gg/wiki/Macro_conditionals
+- =Region:SetAlpha= is documented =AllowedWhenTainted=; =Show= / =Hide= on protected frames are protected in combat. https://warcraft.wiki.gg/wiki/API_Region_SetAlpha , https://warcraft.wiki.gg/wiki/Secure_Execution_and_Tainting . The researcher flagged that insecure =SetAlpha= on a protected header in combat is not proven on this client (A-48, R-64); Bartender4/ElvUI-style mouseover fading relies on it (planner knowledge, not verified here).
+- =SetOverrideBindingClick= has no documented visibility restriction on its target (hidden buttons as click targets: LIKELY, A-45). https://warcraft.wiki.gg/wiki/API_SetOverrideBindingClick
+
 ** Unverified claims (S0 probes decide)
 - =WOW_PROJECT_ID= equals =WOW_PROJECT_MAINLINE= on Forever. If so, LibRangeCheck treats the client as retail and uses retail spell IDs, which could break the yard estimates (R-04).
 - The class list on Forever. Assumed to be the nine classic classes.
@@ -745,6 +799,23 @@ Architect critique (opus, this pass) adopted: the message relay carries the key;
 | D-77 | Release: S31 sets =## Version= to the next minor after the last tagged release at its start (=0.17.0= when S27-S30 shipped as =0.16.0=; =0.18.0= if the Handoff's early =v0.16.0-s29.1= cut happened); S32 and S33 don't bump; tag =v<Version>-s33.1=; one game gate G-S33-GAME closes S31-S33 (D-41 precedent). The TOC gains =Util\Media.lua=, so a full client restart is needed (R-09). A separate release from S27-S30, whose gated packets stay untouched. | Architect + D-23/D-33 |
 | D-78 | Options window (S32; amends D-27 and D-39): =dialogControl= ="LSM30_Statusbar"= is supported on =select=: each drop item gets a module-owned =item.preview= texture (inset 1 px, below the text, =SetVertexColor(0.5, 0.5, 0.5)=) shown with =ns.Media:Fetch("statusbar", key)= in statusbar lists (the ="*"= row shows the global texture) and hidden in every other list, reset on every acquire; the closed button shows text only. The window font is resolved once at the top of =build()= into a file-local =windowFont= (=ns.Media:FontPath(optionsFont)=), used by =setFont= with today's =Theme.font= → FRIZQT fallback, so a change applies after =/reload=. =setPreviewFont= resolves through =ns.Media:Fetch= (S31 moves this one line, so ="*"= previews in the global font). | User + architect |
 | D-79 | Nameplates adoption (S33): =profile.font = "*"=, =profile.barTexture = "*"= (options "Font" order 21, "Bar texture" order 22). =ApplySize= sets name, health, power, cast and level texts with =ns.Media:SetFont= and the health, power and cast StatusBars with =ns.Media:SetStatusBarTexture=, swapping a bar's texture only when the resolved path changed (=frame.barPath=) and re-applying the cast colour after a swap; backgrounds and the highlight stay =WHITE8X8=. =initializedDebuffButtons= stores the count FontString as its value (=[button] = count=) so count fonts of debuff and CC buttons follow changes (re-applied only while auras aren't secret; otherwise with the existing pending path). =local FONT= is removed; =self.appliedFont= records the applied text font path for the =media= check. | Architect |
+| D-113 | Opacity is per module; no global opacity on the Media page and no "Use global" token. | Defaults differ per module (75 / 100 / 80); a global would be a speculative knob. Architect (opus) |
+| D-114 | Opacity is stored as an integer percent (range 0..100, step 5) and applied as =SetAlpha(pct / 100)= on texture or header references the module stores. | No float drift; =SnapRange= handles integer steps. Architect |
+| D-115 | Nameplate background vertex colours become =(0.1, 0.1, 0.1, 1)= and =bgOpacity = 80= supplies the alpha; DamageMeter and Professions drop =bg:SetAlpha(0.75)= in =OnInitialize= because =Layout()= sets it. | Same default look, one place sets alpha. Architect |
+| D-116 | Option orders: DamageMeter =bgOpacity= 10, =headerOpacity= 11, =reset= 10 → 12; Professions 4 and 5; Nameplates one =bgOpacity= at 23 for all three bar backgrounds. | Reset button stays last; one plate setting. Architect |
+| D-117 | Scope: DamageMeter, Professions, Nameplates (S36) and ActionBars (S37). Excluded: OptionsWindow (user), Mover overlays and Debug window (tooling); RangeText, EnemyCooldowns, CooldownVoice, HideBlizzard have no background. | Planner =CreateTexture= sweep + user instruction |
+| D-118 | Action bar "Opacity" is =SetAlpha= on the header =MerrinxUIBar<b>=; no backdrop. Four new per-bar keys at orders 5..8; setters call =Refresh()= (in combat the existing =ns.Combat:Run= queue applies them after combat). | User answer ("Bar opacity") + existing Apply path |
+| D-119 | A custom state =vis= replaces bar 1's ="visibility"= driver, and bars 2-8 get a =vis= driver too, with header snippet =_onstate-vis= combining the state with attribute =userhidden=. =Apply()= also evaluates Show/Hide explicitly (out of combat) after registering. | The built-in =visibility= state Shows/Hides directly and would override the key toggle; the explicit evaluation does not rely on =_onstate= firing for an unchanged value. Architect |
+| D-120 | Key toggle: one =SecureHandlerClickTemplate= button =MerrinxUIBarToggle= with frame refs =bar1..bar8=, bound by =ApplyBindings= through =SetOverrideBindingClick= to the keys of binding =MERRINXUI_TOGGLEBARS= declared in the new =MerrinxUI/Bindings.xml=. State lives in attribute =barshidden= (session only). A bar opts in through header attribute =keytoggle=, true only for enabled bars with =keyToggle= on. | Reuses the D-93 / S8 override-binding path; works in combat; disabled bars can never be shown by it. Architect + researcher |
+| D-121 | Mouseover uses one plain module frame =self.fader= whose =OnUpdate= calls =UpdateAlphas()= (=h:IsMouseOver()= per enabled bar, alpha cached in =self.alphas=); it is shown only while an enabled bar has =mouseover= on. Instant change, no animation. While the Mover is unlocked mouseover bars show at their opacity (=MERRINXUI_LOCK_CHANGED= → =UpdateAlphas=). | Button =OnEnter=/=OnLeave= hooks miss the gaps between buttons and empty (hidden) slots and would need 96 =HookScript= calls. Architect (changed the planner draft) |
+| D-122 | =MerrinxUIBarToggle= uses =RegisterForClicks("AnyDown")=. | Exactly one toggle per press whatever the click-binding delivery; fallback F-T1 = ="AnyUp"=. Architect |
+| D-123 | Bars hidden by combat, by the toggle or invisible by mouseover keep their key bindings; =ApplyBindings= is unchanged for bar buttons. | User intent (hide, not disable); A-45 settles it in game |
+| D-124 | ActionBars work splits into T-56 (=ActionBarLogic.lua= + =spec/actionbars_spec.lua=) and T-57 (=ActionBars.lua=, =Bindings.xml=, =.luacheckrc=, TOC). The Logic signatures are fixed in "Shared interfaces: S36-S37", so both start at once. | One owner per file, one wave. Architect |
+| D-125 | Checks: =background= in DamageMeter, Professions, Nameplates; =visibility <b>=, =alpha <b>=, =toggle= in ActionBars; all read-only, SKIP when the module is disabled. | Keeps =/mui test= coverage (D-D16) |
+| D-126 | One release =0.20.0= (next minor, D-23), set by T-57; tag =v0.20.0-s37.1=; one game gate G-S37-GAME closes S36 and S37. Only =Bindings.xml= is new and it is not a TOC line, but the client reads key bindings at startup, so installing needs a full client restart. | D-23/D-41 precedent |
+| D-128 | S36 and S37 are =PASSED= on the user's instruction after the 0.20.0 =/mui test= paste (16:41:09, client 1.60.1 build 70450, MAGE enUS, in combat: 181 checks, 126 PASS, 0 FAIL, 6 SKIP, 49 INFO). G-S37-GAME steps 2-8 were not run individually; =ActionBars/toggle= reported "no keys bound", so the key toggle, mouseover-in-combat and taint-log steps stay UNVERIFIED (A-43..A-49, R-64..R-66, R-68, R-69, R-74). | User instruction; D-42/D-112 precedent |
+| D-129 | S38: LibSharedMedia-3.0 is only a registry. The paste shows =Media/fonts 11=, =statusbars 4=, =media addons 0= and =font registrations 0 ...=: nothing but LSM's own Blizzard defaults is registered, so there is nothing more to list. ElvUI (=ElvUI/Game/Shared/Media/SharedMedia.lua=, =AddMedia= → =LSM:Register=) and EllesmereUI (=EllesmereUI_Fonts.lua=, =LSM:Register(LSM.MediaType.FONT, ...)= for =media/fonts=) ship their own font and texture files and register them with LSM. MerrinxUI does the same: 23 OFL / Ubuntu-licensed TTFs from nixpkgs and 6 generated 256x32 TGA statusbars, copied by =flake.nix= =addonMedia= into =MerrinxUI/Media=, registered in =Media.lua= at file scope after the =Register= hook. Supersedes the =sharedmedia-fonts-plan.org= non-goal "calling =LSM:Register= from MerrinxUI" (that one was about rejected pack media). | User request "look at how ElvUI and EllesmereUI do it"; source read of both repos |
+| D-127 | S36-S37 use the one-wave lead protocol ("S36-S37 lead protocol"): all five tasks dispatched concurrently on one coordination channel, a verifier per task as soon as it completes, then one integrated verifier and reviewer + security in parallel. No Git, deploy or approval checkpoint between tasks; commits are grouped by owned paths after the final gate. | Planner instruction set for this plan revision |
 
 ** Per-class default range spells (D-15; IDs unverified on Forever, probed in S0)
 | classFile | Spell (rank 1)  | ID    | Why                                                   |
@@ -875,6 +946,13 @@ If S0 shows other classes or IDs that don't resolve, the lead stops and the user
 - A-40: =SpeakText= with =overlap= false queues (or replaces) rather than talking over itself; a batched message per scan keeps the queue short either way.
 - A-41 (G-S33-GAME): =StatusBar:SetStatusBarTexture= with a new file may reset the bar's colour; re-applying the cast colour after a swap (D-79) plus the existing =UpdateColor= / =UpdatePower= calls restore every bar colour. =Nameplates/health colour= and a visual line on the cast bar check it.
 - A-42: a SharedMedia-style addon's fonts and statusbars register with the shared LSM instance during its own load (after MerrinxUI's, alphabetically), so they appear in the lists the next time a list opens and stored keys apply through the D-74 relay.
+- A-43 (G-S37-GAME step 6): =MerrinxUI/Bindings.xml= loads automatically on Forever; "Toggle action bars" is listed under a "MerrinxUI" header in Key Bindings (AddOns category, or "Other" if =category= is ignored); the empty =<Binding>= body is accepted.
+- A-44 (step 5): the =[combat]= conditional in a =vis= state driver and the restricted =Show= / =Hide= in =_onstate-vis= work on our header in combat.
+- A-45 (steps 5, 6): an action button whose header is hidden (or at alpha 0) still performs its action through its override click binding.
+- A-46 (step 6): the zero-size =MerrinxUIBarToggle= button receives override-binding clicks while not visible on screen.
+- A-47 (step 3): header alpha cascades to the =ActionBarButtonTemplate= children (icon, hotkey, count, border, cooldown).
+- A-48 (step 4, in combat): insecure =SetAlpha= on our protected header works in combat (=AllowedWhenTainted=; Bartender4/ElvUI precedent).
+- A-49 (step 4, in combat): =h:IsMouseOver()= on our header returns a plain boolean in combat (not secret, not blocked).
 
 * Open questions
 - Q-01 (resolved in S0): =Gako358/merrinxui=, configured as =origin=.
@@ -900,6 +978,11 @@ If S0 shows other classes or IDs that don't resolve, the lead stops and the user
   - Q-10 (accent scope, S19): replace the whole accent (title, sidebar active bar, switch-on track, =fill=), not only the logo text.
   - Q-04 (per-second): yes, ="total (per-second)"=, following EllesmereUI's default number format.
   - Former Q-01 (local AddOns path): no longer needed, because releases replace local deploy.
+- Resolved (S36-S37 planning pass):
+  - Q-22 (action bar transparency): "Bar opacity": a per-bar opacity slider for the whole bar; mouseover fades from it to 0; no new background (D-118).
+- Open, non-blocking for S36-S37 (planner defaults applied, the user may override before dispatch):
+  - Q-23: the key toggle state is session-only and starts "shown" after =/reload= (D-120). Persist it instead?
+  - Q-24: DamageMeter and Professions get two sliders (body and header) rather than one (D-116). Prefer one slider for both?
 
 * Risks
 | ID   | Risk | Mitigation |
@@ -981,6 +1064,17 @@ If S0 shows other classes or IDs that don't resolve, the lead stops and the user
 | R-58 | The resolved global font is unusable on this client (profile imported from elsewhere) | =ns.Media:SetFont= falls back to LSM's default font with one chat line per key; =Media/global font= FAIL shows it. |
 | R-59 | Another addon calls LSM =SetGlobal=, which silently wins in =LSM:Fetch= for every addon | Non-goal; the check values show the fetched path, so a mismatch is visible. |
 | R-60 | ruRU and Asian clients: the LSM default font differs from Friz Quadrata, so their default look changes | Intended (LSM's locale default); the user is enUS (A-28). |
+| R-64 | Insecure =SetAlpha= on the protected header is blocked in combat on this client (A-48) | G-S37-GAME step 4 in combat; stop condition: mouseover in combat then needs a secure design (replan, no workaround). |
+| R-65 | =IsMouseOver()= returns a secret or is restricted in combat (A-49) | =alpha <b>= returns INFO "secret"; same stop as R-64. =UpdateAlphas= must never compare a secret: T-57 maps a secret =IsMouseOver= result to "hovered = true" (bar shown) so the bar stays usable. |
+| R-66 | Click bindings deliver down, up or both, toggling twice per press | ="AnyDown"= (D-122); fallback F-T1 = ="AnyUp"= (one line in T-57) if a press does nothing. |
+| R-67 | =RegisterStateDriver= does not set =state-vis= synchronously, so =Apply='s explicit evaluation reads =nil= and hides a bar for a frame | The driver's next update fires =_onstate-vis= and corrects it; =visibility <b>= PASS at step 1 confirms. |
+| R-68 | Cooldown swipe or bling stays visible on a bar at alpha 0 | Step 8 records it; fixing it is a non-goal (follow-up). |
+| R-69 | =toggle:SetFrameRef= missing on this client, erroring inside =Apply= and breaking every bar | Steps 1 and 6; stop condition: replan to the =SecureHandlerSetFrameRef= global (+ =read_globals=). |
+| R-70 | =MerrinxUI/Bindings.xml= is untracked, so a git-source flake evaluation silently leaves it out of =packages.merrinxui= and the zip | Verifiers use the =path:= form and list the built =MerrinxUI/= tree; the git-tree form stays UNVERIFIED until the user stages the file (commit grouping after the final gate). |
+| R-71 | Option changes made in combat apply only after combat (=ns.Combat:Run= queue) | Accepted (D-118). |
+| R-72 | Turning "Hide with key toggle" on while bars are toggled hidden hides that bar at once | Intended session semantics; step 7 records it. |
+| R-73 | =self.fader= =OnUpdate= runs every frame while a mouseover bar exists | 8 =IsMouseOver= calls and a cached alpha compare per frame; accepted; the frame is hidden when no bar uses mouseover. |
+| R-74 | =category="ADDONS"= in =Bindings.xml= is unknown on Forever | Unknown XML attributes are ignored (A-43); fallback F-B1: drop =category= if the binding is missing from the list or FrameXML.log reports it. |
 
 * Stop conditions
 - An S0 probe contradicts something the section relies on: the class list, a default spell ID, an API or a frame global.
@@ -1040,6 +1134,12 @@ If S0 shows other classes or IDs that don't resolve, the lead stops and the user
   - S27-S30 changed =InitializeDebuffButton= differently from their plan (re-read before S33);
   - the user refuses =git add --intent-to-add MerrinxUI/Util/Media.lua=;
   - at G-S33-GAME: any Lua error, =ADDON_ACTION_*= or taint from MerrinxUI; =Media/global font= or =global statusbar= FAIL with default settings; a default-settings visual difference from 0.16.0 on enUS (AC-110); =font preview= > 0 for MerrinxUI keys.
+- S36-S37 (any task stops and reports to the lead on the coordination channel; the lead marks the section =BLOCKED= only if the cause cannot be fixed inside the plan):
+  - an edit is needed outside the task's owned paths, or a symbol named in "Shared interfaces: S36-S37" is missing or differs (=self.bg=, =ApplySize=, =barGroup=, =ApplyBindings=, =L.BindingPrefix=, =MERRINXUI_LOCK_CHANGED=, =ns.Mover:IsUnlocked=);
+  - luacheck needs a global not listed in the contract, or the renderer rejects a =range= with =min = 0=;
+  - T-57: keeping the built-in ="visibility"= driver turns out to be necessary, or a restricted snippet in the contract has to change beyond the F-T1 / F-B1 fallbacks;
+  - busted ≠ baseline + 2 on the integrated tree, or an existing spec needs a change;
+  - at G-S37-GAME: =SetAlpha= or =IsMouseOver= blocked or secret in combat (R-64/R-65); =SetFrameRef= missing (R-69); =ADDON_ACTION_BLOCKED= or a MerrinxUI taint line from the toggle, the =vis= driver or the fader; bound keys stop working on hidden bars (A-45 false) — replan, do not work around it.
 
 * Ownership (one owner per writable path)
 | Owner role            | Paths |
@@ -1053,12 +1153,24 @@ Debug track: every =MerrinxUI/**=, =spec/**= and =.luacheckrc= path it touches s
 
 Sections run strictly one after another. Within a section the lua-wow workstream runs first, then nix/ci. Exception: in S20 nix/ci (WS-22) runs first, because the package check fails on an =embeds.xml= reference to a library that isn't copied yet. Files that later sections append to (the TOC, =embeds.xml=, =Core.lua=, =.luacheckrc=, =flake.nix=) each have a single role owner.
 
+S36-S37 (D-127) replace the role table with one task owner per file; no file is shared and none is split by region:
+| Task | Owned paths (exclusive) |
+|------+-------------------------|
+| T-53 | =MerrinxUI/Modules/DamageMeter.lua= |
+| T-54 | =MerrinxUI/Modules/Professions.lua= |
+| T-55 | =MerrinxUI/Modules/Nameplates.lua= |
+| T-56 | =MerrinxUI/Modules/ActionBarLogic.lua=, =spec/actionbars_spec.lua= |
+| T-57 | =MerrinxUI/Modules/ActionBars.lua=, =MerrinxUI/Bindings.xml= (new), =.luacheckrc=, =MerrinxUI/MerrinxUI.toc= |
+| lead | =merrinxui-plan.org= (status and evidence only) |
+| user | staging =MerrinxUI/Bindings.xml=, commits, push, tag, G-S37-GAME (after the final gate) |
+
 * Target repository layout (after S9)
 #+begin_example
 flake.nix  flake.lock  .gitignore  .luacheckrc  stylua.toml
 .github/workflows/ci.yml
 MerrinxUI/
   MerrinxUI.toc  embeds.xml  Core.lua
+  Bindings.xml   (S37; loaded by the client automatically, not a TOC line)
   Debug/DebugLogic.lua  Debug/Debug.lua                                            (SD1)
   Util/MoverLogic.lua  Util/Mover.lua  Util/CombatQueue.lua  Util/Combat.lua  Util/Hider.lua
   Util/FontLogic.lua                                                                (S21)
@@ -1672,6 +1784,187 @@ message "MERRINXUI_MEDIA_CHANGED" (mediatype, key|nil)   -- D-74
 - Events: =OnEnable= registers =LSM.RegisterCallback(self, "LibSharedMedia_Registered", "OnMediaRegistered")=; the handler relays only ="font"= and ="statusbar"= with the key.
 - Checks (read-only; no =SetFont=, =SetStatusBarTexture=, =SendMessage= inside checks): =fonts= INFO =#LSM:List("font")=, usable-set size; =statusbars= INFO =#LSM:List("statusbar")=; =global font= PASS when =Fetch("font", "*")= is non-nil and not in the unusable set (returns key, path); =global statusbar= PASS when =Fetch("statusbar", "*")= is non-nil (key, path); =options font= INFO key, resolved path.
 - Consumers' check updates: =RangeText/font= expected path = =ns.Media:Fetch("font", profile.font)=, returns the resolved key too; =OptionsWindow/font= PASS when =fontUsed= equals =windowFont= (or the FRIZQT fallback, as today); =Nameplates/media= (target; SKIP disabled / no target / not styled): PASS when =nameText:GetFont()= path equals =self.appliedFont= (case/slash-normalised) and that equals =ns.Media:FontPath(profile.font)=; INFO =healthBar:GetStatusBarTexture():GetTexture()= raw, the resolved bar key and =frame.barPath=.
+
+** Shared interfaces: S36-S37 (opacity and bar visibility; fixed before dispatch, D-113..D-127)
+Every task codes against this block; none waits for another task's output. A task that cannot implement its part verbatim stops and reports (Stop conditions, S36-S37).
+
+*** Profile keys (AceDB defaults; existing profiles get them from the defaults, no migration)
+| Owner | Module / table | Key | Default | Applied |
+|-------+----------------+-----+---------+---------|
+| T-53 | DamageMeter =profile= | =bgOpacity= | 75 | =self.bg:SetAlpha(profile.bgOpacity / 100)= in =Layout()= |
+| T-53 | DamageMeter =profile= | =headerOpacity= | 100 | =self.headerBg:SetAlpha(profile.headerOpacity / 100)= in =Layout()= |
+| T-54 | Professions =profile= | =bgOpacity= | 75 | =self.bg=, in =Layout()= |
+| T-54 | Professions =profile= | =headerOpacity= | 100 | =self.headerBg=, in =Layout()= |
+| T-55 | Nameplates =profile= | =bgOpacity= | 80 | =frame.healthBg=, =frame.powerBg=, =frame.castBg= =SetAlpha(profile.bgOpacity / 100)= in =ApplySize(frame)= right after =SetSize= |
+| T-57 | ActionBars =profile.bars[b]= (b = 1..8) | =opacity= | 100 | header alpha via =UpdateAlphas= |
+| T-57 | ActionBars =profile.bars[b]= | =mouseover= | false | header alpha via =UpdateAlphas= |
+| T-57 | ActionBars =profile.bars[b]= | =hideInCombat= | false | =vis= driver string |
+| T-57 | ActionBars =profile.bars[b]= | =keyToggle= | false | header attribute =keytoggle= |
+
+Background textures keep their RGB: DamageMeter / Professions body =SetVertexColor(0, 0, 0, 1)=, header =SetVertexColor(27/255, 27/255, 27/255, 1)=; Nameplates =SetVertexColor(0.1, 0.1, 0.1, 1)= (alpha 0.8 → 1, D-115). =bg:SetAlpha(0.75)= is removed from both =OnInitialize= bodies; =OnInitialize= stores =self.bg = bg= and =self.headerBg = headerBg=; =CreateStyledFrame= stores =frame.healthBg = bg=, =frame.powerBg = powerBg=, =frame.castBg = castBg=.
+
+*** Options (D-27 types only; every new range =min = 0, max = 100, step = 5=; setters assign then call =self:Refresh()=)
+| Owner | Module | Key | Type | Name | Order | Extra |
+|-------+--------+-----+------+------+-------+-------|
+| T-53 | DamageMeter | =bgOpacity= | range | "Background opacity" | 10 | |
+| T-53 | DamageMeter | =headerOpacity= | range | "Header opacity" | 11 | |
+| T-53 | DamageMeter | =reset= | execute (unchanged) | "Reset" | 12 (was 10) | |
+| T-54 | Professions | =bgOpacity= | range | "Background opacity" | 4 | |
+| T-54 | Professions | =headerOpacity= | range | "Header opacity" | 5 | |
+| T-55 | Nameplates | =bgOpacity= | range | "Background opacity" | 23 | |
+| T-57 | ActionBars =barGroup(b)= | =opacity= | range | "Opacity" | 5 | =disabled = barDisabled(b)= |
+| T-57 | ActionBars =barGroup(b)= | =mouseover= | toggle | "Show on mouseover" | 6 | =disabled = barDisabled(b)= |
+| T-57 | ActionBars =barGroup(b)= | =hideInCombat= | toggle | "Hide in combat" | 7 | =disabled = barDisabled(b)= |
+| T-57 | ActionBars =barGroup(b)= | =keyToggle= | toggle | "Hide with key toggle" | 8 | =disabled = barDisabled(b)=; =desc = "Bind the key under Key Bindings > AddOns > MerrinxUI."= |
+ActionBars setters write =self.db.profile.bars[b].<key>=.
+
+*** Pure functions (T-56 produces, T-57 consumes; appended after =L.BindingPrefix= in =MerrinxUI/Modules/ActionBarLogic.lua=)
+#+begin_src lua
+-- L.VisibilityDriver(b, hideInCombat) -> string (state driver for the custom state "vis")
+--   b == 1, false -> "[overridebar][vehicleui][petbattle] hide; show"
+--   b == 1, true  -> "[overridebar][vehicleui][petbattle] hide; [combat] hide; show"
+--   b >= 2, false -> "show"
+--   b >= 2, true  -> "[combat] hide; show"
+-- L.BarAlpha(opacity, mouseover, hovered, unlocked) -> number
+--   0 when mouseover and not hovered and not unlocked; otherwise opacity / 100
+#+end_src
+Busted examples (T-56 appends exactly these two =it= blocks at the end of the =describe= in =spec/actionbars_spec.lua=; 11 → 13 blocks; suite total = E-PLAN-BASE-3 + 2):
+#+begin_src lua
+it("VisibilityDriver keeps bar 1's override/vehicle/pet-battle hide and adds [combat] on request", function()
+	assert.are.equal("[overridebar][vehicleui][petbattle] hide; show", L.VisibilityDriver(1, false))
+	assert.are.equal("[overridebar][vehicleui][petbattle] hide; [combat] hide; show", L.VisibilityDriver(1, true))
+	assert.are.equal("show", L.VisibilityDriver(2, false))
+	assert.are.equal("[combat] hide; show", L.VisibilityDriver(8, true))
+end)
+
+it("BarAlpha is opacity/100 unless mouseover hides an unhovered bar while locked", function()
+	assert.are.equal(1, L.BarAlpha(100, false, false, false))
+	assert.are.equal(0.5, L.BarAlpha(50, false, false, false))
+	assert.are.equal(0, L.BarAlpha(0, false, true, false))
+	assert.are.equal(0, L.BarAlpha(50, true, false, false))
+	assert.are.equal(0.5, L.BarAlpha(50, true, true, false))
+	assert.are.equal(0.5, L.BarAlpha(50, true, false, true))
+end)
+#+end_src
+
+*** ActionBars runtime (T-57, =MerrinxUI/Modules/ActionBars.lua=)
+- File top, after =local L = ns.ActionBarLogic=: =BINDING_HEADER_MERRINXUI = "MerrinxUI"= and =BINDING_NAME_MERRINXUI_TOGGLEBARS = "Toggle action bars"=.
+- =OnInitialize= adds =self.alphas = {}=, =self.visDrivers = {}=, =self.fader = CreateFrame("Frame")=, =self.fader:Hide()=, =self.fader:SetScript("OnUpdate", function() self:UpdateAlphas() end)=.
+- =OnEnable= adds =self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "UpdateAlphas")=.
+- =CreateBar(b)= sets on every header:
+  #+begin_src lua
+  h:SetAttribute("_onstate-vis", [[
+  	if newstate == "show" and not self:GetAttribute("userhidden") then
+  		self:Show()
+  	else
+  		self:Hide()
+  	end
+  ]])
+  #+end_src
+- =Apply()= enabled branch, before the bar loop, created once:
+  #+begin_src lua
+  if not self.toggle then
+  	local t = CreateFrame("Button", "MerrinxUIBarToggle", UIParent, "SecureHandlerClickTemplate")
+  	t:RegisterForClicks("AnyDown")
+  	t:SetAttribute("_onclick", [[
+  		local hidden = not self:GetAttribute("barshidden")
+  		self:SetAttribute("barshidden", hidden)
+  		for b = 1, 8 do
+  			local h = self:GetFrameRef("bar" .. b)
+  			if h and h:GetAttribute("keytoggle") then
+  				h:SetAttribute("userhidden", hidden)
+  				if h:GetAttribute("state-vis") == "show" and not hidden then
+  					h:Show()
+  				else
+  					h:Hide()
+  				end
+  			end
+  		end
+  	]])
+  	self.toggle = t
+  end
+  local barsHidden = self.toggle:GetAttribute("barshidden") == true
+  #+end_src
+- Per enabled bar, replacing bar 1's =RegisterStateDriver(h, "visibility", ...)= and bars 2-8's =h:Show()= (bar 1 keeps its =page= driver):
+  #+begin_src lua
+  self.toggle:SetFrameRef("bar" .. b, h)
+  h:SetAttribute("keytoggle", barProfile.keyToggle)
+  h:SetAttribute("userhidden", barProfile.keyToggle and barsHidden)
+  self.visDrivers[b] = L.VisibilityDriver(b, barProfile.hideInCombat)
+  RegisterStateDriver(h, "vis", self.visDrivers[b])
+  if h:GetAttribute("state-vis") == "show" and not h:GetAttribute("userhidden") then
+  	h:Show()
+  else
+  	h:Hide()
+  end
+  #+end_src
+- Bar-disabled and module-disabled branches: =UnregisterStateDriver(h, "vis")= replaces =UnregisterStateDriver(h, "visibility")=; add =h:SetAttribute("keytoggle", false)= and =self.visDrivers[b] = nil=; keep =h:Hide()=. Module-disabled branch also =self.fader:Hide()=.
+- After both loops of the enabled branch: =self.fader:Show()= if any enabled bar has =mouseover=, else =self.fader:Hide()=; then =self:UpdateAlphas()=.
+- New method (R-65: a secret =IsMouseOver= result counts as hovered so the bar stays visible and nothing secret is compared):
+  #+begin_src lua
+  function ActionBars:UpdateAlphas()
+  	local unlocked = ns.Mover:IsUnlocked()
+  	for b = 1, 8 do
+  		local h = self.headers[b]
+  		local p = self.db.profile.bars[b]
+  		if h and p.enabled then
+  			local over = h:IsMouseOver()
+  			if issecretvalue(over) then
+  				over = true
+  			end
+  			local alpha = L.BarAlpha(p.opacity, p.mouseover, over, unlocked)
+  			if alpha ~= self.alphas[b] then
+  				h:SetAlpha(alpha)
+  				self.alphas[b] = alpha
+  			end
+  		end
+  	end
+  end
+  #+end_src
+- =ApplyBindings()=, inside =if self:IsEnabled()=, after the bar loop (not added to =count=):
+  #+begin_src lua
+  if self.toggle then
+  	for _, key in ipairs({ GetBindingKey("MERRINXUI_TOGGLEBARS") }) do
+  		SetOverrideBindingClick(self.bindingOwner, false, key, "MerrinxUIBarToggle", "LeftButton")
+  	end
+  end
+  #+end_src
+- Names: header attributes =state-vis= (="show"= / ="hide"=), =userhidden= (bool), =keytoggle= (bool); toggle attribute =barshidden= (bool, starts nil); frame refs =bar1..bar8=; frame =MerrinxUIBarToggle=; override action string =CLICK MerrinxUIBarToggle:LeftButton=.
+
+*** =MerrinxUI/Bindings.xml= (T-57, new; LF line endings; not a TOC line)
+#+begin_src xml
+<Bindings>
+	<Binding name="MERRINXUI_TOGGLEBARS" header="MERRINXUI" category="ADDONS">
+	</Binding>
+</Bindings>
+#+end_src
+Fallback F-B1 (only on G-S37-GAME evidence, R-74): drop =category="ADDONS"=.
+
+*** =.luacheckrc= (T-57)
+Add after the =read_globals= table, nothing else:
+#+begin_src lua
+globals = {
+	"BINDING_HEADER_MERRINXUI",
+	"BINDING_NAME_MERRINXUI_TOGGLEBARS",
+}
+#+end_src
+No new =read_globals= (=issecretvalue=, =GetBindingKey=, =SetOverrideBindingClick=, =RegisterStateDriver=, =UnregisterStateDriver=, =CreateFrame=, =UIParent= are already listed).
+
+*** TOC (T-57)
+=## Version: 0.19.0= → =## Version: 0.20.0=; no other TOC line changes.
+
+*** Debug checks (read-only; alpha compares ±0.01; any secret value → ="INFO", "secret"=)
+| Owner | Check | SKIP | Returns |
+|-------+-------+------+---------|
+| T-53 / T-54 | =background= (appended last) | =ctx.enabled == false= → ="module disabled"= | PASS when =self.bg:GetAlpha()= ≈ =bgOpacity/100= and =self.headerBg:GetAlpha()= ≈ =headerOpacity/100=, else FAIL; =status, bgAlpha, headerAlpha= |
+| T-55 | =background= | module disabled; no shown frame in =self.plateFrames= → ="no plates"= | first shown styled frame; PASS when all three ≈ =bgOpacity/100=; =status, healthAlpha, powerAlpha, castAlpha= |
+| T-57 | =visibility <b>= (same loop and condition as =layout <b>=) | module disabled | PASS when =self.visDrivers[b] == L.VisibilityDriver(b, p.hideInCombat)=, =(h:GetAttribute("keytoggle") == true) == p.keyToggle= and =h:IsShown() == (state-vis == "show" and not userhidden)=; =status, state, userhidden == true, h:IsShown()= |
+| T-57 | =alpha <b>= (same loop) | module disabled | expected =L.BarAlpha(p.opacity, p.mouseover, h:IsMouseOver(), ns.Mover:IsUnlocked())=; =status, h:GetAlpha(), expected= |
+| T-57 | =toggle= | module disabled | =self.toggle == nil= → ="FAIL", "no toggle button"=; no keys → ="INFO", "no keys bound", barshidden == true=; else every key of =GetBindingKey("MERRINXUI_TOGGLEBARS")= has =GetBindingAction(key, true) == "CLICK MerrinxUIBarToggle:LeftButton"= → =PASS/FAIL, ok, total, barshidden == true= |
+The existing =apis= check in ActionBars stays as is; the existing =bindings= count semantics stay (toggle keys are not counted).
+
+*** Message contract
+No new AceEvent message. T-57 consumes the existing =MERRINXUI_LOCK_CHANGED= (=Util/Mover.lua=, unchanged).
 
 ** Defaults
 #+begin_src lua
@@ -3668,7 +3961,7 @@ Lead protocol for each section:
 
 ** S27 - Nameplates: level text right of the health bar (0.16.0)
 - Section ID: S27
-- Status: IN_PROGRESS (run D-101; TOC goes to 0.17.0 per D-102; busted 176)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S27-VER / G-S27-REV / G-S27-SEC)
 - Origin: user request "The nameplates should show level on right side of the mob/player"; Q-17 "Outside, just right of the health bar".
 - Workstreams / tasks: WS-31 / T-39. No game gate of its own; closed by G-S30-GAME (D-69).
 - Acceptance: AC-96, AC-97, AC-104 (busted 149), plus AC-01, AC-16, AC-D7, AC-D13.
@@ -3725,11 +4018,12 @@ Lead protocol for each section:
   - E-S27-REV = G-S27-REV =Overall verdict: CLEAR= (reviewer, opus). Non-blocking notes N-S27-01..05; N-S27-02 (the =level= check should accept =""= when the expected text is nil, avoiding a false FAIL) is folded into S28 by the lead.
   - E-S27-SEC = G-S27-SEC =Overall verdict: CLEAR= (security, sonnet): no globals, addon-owned font string, secrets mapped to nil before use, check read-only, no CVar/flake/workflow change.
   - Code gates PASSED/CLEAR/CLEAR; stays =IN_PROGRESS= until G-S33-GAME (D-103).
+  - E-S27-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38 (0.19.0, out of the S33 release line): =Nameplates/level= PASS =7 7 7 normal 0.502 0.502 0.502 0.5 0.5 0.5 points restricted= (one normal mob only), =Nameplates/apis= PASS. UNVERIFIED: elite and ??-level targets, the visual line (G-S30-GAME step 1).
 - Next: S28.
 
 ** S28 - Nameplates: debuff X/Y offsets
 - Section ID: S28
-- Status: IN_PROGRESS (run D-101; busted 176; plus N-S27-02)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S28-VER / G-S28-REV / G-S28-SEC)
 - Origin: user request "option to decide where we want debuff to show on nameplates"; Q-16 "X/Y offset sliders".
 - Workstreams / tasks: WS-32 / T-40. No game gate of its own (G-S30-GAME).
 - Acceptance: AC-98, AC-104 (busted 149), plus AC-01, AC-16, AC-D7.
@@ -3751,11 +4045,12 @@ Lead protocol for each section:
   - E-S28-REV = G-S28-REV =Overall verdict: CLEAR= (reviewer, opus); notes N-S28-01 ("Show level" order 15 sits between the debuff options; orders as planned), N-S28-02 (debug-check paths covered by reading only).
   - E-S28-SEC = G-S28-SEC =Overall verdict: CLEAR= (security, sonnet); informational: unguarded numeric profile fields on tampered SavedVariables are pre-existing design, not new.
   - Code gates PASSED/CLEAR/CLEAR; stays =IN_PROGRESS= until G-S33-GAME.
+  - E-S28-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38: =Nameplates/debuffs= PASS =true auras secret auras secret points restricted= with =debuffX=0 debuffY=0=, anchor TOP. UNVERIFIED: non-zero offsets and the TOP/RIGHT/BOTTOM/LEFT sweep (G-S30-GAME step 2).
 - Next: S29.
 
 ** S29 - Nameplates: CC icons, larger, on the left
 - Section ID: S29
-- Status: IN_PROGRESS (run D-101; busted 177; grep =GetAuraGroupFrame\(=)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S29-VER-2 / G-S29-REV-2 / G-S29-SEC-2)
 - Origin: user request "have CC show larger icons on left side".
 - Workstreams / tasks: WS-33 / T-41. No game gate of its own (G-S30-GAME).
 - Acceptance: AC-99, AC-100, AC-104 (busted 150), plus AC-01, AC-16, AC-37 (no new Blizzard writes or hooks), AC-91 (no runtime =C_UnitAuras=), AC-D7.
@@ -3792,11 +4087,12 @@ Lead protocol for each section:
   - E-S29-REV = G-S29-REV =Overall verdict: FINDINGS= (R-S29-01 Low: debuff container refreshed on =UNIT_AURA= while debuffs off) → G-S29-REV-2 =Overall verdict: CLEAR= after RB1. Notes: =cc= check hard-codes −2; =cc filters= has no module-disabled SKIP (API probe); duplicated secret-resize comment.
   - E-S29-SEC = G-S29-SEC =Overall verdict: CLEAR= and G-S29-SEC-2 =Overall verdict: CLEAR= (security, sonnet): AC-37, AC-91, D-59 hold; =cc filters= calls =GetUnitAuras= only when not secret, under =pcall=.
   - Code gates PASSED/CLEAR/CLEAR; stays =IN_PROGRESS= until G-S33-GAME.
+  - E-S29-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38 (in combat): =Nameplates/cc= PASS =true auras secret points restricted=; =cc icons= INFO =size secret 10 true false=; =cc filters= SKIP "auras secret". UNVERIFIED: the out-of-combat CC step with the six filter counts (G-S30-GAME step 3, A-39), so F-CC1 stays pre-approved but untriggered.
 - Next: S30.
 
 ** S30 - CooldownVoice module, release 0.17.0 per D-81 (game gate for S27-S30; G-FU-NP fallback only, D-90)
 - Section ID: S30
-- Status: PENDING
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; shipped outside the planned gates in =27e68e8=; no G-S30-VER/REV/SEC reports)
 - Origin: user request "add voice for ability back off cooldown as a new module"; Q-15 "Spells I type in".
 - Workstreams / tasks: WS-34 / T-42 (code), WS-35 / T-43 (integrated gates), WS-36 / T-44 (user game gate).
 - Acceptance: AC-101, AC-102, AC-103, AC-104 (busted 156, luacheck 36 files, zip 0.16.0), AC-105, plus AC-01, AC-07, AC-16, AC-D7, AC-D8, AC-D9, AC-D10, AC-D12.
@@ -3842,20 +4138,20 @@ Lead protocol for each section:
   - =validate= in =CooldownVoice.lua=: no match (D-71).
 - Gates: G-S30-VER → G-S30-REV → G-S30-SEC (security required), then G-INT-VER/REV/SEC over S27-S30 (T-43), then G-S30-GAME (T-44). S27-S30 become =PASSED= together on a clean G-S30-GAME paste with the latest verifier PASSED and reviewer and security CLEAR (D-69). G-FU-NP is recorded separately in E-FU-NP; a failure there reopens S25 only.
 - Evidence:
-  - E-S30-HUNKS = (pending)
-  - E-S30-VER = (pending)
-  - E-S30-REV = (pending)
-  - E-S30-SEC = (pending)
-  - E-S27-30-INT-VER = (pending)
-  - E-S27-30-INT-REV = (pending)
-  - E-S27-30-INT-SEC = (pending)
-  - E-S30-GAME = (pending: tag, CI run id, pasted log, lines for steps 1-8)
+  - E-S30-HUNKS = not recorded; CooldownVoice landed in commit =27e68e8= outside this plan's run.
+  - E-S30-VER = no G-S30-VER report. Lead check on HEAD =14a0c2d= (D-112): =nix__flake_check= exit 0 "all checks passed!"; =nix__build= =checks.x86_64-linux.busted=, =pre-commit-check=, =lua-syntax=, =release= exit 0 (counts not printed; outputs cached).
+  - E-S30-REV = not run (waived by D-112).
+  - E-S30-SEC = not run (waived by D-112).
+  - E-S27-30-INT-VER = superseded by E-S27-33-INT-VER (D-103), which did not include CooldownVoice.
+  - E-S27-30-INT-REV = superseded by E-S27-33-INT-REV (D-103).
+  - E-S27-30-INT-SEC = superseded by E-S27-33-INT-SEC (D-103).
+  - E-S30-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38 (0.19.0, tag =v0.19.0= / =v0.19.0-fix.1=, CI run id not given): =CooldownVoice/enabled state= PASS, =apis= PASS, =voices= PASS =2 2 true=, =ticker= PASS =false 0=; =spells= and =cooldown info= SKIP "no spells"; =spoken= INFO 0. UNVERIFIED: steps 1-3 (see E-S27/S28/S29-GAME), step 5 speech at cooldown end and GCD silence (A-36, R-48), step 7 off/on, step 8 BugSack / =ADDON_ACTION_BLOCKED=.
   - E-FU-NP = (pending: G-FU-NP steps 1-5, now from the G-S9-GAME paste per D-90)
 - Next: S31.
 
 ** S31 - Media core: global font and bar texture, per-module override; RangeText adopts (0.17.0)
 - Section ID: S31
-- Status: IN_PROGRESS (run D-101; busted 180, luacheck 40 files; D-104a; no =git add -N=, DU-S31)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S31-VER (attempt 2) / G-S31-REV / G-S31-SEC)
 - Origin: user request "I want all modules to be able to benefit if I download an addon like SharedMedia"; Q-18 "Fonts and bar textures"; Q-19 "One global choice + per-module override". Replaces the old optional Nameplates-only S31 (Q-14).
 - Workstreams / tasks: WS-37 / T-45. No game gate of its own; closed by G-S33-GAME (D-77).
 - Acceptance: AC-107, AC-108 (RangeText part), AC-109 (RangeText part), AC-110 (RangeText part), AC-111, AC-112 (=Media/*=, =RangeText/font=, =font preview=), AC-113 (busted 159, 37 files), plus AC-01, AC-16, AC-D7, AC-D9, AC-D10 (amended by D-75), AC-D13.
@@ -3911,11 +4207,12 @@ Lead protocol for each section:
   - E-S31-REV = G-S31-REV =Overall verdict: CLEAR= (reviewer, opus): load/enable order confirmed (Core → FontLogic → Media before Modules). Notes: =Migrate= tie-break now prefers the alphabetically first alias of a legacy path (same file); =reportedBadFonts= never cleared; RangeText failures don't feed =unusableFonts=; =previewFailed["*"]= sticky until =/reload=.
   - E-S31-SEC = G-S31-SEC =Overall verdict: CLEAR= (security, sonnet); SEC-S31-01 informational: no =OnDisable= unregister (Media is never disabled).
   - Code gates PASSED/CLEAR/CLEAR; stays =IN_PROGRESS= until G-S33-GAME.
+  - E-S31-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38: =Media/global font= PASS =Friz Quadrata TT Fonts\FRIZQT__.TTF=, =global statusbar= PASS =Solid Interface\Buttons\WHITE8X8=, =RangeText/font= PASS =* Fonts\FRIZQT__.TTF 18 OUTLINE Friz Quadrata TT=; =Media/fonts= INFO =11 0=, =statusbars= 4, =media addons= 0. Files are tracked since =6b0406c=, so DU-S31 is moot.
 - Next: S32.
 
 ** S32 - Options window: "Use global" and bar-texture previews, window font
 - Section ID: S32
-- Status: IN_PROGRESS (run D-101; busted 180, 40 files)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S32-VER-2 / G-S32-REV-2 / G-S32-SEC-2)
 - Workstreams / tasks: WS-38 / T-46. No game gate of its own (G-S33-GAME).
 - Acceptance: AC-107 (window font after =/reload=), AC-112 (=OptionsWindow/font=, =font preview=), AC-113 (busted 159), plus AC-01, AC-16, AC-32, AC-82, AC-83.
   - Regressions to protect: AC-82/AC-83 (font previews only in font lists; every other select in the window font), AC-34 (look), D-29 re-render rules, pooled-row resets (R-32).
@@ -3937,11 +4234,12 @@ Lead protocol for each section:
   - E-S32-REV = G-S32-REV =Overall verdict: FINDINGS= (R-S32-01, R-S32-02, both Low) → G-S32-REV-2 =Overall verdict: CLEAR=.
   - E-S32-SEC = G-S32-SEC =Overall verdict: CLEAR= and G-S32-SEC-2 =Overall verdict: CLEAR= (security, sonnet).
   - Code gates PASSED/CLEAR/CLEAR; stays =IN_PROGRESS= until G-S33-GAME.
+  - E-S32-GAME = PASSED on the user's instruction (D-112). Paste 20:17:38: =OptionsWindow/font= PASS =Fonts\ARIALN.TTF Fonts\ARIALN.TTF= (=optionsFont=Arial Narrow=), =font preview= INFO 0, =esc= and =config callback= PASS. UNVERIFIED: the bar-texture strips and the window-font change after =/reload= (G-S33-GAME steps 2, 6).
 - Next: S33.
 
 ** S33 - Nameplates: font and bar texture via Media; release 0.17.0 (game gate for S31-S33)
 - Section ID: S33
-- Status: IN_PROGRESS (run D-101; busted 180, 40 files; D-104b-d; G-S33-GAME combined per D-103)
+- Status: PASSED (user instruction after the 0.19.0 =/mui test= paste of 20:17:38, D-112; code gates G-S33-VER / G-S33-REV / G-S33-SEC and G-S27-33-INT-VER / REV / SEC)
 - Workstreams / tasks: WS-39 / T-47 (code), WS-40 / T-48 (user game gate).
 - Acceptance: AC-108, AC-109, AC-110, AC-111, AC-112 (=Nameplates/media=), AC-113, plus AC-01, AC-16, AC-18, AC-19, AC-37, AC-91, AC-D7.
   - Regressions to protect: AC-18/AC-19 (bar colours, cast colour and shield), AC-39..AC-44 texts, AC-90..AC-93 and AC-96..AC-100 (S25/S27/S29 behaviour), D-58/D-59 (no button access while auras are secret).
@@ -3980,8 +4278,136 @@ Lead protocol for each section:
   - E-S31-33-INT-VER = superseded by E-S27-33-INT-VER (D-103; scope S27-S35), recorded in the Handoff.
   - E-S31-33-INT-REV = superseded by E-S27-33-INT-REV (D-103).
   - E-S31-33-INT-SEC = superseded by E-S27-33-INT-SEC (D-103).
-  - E-S33-GAME = (pending: tag, CI run id, pasted log, lines for steps 1-9)
+  - E-S33-GAME = PASSED on the user's instruction (D-112). Paste (user, 20:17:38, addon 0.19.0, client 1.60.1 build 70425 Oct 14 2026, interface 16001, MAGE enUS, in combat; tag =v0.19.0= / =v0.19.0-fix.1= rather than =v0.17.0-s33.1=, CI run id not given): 171 checks, 117 PASS, 0 FAIL, 6 SKIP, 48 INFO. Step 1: =Media/global font= PASS, =global statusbar= PASS, =Nameplates/media= PASS =Fonts\FRIZQT__.TTF x3 130871 Solid Interface\Buttons\WHITE8X8=, =RangeText/font= PASS; =Nameplates/health colour= PASS =1 1 0 1 1 0=. UNVERIFIED: the visual "same as 0.16.0 / cast bar orange" line, steps 2-8 (lists, global and per-module changes, in-combat change, options font after =/reload=, SharedMedia addon, profiles) and step 9 (BugSack, =ADDON_ACTION_BLOCKED=, visual issues).
 - Next: S7 per the board (S7 and S9 follow the Media contract, D-76).
+
+** S36-S37 lead protocol (one wave, D-127)
+This replaces the sequential "Lead protocol for each section" above for S36 and S37 only.
+1. Before dispatch: record the baseline E-PLAN-BASE-3 from =/home/merrinx/Projects/merrinxui=: =nix develop -c busted spec= (successes / failures / errors) and =nix develop -c luacheck MerrinxUI spec= (warnings / errors / files). Confirm =git status --short= shows no change in any owned path of T-53..T-57.
+2. Mark S36 and S37 =IN_PROGRESS= (each before dispatching its first task).
+3. Open one coordination channel =merrinxui-s36-37= (bus) and dispatch T-53, T-54, T-55, T-56 and T-57 concurrently, one =implementor= each. Every packet carries: =Workflow intent: implementation=, task ID, section ID, workstream ID, AC IDs, the exact owned paths, the skills to load, the "Shared interfaces: S36-S37" block, the task's steps, its verifier checks, the stop conditions and the coordination rules below.
+4. As each task reports done, dispatch its verifier immediately (=Workflow intent: verification=, the task's checks only). FAILED/UNVERIFIED → a bounded remediation packet to the same task owner, then re-verify. Never hold a task for a sibling.
+5. When all five per-task verifiers are =PASSED=: integrated verifier G-S36-37-INT-VER over the whole change set; then reviewer G-S36-37-INT-REV and security G-S36-37-INT-SEC in parallel (security required). Findings → remediation batches per owned path → re-verify → re-review until PASSED / CLEAR / CLEAR.
+6. Mark S36 and S37 =PASSED= only when every task's latest verifier report is =PASSED= and the final reviewer and security reports are =CLEAR=; record report IDs and literal command outputs in the evidence fields (planned expectations are not evidence).
+7. After the final gate (not between tasks): commit grouping by owned paths, proposed to the user (Git writes need approval): (a) =MerrinxUI/Modules/DamageMeter.lua=, =MerrinxUI/Modules/Professions.lua=, =MerrinxUI/Modules/Nameplates.lua= (S36); (b) =MerrinxUI/Modules/ActionBarLogic.lua=, =spec/actionbars_spec.lua=, =MerrinxUI/Modules/ActionBars.lua=, =MerrinxUI/Bindings.xml=, =.luacheckrc=, =MerrinxUI/MerrinxUI.toc= (S37). The plan file is not committed. Then the user tags =v0.20.0-s37.1= and runs G-S37-GAME.
+8. Formatters run only on a task's own files (=stylua <owned .lua files>=), never on =MerrinxUI= as a whole.
+
+** S36 - Background opacity: DamageMeter, Professions, Nameplates (0.20.0)
+- Section ID: S36
+- Status: PASSED (T-53, T-54, T-55 verifiers PASSED; G-S36-37-INT-VER PASSED, INT-REV CLEAR, INT-SEC CLEAR; lead protocol step 6. Visual confirmation still rides G-S37-GAME steps 1-2, 9.)
+- Workstreams / tasks: WS-43 / T-53 (DamageMeter), WS-44 / T-54 (Professions), WS-45 / T-55 (Nameplates). All three are ready at once and independent of each other and of S37.
+- Acceptance: AC-129, AC-130, AC-131, AC-138 (=background= checks), plus AC-01, AC-16, AC-D7.
+  - Regressions to protect: AC-22 / AC-117..AC-121 (meter rows, title, menus, Reset), AC-125 (DamageMeter media), Professions window and menu, AC-18 / AC-19 / AC-96..AC-100 and AC-108..AC-111 (plate bars, colours, cast colour, texts, media); default look identical to 0.19.0.
+- Dependencies: none (union of task edges is empty).
+- Owned paths: T-53 =MerrinxUI/Modules/DamageMeter.lua=; T-54 =MerrinxUI/Modules/Professions.lua=; T-55 =MerrinxUI/Modules/Nameplates.lua=.
+- Steps T-53 (DamageMeter):
+  1. Defaults =bgOpacity = 75=, =headerOpacity = 100=.
+  2. =OnInitialize=: =self.bg = bg=, =self.headerBg = headerBg=; delete =bg:SetAlpha(0.75)=; vertex colours unchanged.
+  3. =Layout()=: =self.bg:SetAlpha(profile.bgOpacity / 100)=, =self.headerBg:SetAlpha(profile.headerOpacity / 100)=.
+  4. Options =bgOpacity= (10), =headerOpacity= (11); =reset= order 10 → 12.
+  5. Check =background= appended last in =GetDebugChecks=.
+- Steps T-54 (Professions): as T-53 with option orders 4 and 5; no reset.
+- Steps T-55 (Nameplates):
+  1. Default =bgOpacity = 80=.
+  2. =CreateStyledFrame=: the three background =SetVertexColor(0.1, 0.1, 0.1, 0.8)= become =(0.1, 0.1, 0.1, 1)=; store =frame.healthBg=, =frame.powerBg=, =frame.castBg= next to the existing =frame.*= assignments.
+  3. =ApplySize(frame)=: after =frame:SetSize(...)=, three =SetAlpha(profile.bgOpacity / 100)= lines.
+  4. Option =bgOpacity= order 23.
+  5. Check =background= per the contract.
+- Per-task verifier checks (cwd =/home/merrinx/Projects/merrinxui=; each meaningful while siblings are in flight):
+  #+begin_src sh
+  nix develop -c luacheck MerrinxUI/Modules/DamageMeter.lua      # T-53: 0 warnings / 0 errors
+  nix develop -c stylua --check MerrinxUI/Modules/DamageMeter.lua # exit 0
+  nix develop -c luac -p MerrinxUI/Modules/DamageMeter.lua        # exit 0
+  nix develop -c busted spec                                      # 0 failures / 0 errors (count = baseline, or baseline + 2 once T-56 landed)
+  # T-54 / T-55: same four commands with MerrinxUI/Modules/Professions.lua / MerrinxUI/Modules/Nameplates.lua
+  #+end_src
+  Grep gates (=eca__grep=):
+  - T-53: =bgOpacity = 75=, =headerOpacity = 100=, =self\.bg = bg=, =self\.headerBg = headerBg=, =name = "background"= present; =SetAlpha\(0\.75\)= absent; the =reset= option has =order = 12=.
+  - T-54: the same with orders 4 / 5 (no reset).
+  - T-55: =SetVertexColor\(0\.1, 0\.1, 0\.1, 0\.8\)= absent; =SetVertexColor\(0\.1, 0\.1, 0\.1, 1\)= 3 matches; =bgOpacity = 80=, =frame\.healthBg=, =frame\.powerBg=, =frame\.castBg=, =order = 23=, =name = "background"= present.
+  - Read-only: inside each =GetDebugChecks= body no =SetAlpha|:Show\(|:Hide\(|SetAttribute|StateDriver|SetOverride|SetFrameRef= added (diff against HEAD).
+  - =git diff --stat= for the task lists only its owned file.
+- Gates: per-task verifiers G-S36-VER-T53, G-S36-VER-T54, G-S36-VER-T55; final gate G-S36-37-INT-VER → G-S36-37-INT-REV ∥ G-S36-37-INT-SEC; user G-S37-GAME (steps 1-2, 9).
+- Evidence (fill with actual reports and outputs):
+  - E-S36-T53-HUNKS = implementor (sonnet): DamageMeter.lua only: defaults =bgOpacity = 75=, =headerOpacity = 100=; =OnInitialize= stores =self.bg= / =self.headerBg=, =bg:SetAlpha(0.75)= removed, vertex colours unchanged; =Layout()= sets both alphas; options =bgOpacity= 10 / =headerOpacity= 11 (range 0..100 step 5, set + =Refresh=), =reset= 10 → 12; =background= check appended after =redraw= (the real last check; the planner's list omitted =available= and =redraw=).
+  - E-S36-T53-VER = G-S36-VER-T53 verifier (haiku), cwd repo root: =nix develop -c luacheck MerrinxUI/Modules/DamageMeter.lua= exit 0 (0/0); =stylua --check= exit 0; =luac -p= exit 0; =nix develop -c busted spec= exit 0 =226 successes / 0 failures / 0 errors=; grep gates C-5..C-23 all PASSED (=SetAlpha(0.75)= 0, =reset= order 12, check last, ±0.01, secret → INFO, read-only); diagnostics clean. Overall verdict: PASSED.
+  - E-S36-T54-HUNKS = implementor (sonnet): Professions.lua only: same shape as T-53, options orders 4 / 5, no reset; =background= check appended last with =issecretvalue= guard.
+  - E-S36-T54-VER = G-S36-VER-T54 verifier (haiku): luacheck 0/0, stylua exit 0, luac exit 0, busted =226 / 0 / 0=; gates P1..P18 PASSED (=self.bg = bg= l.74, =self.headerBg = headerBg= l.84, options 4/5, no reset, Layout l.216-217, check l.548-567 read-only); diagnostics clean. Overall verdict: PASSED.
+  - E-S36-T55-HUNKS = implementor (sonnet): Nameplates.lua only: default =bgOpacity = 80=; three background =SetVertexColor(0.1, 0.1, 0.1, 1)=; =frame.healthBg/powerBg/castBg= stored; =ApplySize= sets the three alphas right after =SetSize=; option =bgOpacity= order 23; =background= check appended after =media= (SKIP "module disabled" / "no plates").
+  - E-S36-T55-VER = G-S36-VER-T55 verifier (haiku): luacheck 0/0, stylua exit 0, luac exit 0, busted =226 / 0 / 0=; =SetVertexColor(0.1, 0.1, 0.1, 0.8)= 0 matches, =(0.1, 0.1, 0.1, 1)= 3 (l.473/501/515); =Refresh= → =ApplySize= (l.167); option l.1361-1375; check l.2300-2331 read-only; no other cast-bar/Media change; diagnostics clean. Overall verdict: PASSED.
+  - E-S36-37-INT-VER / REV / SEC = (see Final gate)
+  - E-S37-GAME = (see S37)
+- Next: S37 (no ordering between them; S37 is only the next resumption point).
+
+** S37 - Action bars: opacity, mouseover, hide in combat, key toggle; release 0.20.0
+- Section ID: S37
+- Status: PASSED (D-128; T-56, T-57 verifiers PASSED; final gate PASSED / CLEAR / CLEAR; E-S37-GAME = the 0.20.0 paste, all =ActionBars/*= checks PASS, =toggle= INFO "no keys bound false")
+- Workstreams / tasks: WS-46 / T-56 (pure logic + spec), WS-47 / T-57 (runtime, =Bindings.xml=, =.luacheckrc=, TOC), WS-48 / T-58 (user: commit, tag, G-S37-GAME, after the final gate).
+- Acceptance: AC-132..AC-137, AC-138 (ActionBars checks), AC-139, AC-140, plus AC-01, AC-16, AC-20, AC-21, AC-D7.
+  - Regressions to protect: AC-20 (bars, bar 1 paging, override/vehicle/pet battle hide on bar 1, combat-deferred layout), AC-21 and D-93 (keybinds fire exactly once; pet battle owner), the existing =bars=, =paging=, =driver=, =bindings=, =layout <b>=, =actions <b>= checks, AC-37 (no Blizzard frame writes, no new hooks).
+- Dependencies: none. T-57 calls =L.VisibilityDriver= / =L.BarAlpha= by the contract names; until T-56 lands, T-57's busted run is unaffected (no spec loads =ActionBars.lua=) and its luacheck/stylua/luac checks are file-local.
+- Owned paths: T-56 =MerrinxUI/Modules/ActionBarLogic.lua=, =spec/actionbars_spec.lua=; T-57 =MerrinxUI/Modules/ActionBars.lua=, =MerrinxUI/Bindings.xml= (new), =.luacheckrc=, =MerrinxUI/MerrinxUI.toc=.
+- Steps T-56: spec first (the two =it= blocks, fail), then =L.VisibilityDriver= and =L.BarAlpha= after =L.BindingPrefix=; no other change.
+- Steps T-57:
+  1. Binding globals at file top; =OnInitialize= / =OnEnable= additions.
+  2. Defaults =opacity = 100=, =mouseover = false=, =hideInCombat = false=, =keyToggle = false= in the =for b = 1, 8= defaults loop.
+  3. =CreateBar=: =_onstate-vis= snippet.
+  4. =Apply()=: toggle button, per-bar =vis= driver block, disabled-branch changes, fader show/hide, =UpdateAlphas()=; the bar 1 =page= driver, pet battle owner and =ApplyBindings()= call stay.
+  5. =UpdateAlphas()= method; =ApplyBindings()= toggle-key block.
+  6. Options orders 5..8 in =barGroup(b)=.
+  7. Checks =visibility <b>=, =alpha <b>= (in the loop that adds =layout <b>=), =toggle=.
+  8. =MerrinxUI/Bindings.xml=, =.luacheckrc= =globals=, TOC =## Version: 0.20.0=.
+- Per-task verifier checks (cwd =/home/merrinx/Projects/merrinxui=):
+  #+begin_src sh
+  # T-56
+  nix develop -c busted spec/actionbars_spec.lua                                     # 13 successes / 0 / 0
+  nix develop -c busted spec                                                         # baseline + 2 / 0 / 0
+  nix develop -c luacheck MerrinxUI/Modules/ActionBarLogic.lua spec/actionbars_spec.lua   # 0 / 0
+  nix develop -c stylua --check MerrinxUI/Modules/ActionBarLogic.lua spec/actionbars_spec.lua
+  # T-57
+  nix develop -c luacheck MerrinxUI/Modules/ActionBars.lua                           # 0 / 0 (uses the new .luacheckrc globals)
+  nix develop -c stylua --check MerrinxUI/Modules/ActionBars.lua
+  nix develop -c luac -p MerrinxUI/Modules/ActionBars.lua
+  nix develop -c busted spec/debug_coverage_spec.lua                                 # 0 failures (TOC still parses; ActionBars keeps GetDebugChecks)
+  nix build --no-link --print-out-paths "path:/home/merrinx/Projects/merrinxui#merrinxui"   # then: ls <out>/MerrinxUI/Bindings.xml exists; grep '## Version: 0.20.0' <out>/MerrinxUI/MerrinxUI.toc
+  #+end_src
+  Grep gates (=eca__grep= on =MerrinxUI/Modules/ActionBars.lua=): =StateDriver\(h, "visibility"= absent; =RegisterStateDriver\(h, "vis"= 1; =UnregisterStateDriver\(h, "vis"= 2; =SecureHandlerClickTemplate= 1; =MerrinxUIBarToggle= ≥ 2; =MERRINXUI_TOGGLEBARS= ≥ 2; =MERRINXUI_LOCK_CHANGED= 1; =RegisterForClicks\("AnyDown"\)= 1; =HookScript= absent; =hooksecurefunc= absent. =MerrinxUI/Bindings.xml= equals the contract. =.luacheckrc= diff is exactly the =globals= table. TOC diff is exactly the version line. Read-only check bodies as in S36. T-56: =ActionBarLogic.lua= reads no WoW global (D-12).
+- Steps T-58 (user, G-S37-GAME, after the final gate; 0.20.0, full client restart): =/console scriptErrors 1=, =/console taintLog 1=, clear BugSack, =/mui debug on=, clear the log; ActionBars, DamageMeter, Professions, Nameplates enabled. After every step run =/mui test=:
+  1. Defaults: no FAIL; =DamageMeter/background= PASS =0.75 1=, =Professions/background= PASS =0.75 1=, =Nameplates/background= PASS =0.8 0.8 0.8= (hostile plate in view), =ActionBars/visibility N= and =alpha N= PASS for each enabled bar, =ActionBars/toggle= INFO "no keys bound". One line: does everything look as in 0.19.0?
+  2. DamageMeter background 0 / header 50, Professions 30 / 100, Nameplates 30: the visuals follow at once; =background= PASS with the new values. Change one of them in combat: applies (no error).
+  3. Bar 2 opacity 50: the whole bar (icons, hotkeys, cooldowns) is at half alpha; =alpha 2= PASS =0.5 0.5= (A-47).
+  4. Bar 2 "Show on mouseover": invisible; hover shows it at 50 %; leaving through a gap between buttons hides it; =/mui unlock= shows it, =/mui lock= hides it; =/mui test= with the mouse away: =alpha 2= PASS =0 0=. Repeat the hover in combat (A-48, A-49, R-64, R-65).
+  5. Bar 3 "Hide in combat", attack a target dummy: bar 3 hides; a bar 3 keybind still casts (A-45); in-combat =/mui test=: =visibility 3= PASS with state =hide=; leaving combat brings it back (A-44). Bar 1 still hides in a vehicle / override bar if you can reach one (optional).
+  6. Key Bindings > AddOns: "Toggle action bars" under "MerrinxUI" (A-43, R-74); bind a key; =toggle= PASS =1 1 false=. Bars 2 and 3 "Hide with key toggle" on: one press hides both, exactly one toggle (R-66); =toggle= shows =barshidden true=, =visibility 2/3= PASS; press again in combat: they return (A-46); bound keys on hidden bars still cast.
+  7. While toggled hidden, turn "Hide with key toggle" off on bar 3: bar 3 reappears; turn it on again: it hides (R-72).
+  8. Put a spell on cooldown on the invisible mouseover bar: does the swipe or bling show (R-68)?
+  9. =/reload=: settings persist; the toggle state is "shown" again. =/mui log=, paste, plus: BugSack clean? any =ADDON_ACTION_BLOCKED=? any MerrinxUI line in =Logs/taint.log=? anything visually wrong?
+- Gates: G-S37-VER-T56, G-S37-VER-T57; final gate G-S36-37-INT-*; G-S37-GAME (closes S36 and S37, D-126).
+- Evidence (fill with actual reports and outputs):
+  - E-PLAN-BASE-3 = verifier (haiku), HEAD =14a0c2d=, cwd =/home/merrinx/Projects/merrinxui=, before dispatch: =nix develop -c busted spec= exit 0, =224 successes / 0 failures / 0 errors / 0 pending=; =nix develop -c luacheck MerrinxUI spec= exit 0, =Total: 0 warnings / 0 errors in 59 files=; =nix develop -c stylua --check MerrinxUI spec= exit 0; =git status --short= only =M merrinxui-plan.org=, =?? sharedmedia-fonts-plan.org=; =spec/actionbars_spec.lua= 11 =it(=; TOC =## Version: 0.19.0=. Overall verdict: PASSED. Expected after S37: busted 226/0/0, luacheck 0/0 in 59 files (=Bindings.xml= is not Lua).
+  - E-S37-T56-HUNKS = implementor (sonnet): spec first (red: =busted spec/actionbars_spec.lua= 11 successes / 2 errors, nil =VisibilityDriver= / =BarAlpha=), then =L.VisibilityDriver= and =L.BarAlpha= after =L.BindingPrefix= (green 13/0/0); the two contract =it= blocks appended verbatim; no other change; posted =contract-ready= to T-57.
+  - E-S37-T56-VER = G-S37-VER-T56 verifier (haiku): =nix develop -c busted spec/actionbars_spec.lua= exit 0 =13 / 0 / 0=; =nix develop -c busted spec= exit 0 =226 / 0 / 0= (baseline 224 + 2); luacheck 0/0 in 2 files; stylua exit 0; diff = only the two functions and two =it= blocks; no WoW global; diagnostics clean. Overall verdict: PASSED.
+  - E-S37-T57-HUNKS = implementor (sonnet): ActionBars.lua per contract (BINDING_* globals, per-bar defaults, alphas/visDrivers/fader, =MERRINXUI_LOCK_CHANGED= → =UpdateAlphas=, =_onstate-vis=, =MerrinxUIBarToggle= + =_onclick= (stylua reflowed the =SetAttribute= calls like the existing =_onstate-petbattle=; snippet bodies unchanged), =vis= driver per bar, disabled branches, fader show/hide, =UpdateAlphas=, toggle override bindings, options 5..8, checks =toggle=, =visibility <b>=, =alpha <b>=); =MerrinxUI/Bindings.xml= new (4 lines, tab, LF); =.luacheckrc= =globals= table; TOC =0.19.0= → =0.20.0=. Implementors had no =eca__spawn_agent=, so the lead spawned all five per-task verifiers.
+  - E-S37-T57-VER = G-S37-VER-T57 verifier (haiku): luacheck 0/0, stylua exit 0, luac exit 0; =busted spec/debug_coverage_spec.lua= =4 / 0 / 0=; =nix build --no-link --print-out-paths "path:/home/merrinx/Projects/merrinxui#merrinxui"= exit 0 → =/nix/store/qrb222bczz6b0gk7yf986gwjkf0n358r-merrinxui=, =Bindings.xml= present, =## Version: 0.20.0=; grep gates: visibility driver 0, =RegisterStateDriver(h, "vis"= 1, =UnregisterStateDriver(h, "vis"= 2, =SecureHandlerClickTemplate= 1, =MerrinxUIBarToggle= 3, =MERRINXUI_TOGGLEBARS= 3, =MERRINXUI_LOCK_CHANGED= 1, =AnyDown= 1, =HookScript= 0, =hooksecurefunc= 0; Bindings.xml exact, not in TOC; =.luacheckrc= / TOC diffs exact; checks read-only; diagnostics clean. Overall verdict: PASSED.
+  - E-S37-GAME = (tag, CI run id, pasted =/mui log=, step lines 1-9)
+- Next: -
+
+** Final gate (S36-S37)
+- Runs after all five per-task verifiers are =PASSED=.
+- G-S36-37-INT-VER (=Workflow intent: verification=, verifier; cwd =/home/merrinx/Projects/merrinxui=):
+  #+begin_src sh
+  nix develop -c busted spec                                   # E-PLAN-BASE-3 + 2 successes / 0 / 0
+  nix develop -c luacheck MerrinxUI spec                       # 0 warnings / 0 errors (file count = baseline)
+  nix develop -c stylua --check MerrinxUI spec                 # exit 0
+  nix flake check -L --no-update-lock-file path:/home/merrinx/Projects/merrinxui   # exit 0
+  nix build --no-link --print-out-paths "path:/home/merrinx/Projects/merrinxui#release"   # then unzip -l <out>/MerrinxUI.zip | grep -E 'MerrinxUI/Bindings.xml'; unzip -p <out>/MerrinxUI.zip MerrinxUI/MerrinxUI.toc | grep '## Version: 0.20.0'
+  #+end_src
+  Also =nix__flake_check= (git tree): expected to pass but cannot see the untracked =Bindings.xml= (R-70) — packaging on the git tree stays UNVERIFIED until the user stages it. Changed set = exactly the 9 owned paths (8 modified + =Bindings.xml= new) besides this plan; all S36/S37 grep gates re-run; =eca__editor_diagnostics= clean.
+- G-S36-37-INT-REV (=Workflow intent: review=, reviewer) and G-S36-37-INT-SEC (=Workflow intent: security=, security) in parallel over the full diff. Security covers: restricted snippets (no insecure data reaching =_onclick= / =_onstate-vis=), override-binding scope and owner, globals (only the two =BINDING_*=), taint (insecure code touches protected headers only through =SetAlpha= and out-of-combat =Apply=), no Blizzard frame writes or hooks (AC-37), checks read-only, no secret compared (=UpdateAlphas= guard), no CVar change.
+- Evidence:
+  - E-S36-37-INT-VER = G-S36-37-INT-VER verifier (haiku), cwd repo root: =nix develop -c busted spec= exit 0 =226 successes / 0 failures / 0 errors=; =nix develop -c luacheck MerrinxUI spec= exit 0 =0 warnings / 0 errors in 59 files=; =nix develop -c stylua --check MerrinxUI spec= exit 0; =luac -p= on the 5 changed Lua files exit 0; =nix flake check -L --no-update-lock-file path:/home/merrinx/Projects/merrinxui= exit 0; =nix build --no-link --print-out-paths "path:/home/merrinx/Projects/merrinxui#release"= exit 0 → =/nix/store/581xlrm22bywccf3bmfsx37xp15pa4l0-merrinxui-release=, zip lists =MerrinxUI/Bindings.xml= (111 bytes), TOC =## Version: 0.20.0=; changed set = the 9 owned paths (8 M + =?? MerrinxUI/Bindings.xml=) plus the two =.org= files; all S36/S37 grep gates re-run PASSED; read-only check bodies; diagnostics clean. =nix__flake_check= (git tree) exit 0 but cannot see untracked =Bindings.xml=: git-tree packaging UNVERIFIED (R-70, expected) until the user stages it. Overall verdict: PASSED.
+  - E-S36-37-INT-REV = G-S36-37-INT-REV reviewer (opus), full diff vs HEAD =14a0c2d= + =Bindings.xml=: no actionable findings; contract matched (defaults reproduce 0.19.0 look, new =SetAlpha= reached from =OnEnable= / =Refresh= / =OnMediaChanged= / =StyleUnit=, option orders without clashes, =_onstate-vis= / =_onclick= / =Apply= consistent, bar 1 page + override/vehicle/petbattle hide kept, D-93 owner unchanged, =self.alphas= cache safe, checks read-only, no new comments or dead code). Non-actionable: duplicated teardown block in the two disabled branches (optional refactor), toggle state survives module disable/enable in-session (consistent with D-120/R-72), fader polls all enabled bars (R-73), in-game risks R-64/R-65/R-66/R-69/R-74, A-45. Overall verdict: CLEAR.
+  - E-S36-37-INT-SEC = G-S36-37-INT-SEC security (sonnet): no actionable findings. Restricted snippets are static literals (only ="bar" .. b= with loop index); override bindings only on =self.bindingOwner=, toggle keys → =MerrinxUIBarToggle= =LeftButton=, no =SaveBindings=; new globals exactly the two =BINDING_*= plus frame =MerrinxUIBarToggle=; protected calls only inside =ns.Combat:Run=-gated =Apply= / =ApplyBindings=, in-combat insecure touch is =SetAlpha= only; no =HookScript= / =hooksecurefunc= / CVar / Blizzard frame writes added; checks read-only with =issecretvalue= guards; =Bindings.xml= exact, not in TOC; no flake/CI/dependency change; SavedVariables gain only numbers and booleans. Non-actionable (game gate): R-64, R-65, R-68, R-69, R-70, R-72, R-73, R-74. Overall verdict: CLEAR.
 
 * Workstreams
 | Field               | WS-00 | WS-01 | WS-02 | WS-03 |
@@ -4140,6 +4566,31 @@ WS-31..WS-34 run strictly one after another with one lua-wow owner: they share =
 
 WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS-38 share =OptionsWindow.lua=, and WS-38/WS-39 consume the WS-37 interface. None of them runs while an S27-S30 workstream is open.
 
+| Field               | WS-43 | WS-44 | WS-45 | WS-46 | WS-47 | WS-48 |
+|---------------------+-------+-------+-------+-------+-------+-------|
+| Workstream ID       | WS-43 | WS-44 | WS-45 | WS-46 | WS-47 | WS-48 |
+| Specialist          | implementor; skills =backend=, =behavioral-validation= | implementor; skills =backend=, =behavioral-validation= | implementor; skills =backend=, =behavioral-validation= | implementor; skills =backend=, =behavioral-validation= | implementor; skills =backend=, =behavioral-validation= | user |
+| Goal                | DamageMeter background and header opacity | Professions background and header opacity | Nameplate bar background opacity | pure =VisibilityDriver= / =BarAlpha= + 2 specs | action bar opacity, mouseover, hide in combat, key toggle, =Bindings.xml=, luacheck globals, 0.20.0 | commit groups, tag =v0.20.0-s37.1=, G-S37-GAME |
+| Owned files/modules | =MerrinxUI/Modules/DamageMeter.lua= | =MerrinxUI/Modules/Professions.lua= | =MerrinxUI/Modules/Nameplates.lua= | =MerrinxUI/Modules/ActionBarLogic.lua=, =spec/actionbars_spec.lua= | =MerrinxUI/Modules/ActionBars.lua=, =MerrinxUI/Bindings.xml=, =.luacheckrc=, =MerrinxUI/MerrinxUI.toc= | none (Git writes and the game) |
+| Dependencies        | - | - | - | - | - (codes against the T-56 contract) | final gate G-S36-37-INT-* |
+| Shared interfaces   | profile keys, options, =background= check (S36-S37 block) | same as WS-43 (orders 4/5) | profile key, option 23, =background= check | produces =L.VisibilityDriver=, =L.BarAlpha= | consumes them; defines =MerrinxUIBarToggle=, =vis= / =userhidden= / =keytoggle= / =barshidden=, =MERRINXUI_TOGGLEBARS=, =BINDING_*= globals, checks | pasted =/mui log= |
+| Parallel group      | S36-37-W1 | S36-37-W1 | S36-37-W1 | S36-37-W1 | S36-37-W1 | after final gate |
+| Integration order   | 45 | 45 | 45 | 45 | 45 | 46 |
+| Targeted validation | S36 T-53 commands + grep gates | S36 T-54 commands + grep gates | S36 T-55 commands + grep gates | S37 T-56 commands | S37 T-57 commands + grep gates + package listing | G-S37-GAME steps 1-9 |
+
+WS-43..WS-47 form one wave (parallel group S36-37-W1): disjoint owned paths, no depends-on edges, every cross-task name fixed in "Shared interfaces: S36-S37".
+
+* Coordination (S36-S37)
+One bus channel =merrinxui-s36-37=; participants =lead=, =T-53=, =T-54=, =T-55=, =T-56=, =T-57=. Each task posts =done= (with its changed paths) to =lead= when finished, and =blocked= with the stop condition when it stops.
+| Task | Exchanges with | Message and payload |
+|------+----------------+---------------------|
+| T-53 | lead | =done=: hunks summary, check names; =blocked=: missing =self.bg= / =Layout= or a need to touch another file. No sibling messages (no shared file or symbol). |
+| T-54 | lead | as T-53 (keys and check shape are identical by contract, so T-53/T-54 need not talk). |
+| T-55 | lead | as T-53; =blocked= if =ApplySize= / =CreateStyledFrame= differ from the context subsection. |
+| T-56 | T-57, lead | =contract-ready= to T-57 when =L.VisibilityDriver= / =L.BarAlpha= exist with the contract signatures (informational; T-57 does not wait); =changed-assumption= to T-57 and lead only if a contract value cannot be implemented verbatim (should not happen; the lead then updates the contract and both tasks). |
+| T-57 | T-56, lead | =changed-assumption= to T-56 and lead if the runtime needs a different Logic signature (stop first; the lead decides); =requested-edit= to lead for any file outside its owned paths (expected none: =Util/Mover.lua=, =Core.lua= and =OptionsWindow.lua= stay unchanged); =blocked= for R-69-type static failures or an extra luacheck global. |
+| lead | all tasks | contract amendments (with a new D-ID), remediation packets, and the busted baseline E-PLAN-BASE-3 to every verifier. |
+
 * Registers (JSON)
 #+begin_src json
 {
@@ -4240,7 +4691,19 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "AC-113", "text": "busted 159/0/0 after S31-S33; luacheck 0/0 in 37 files; stylua; flake check; zip has Util/Media.lua and 0.17.0; LSM calls only in Util/Media.lua; no local FONT in Nameplates", "sections": ["S31","S32","S33"]},
     {"id": "AC-114", "text": "busted S7 157, S8 158, S9 165, S10 165; luacheck 36/36/39/39 files; zip has the 4 new Lua files and ## Version: 0.16.0 (D-81)", "sections": ["S7","S8","S9","S10"]},
     {"id": "AC-115", "text": "S7-S9 checks exist, are read-only and SKIP when their module is disabled", "sections": ["S7","S8","S9"]},
-    {"id": "AC-116", "text": "flake.lock adds only wow-api (rev d0b5b51f, narHash sha256-moaTf...); nix develop writes gitignored .luarc.json; nothing new in the zip", "sections": ["S10"]}
+    {"id": "AC-116", "text": "flake.lock adds only wow-api (rev d0b5b51f, narHash sha256-moaTf...); nix develop writes gitignored .luarc.json; nothing new in the zip", "sections": ["S10"]},
+    {"id": "AC-129", "text": "DamageMeter bgOpacity 75 / headerOpacity 100, options 10/11 (0..100 step 5), reset 12; live and persistent; default look unchanged", "sections": ["S36"]},
+    {"id": "AC-130", "text": "Professions bgOpacity 75 / headerOpacity 100, options 4/5; live and persistent; default look unchanged", "sections": ["S36"]},
+    {"id": "AC-131", "text": "Nameplates bgOpacity 80 (option 23) sets health/power/cast background alpha on every styled plate; default look unchanged", "sections": ["S36"]},
+    {"id": "AC-132", "text": "ActionBarLogic.VisibilityDriver and BarAlpha return the contract values; 2 new it blocks; busted baseline + 2", "sections": ["S37"]},
+    {"id": "AC-133", "text": "per-bar Opacity/Show on mouseover/Hide in combat/Hide with key toggle options 5..8, disabled while bar off, persistent", "sections": ["S37"]},
+    {"id": "AC-134", "text": "bar opacity on the whole bar; mouseover invisible until hovered incl. gaps, in and out of combat; visible while unlocked", "sections": ["S37"]},
+    {"id": "AC-135", "text": "hide in combat hides on combat start, returns after; bar 1 override/vehicle/pet battle hide kept; no ADDON_ACTION_BLOCKED", "sections": ["S37"]},
+    {"id": "AC-136", "text": "Toggle action bars binding listed; one press toggles opted-in enabled bars once, in and out of combat; others untouched; resets on /reload", "sections": ["S37"]},
+    {"id": "AC-137", "text": "hidden or invisible bars keep their key bindings", "sections": ["S37"]},
+    {"id": "AC-138", "text": "background, visibility <b>, alpha <b>, toggle checks exist, read-only, SKIP when disabled", "sections": ["S36","S37"]},
+    {"id": "AC-139", "text": "TOC 0.20.0; Bindings.xml in package and zip; luacheck globals exactly the two BINDING_*; all checks green on the integrated tree", "sections": ["S37"]},
+    {"id": "AC-140", "text": "G-S37-GAME pasted with every step on 0.20.0; no Lua error, ADDON_ACTION or taint incl. in combat", "sections": ["S36","S37"]}
   ],
   "sections": [
     {"id": "S0", "title": "In-game probes", "status": "PASSED", "deps": [], "workstreams": ["WS-00"], "tasks": ["T-00"], "acs": [], "owned_paths": [], "gates": ["G-S0-USER"], "next": "S2"},
@@ -4275,13 +4738,15 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "S24", "title": "Nameplates: keep Blizzard plate hidden, unit token fix, 0.15.0", "status": "PASSED", "deps": ["S22"], "workstreams": ["WS-27"], "tasks": ["T-32"], "acs": ["AC-01","AC-16","AC-37","AC-86","AC-87","AC-88","AC-89","AC-D7","AC-D13"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/Modules/EnemyCooldowns.lua","MerrinxUI/MerrinxUI.toc"], "gates": ["G-S24-VER","G-S24-REV","G-S24-SEC","G-S25-GAME"], "retired": ["T-33","G-S24-GAME"], "next": "S25"},
     {"id": "S25", "title": "Nameplates: debuffs via AuraContainer in and out of combat, 0.15.0 with S24 (D-55)", "status": "PASSED", "deps": ["S24"], "workstreams": ["WS-28"], "tasks": ["T-34","T-35"], "acs": ["AC-01","AC-16","AC-70","AC-90","AC-91","AC-92","AC-93","AC-D7","AC-D13"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/MerrinxUI.toc"], "gates": ["G-S25-VER","G-S25-REV","G-S25-SEC","G-INT-VER","G-INT-REV","G-INT-SEC","G-S25-GAME","G-FU-NP"], "next": "S23"},
     {"id": "S26", "title": "RangeText: hide unusable LSM fonts (Q-11 = hide)", "status": "PASSED", "deps": ["S22"], "workstreams": ["WS-29"], "tasks": ["T-36"], "acs": ["AC-01","AC-16","AC-94"], "owned_paths": ["MerrinxUI/Util/FontLogic.lua","spec/font_logic_spec.lua","MerrinxUI/Modules/RangeText.lua"], "gates": ["G-S26-VER","G-S26-REV","G-S26-SEC","G-S26-GAME"], "next": null},
-    {"id": "S27", "title": "Nameplates: level text right of the health bar, 0.16.0", "status": "PENDING", "deps": ["S25","S26"], "workstreams": ["WS-31"], "tasks": ["T-39"], "acs": ["AC-01","AC-16","AC-96","AC-97","AC-104","AC-D7","AC-D13"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/Modules/NameplateLogic.lua","spec/nameplate_spec.lua",".luacheckrc","MerrinxUI/MerrinxUI.toc"], "gates": ["G-S27-VER","G-S27-REV","G-S27-SEC","G-S30-GAME"], "next": "S28"},
-    {"id": "S28", "title": "Nameplates: debuff X/Y offsets", "status": "PENDING", "deps": ["S27"], "workstreams": ["WS-32"], "tasks": ["T-40"], "acs": ["AC-01","AC-16","AC-98","AC-104","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua"], "gates": ["G-S28-VER","G-S28-REV","G-S28-SEC","G-S30-GAME"], "next": "S29"},
-    {"id": "S29", "title": "Nameplates: CC icons, larger, on the left", "status": "PENDING", "deps": ["S28"], "workstreams": ["WS-33"], "tasks": ["T-41"], "acs": ["AC-01","AC-16","AC-37","AC-91","AC-99","AC-100","AC-104","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/Modules/NameplateLogic.lua","spec/nameplate_spec.lua"], "gates": ["G-S29-VER","G-S29-REV","G-S29-SEC","G-S30-GAME"], "next": "S30"},
-    {"id": "S30", "title": "CooldownVoice module, release 0.17.0 per D-81 (game gate for S27-S30; G-FU-NP moved to G-S9-GAME, D-90)", "status": "PENDING", "deps": ["S29"], "workstreams": ["WS-34","WS-35","WS-36"], "tasks": ["T-42","T-43","T-44"], "acs": ["AC-01","AC-07","AC-16","AC-101","AC-102","AC-103","AC-104","AC-105","AC-D7","AC-D8","AC-D9","AC-D10","AC-D12"], "owned_paths": ["MerrinxUI/Modules/CooldownVoiceLogic.lua","MerrinxUI/Modules/CooldownVoice.lua","spec/cooldown_voice_logic_spec.lua","MerrinxUI/MerrinxUI.toc",".luacheckrc"], "gates": ["G-S30-VER","G-S30-REV","G-S30-SEC","G-S27-30-INT-VER","G-S27-30-INT-REV","G-S27-30-INT-SEC","G-S30-GAME"], "next": null},
-    {"id": "S31", "title": "Media core: global font/bar texture + per-module override; RangeText adopts, 0.17.0", "status": "PENDING", "deps": ["S30"], "workstreams": ["WS-37"], "tasks": ["T-45"], "acs": ["AC-01","AC-16","AC-107","AC-108","AC-109","AC-110","AC-111","AC-112","AC-113","AC-D7","AC-D9","AC-D10","AC-D13"], "owned_paths": ["MerrinxUI/Util/FontLogic.lua","spec/font_logic_spec.lua","MerrinxUI/Util/Media.lua","MerrinxUI/MerrinxUI.toc","MerrinxUI/Debug/Debug.lua","MerrinxUI/Modules/RangeText.lua","MerrinxUI/Options/OptionsWindow.lua"], "gates": ["G-S31-VER","G-S31-REV","G-S31-SEC","G-S33-GAME"], "next": "S32"},
-    {"id": "S32", "title": "Options window: Use global and bar-texture previews, window font", "status": "PENDING", "deps": ["S31"], "workstreams": ["WS-38"], "tasks": ["T-46"], "acs": ["AC-01","AC-16","AC-32","AC-82","AC-83","AC-107","AC-112","AC-113"], "owned_paths": ["MerrinxUI/Options/OptionsWindow.lua"], "gates": ["G-S32-VER","G-S32-REV","G-S32-SEC","G-S33-GAME"], "next": "S33"},
-    {"id": "S33", "title": "Nameplates: font and bar texture via Media, release 0.17.0 (game gate for S31-S33)", "status": "PENDING", "deps": ["S32"], "workstreams": ["WS-39","WS-40"], "tasks": ["T-47","T-48"], "acs": ["AC-01","AC-16","AC-18","AC-19","AC-37","AC-91","AC-108","AC-109","AC-110","AC-111","AC-112","AC-113","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua"], "gates": ["G-S33-VER","G-S33-REV","G-S33-SEC","G-S31-33-INT-VER","G-S31-33-INT-REV","G-S31-33-INT-SEC","G-S33-GAME"], "next": null}
+    {"id": "S27", "title": "Nameplates: level text right of the health bar, 0.16.0", "status": "PASSED", "deps": ["S25","S26"], "workstreams": ["WS-31"], "tasks": ["T-39"], "acs": ["AC-01","AC-16","AC-96","AC-97","AC-104","AC-D7","AC-D13"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/Modules/NameplateLogic.lua","spec/nameplate_spec.lua",".luacheckrc","MerrinxUI/MerrinxUI.toc"], "gates": ["G-S27-VER","G-S27-REV","G-S27-SEC","G-S30-GAME"], "next": "S28"},
+    {"id": "S28", "title": "Nameplates: debuff X/Y offsets", "status": "PASSED", "deps": ["S27"], "workstreams": ["WS-32"], "tasks": ["T-40"], "acs": ["AC-01","AC-16","AC-98","AC-104","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua"], "gates": ["G-S28-VER","G-S28-REV","G-S28-SEC","G-S30-GAME"], "next": "S29"},
+    {"id": "S29", "title": "Nameplates: CC icons, larger, on the left", "status": "PASSED", "deps": ["S28"], "workstreams": ["WS-33"], "tasks": ["T-41"], "acs": ["AC-01","AC-16","AC-37","AC-91","AC-99","AC-100","AC-104","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua","MerrinxUI/Modules/NameplateLogic.lua","spec/nameplate_spec.lua"], "gates": ["G-S29-VER","G-S29-REV","G-S29-SEC","G-S30-GAME"], "next": "S30"},
+    {"id": "S30", "title": "CooldownVoice module, release 0.17.0 per D-81 (game gate for S27-S30; G-FU-NP moved to G-S9-GAME, D-90)", "status": "PASSED", "deps": ["S29"], "workstreams": ["WS-34","WS-35","WS-36"], "tasks": ["T-42","T-43","T-44"], "acs": ["AC-01","AC-07","AC-16","AC-101","AC-102","AC-103","AC-104","AC-105","AC-D7","AC-D8","AC-D9","AC-D10","AC-D12"], "owned_paths": ["MerrinxUI/Modules/CooldownVoiceLogic.lua","MerrinxUI/Modules/CooldownVoice.lua","spec/cooldown_voice_logic_spec.lua","MerrinxUI/MerrinxUI.toc",".luacheckrc"], "gates": ["G-S30-VER","G-S30-REV","G-S30-SEC","G-S27-30-INT-VER","G-S27-30-INT-REV","G-S27-30-INT-SEC","G-S30-GAME"], "next": null},
+    {"id": "S31", "title": "Media core: global font/bar texture + per-module override; RangeText adopts, 0.17.0", "status": "PASSED", "deps": ["S30"], "workstreams": ["WS-37"], "tasks": ["T-45"], "acs": ["AC-01","AC-16","AC-107","AC-108","AC-109","AC-110","AC-111","AC-112","AC-113","AC-D7","AC-D9","AC-D10","AC-D13"], "owned_paths": ["MerrinxUI/Util/FontLogic.lua","spec/font_logic_spec.lua","MerrinxUI/Util/Media.lua","MerrinxUI/MerrinxUI.toc","MerrinxUI/Debug/Debug.lua","MerrinxUI/Modules/RangeText.lua","MerrinxUI/Options/OptionsWindow.lua"], "gates": ["G-S31-VER","G-S31-REV","G-S31-SEC","G-S33-GAME"], "next": "S32"},
+    {"id": "S32", "title": "Options window: Use global and bar-texture previews, window font", "status": "PASSED", "deps": ["S31"], "workstreams": ["WS-38"], "tasks": ["T-46"], "acs": ["AC-01","AC-16","AC-32","AC-82","AC-83","AC-107","AC-112","AC-113"], "owned_paths": ["MerrinxUI/Options/OptionsWindow.lua"], "gates": ["G-S32-VER","G-S32-REV","G-S32-SEC","G-S33-GAME"], "next": "S33"},
+    {"id": "S33", "title": "Nameplates: font and bar texture via Media, release 0.17.0 (game gate for S31-S33)", "status": "PASSED", "deps": ["S32"], "workstreams": ["WS-39","WS-40"], "tasks": ["T-47","T-48"], "acs": ["AC-01","AC-16","AC-18","AC-19","AC-37","AC-91","AC-108","AC-109","AC-110","AC-111","AC-112","AC-113","AC-D7"], "owned_paths": ["MerrinxUI/Modules/Nameplates.lua"], "gates": ["G-S33-VER","G-S33-REV","G-S33-SEC","G-S31-33-INT-VER","G-S31-33-INT-REV","G-S31-33-INT-SEC","G-S33-GAME"], "next": null},
+    {"id": "S36", "title": "Background opacity: DamageMeter, Professions, Nameplates (0.20.0)", "status": "PASSED", "deps": [], "workstreams": ["WS-43","WS-44","WS-45"], "tasks": ["T-53","T-54","T-55"], "acs": ["AC-01","AC-16","AC-129","AC-130","AC-131","AC-138","AC-140","AC-D7"], "owned_paths": ["MerrinxUI/Modules/DamageMeter.lua","MerrinxUI/Modules/Professions.lua","MerrinxUI/Modules/Nameplates.lua"], "verifier_checks": {"T-53": ["luacheck/stylua/luac DamageMeter.lua","busted spec","S36 T-53 grep gates"], "T-54": ["luacheck/stylua/luac Professions.lua","busted spec","S36 T-54 grep gates"], "T-55": ["luacheck/stylua/luac Nameplates.lua","busted spec","S36 T-55 grep gates"]}, "gates": ["G-S36-VER-T53","G-S36-VER-T54","G-S36-VER-T55","G-S36-37-INT-VER","G-S36-37-INT-REV","G-S36-37-INT-SEC","G-S37-GAME"], "evidence": ["E-S36-T53-HUNKS","E-S36-T53-VER","E-S36-T54-HUNKS","E-S36-T54-VER","E-S36-T55-HUNKS","E-S36-T55-VER","E-S36-37-INT-VER","E-S36-37-INT-REV","E-S36-37-INT-SEC","E-S37-GAME"], "next": "S37"},
+    {"id": "S37", "title": "Action bars: opacity, mouseover, hide in combat, key toggle; release 0.20.0", "status": "PASSED", "deps": [], "workstreams": ["WS-46","WS-47","WS-48"], "tasks": ["T-56","T-57","T-58"], "acs": ["AC-01","AC-16","AC-20","AC-21","AC-132","AC-133","AC-134","AC-135","AC-136","AC-137","AC-138","AC-139","AC-140","AC-D7"], "closed_by": "D-128", "owned_paths": ["MerrinxUI/Modules/ActionBarLogic.lua","spec/actionbars_spec.lua","MerrinxUI/Modules/ActionBars.lua","MerrinxUI/Bindings.xml",".luacheckrc","MerrinxUI/MerrinxUI.toc"], "verifier_checks": {"T-56": ["busted spec/actionbars_spec.lua (13)","busted spec (baseline + 2)","luacheck/stylua ActionBarLogic.lua + spec"], "T-57": ["luacheck/stylua/luac ActionBars.lua","busted spec/debug_coverage_spec.lua","path: build lists Bindings.xml and 0.20.0","S37 T-57 grep gates"]}, "gates": ["G-S37-VER-T56","G-S37-VER-T57","G-S36-37-INT-VER","G-S36-37-INT-REV","G-S36-37-INT-SEC","G-S37-GAME"], "evidence": ["E-PLAN-BASE-3","E-S37-T56-HUNKS","E-S37-T56-VER","E-S37-T57-HUNKS","E-S37-T57-VER","E-S36-37-INT-VER","E-S36-37-INT-REV","E-S36-37-INT-SEC","E-S37-GAME"], "next": null}
   ],
   "workstreams": [
     {"id": "WS-00", "specialist": "user", "owned": [], "deps": [], "group": "P0", "order": 0},
@@ -4328,7 +4793,13 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "WS-37", "specialist": "backend (lua-wow)", "owned": ["MerrinxUI/Util/FontLogic.lua","spec/font_logic_spec.lua","MerrinxUI/Util/Media.lua","MerrinxUI/MerrinxUI.toc","MerrinxUI/Debug/Debug.lua","MerrinxUI/Modules/RangeText.lua","MerrinxUI/Options/OptionsWindow.lua"], "deps": ["WS-36"], "group": "S31-A", "order": 41},
     {"id": "WS-38", "specialist": "backend (lua-wow)", "owned": ["MerrinxUI/Options/OptionsWindow.lua"], "deps": ["WS-37"], "group": "S32-A", "order": 42},
     {"id": "WS-39", "specialist": "backend (lua-wow)", "owned": ["MerrinxUI/Modules/Nameplates.lua"], "deps": ["WS-38"], "group": "S33-A", "order": 43},
-    {"id": "WS-40", "specialist": "user", "owned": [], "deps": ["WS-39"], "group": "S33-B", "order": 44}
+    {"id": "WS-40", "specialist": "user", "owned": [], "deps": ["WS-39"], "group": "S33-B", "order": 44},
+    {"id": "WS-43", "specialist": "implementor (backend, behavioral-validation)", "goal": "DamageMeter background/header opacity", "owned": ["MerrinxUI/Modules/DamageMeter.lua"], "deps": [], "shared_interfaces": "Shared interfaces: S36-S37 (DamageMeter rows)", "group": "S36-37-W1", "order": 45, "validation": "S36 T-53 checks"},
+    {"id": "WS-44", "specialist": "implementor (backend, behavioral-validation)", "goal": "Professions background/header opacity", "owned": ["MerrinxUI/Modules/Professions.lua"], "deps": [], "shared_interfaces": "Shared interfaces: S36-S37 (Professions rows)", "group": "S36-37-W1", "order": 45, "validation": "S36 T-54 checks"},
+    {"id": "WS-45", "specialist": "implementor (backend, behavioral-validation)", "goal": "Nameplate bar background opacity", "owned": ["MerrinxUI/Modules/Nameplates.lua"], "deps": [], "shared_interfaces": "Shared interfaces: S36-S37 (Nameplates rows)", "group": "S36-37-W1", "order": 45, "validation": "S36 T-55 checks"},
+    {"id": "WS-46", "specialist": "implementor (backend, behavioral-validation)", "goal": "VisibilityDriver/BarAlpha + specs", "owned": ["MerrinxUI/Modules/ActionBarLogic.lua","spec/actionbars_spec.lua"], "deps": [], "shared_interfaces": "produces L.VisibilityDriver, L.BarAlpha", "group": "S36-37-W1", "order": 45, "validation": "S37 T-56 checks"},
+    {"id": "WS-47", "specialist": "implementor (backend, behavioral-validation)", "goal": "action bar opacity, mouseover, hide in combat, key toggle, Bindings.xml, luacheck globals, TOC 0.20.0", "owned": ["MerrinxUI/Modules/ActionBars.lua","MerrinxUI/Bindings.xml",".luacheckrc","MerrinxUI/MerrinxUI.toc"], "deps": [], "shared_interfaces": "consumes L.VisibilityDriver, L.BarAlpha; defines MerrinxUIBarToggle, vis/userhidden/keytoggle/barshidden, MERRINXUI_TOGGLEBARS, BINDING_* globals, checks", "group": "S36-37-W1", "order": 45, "validation": "S37 T-57 checks"},
+    {"id": "WS-48", "specialist": "user", "goal": "commit groups, tag v0.20.0-s37.1, G-S37-GAME", "owned": [], "deps": ["G-S36-37-INT-VER","G-S36-37-INT-REV","G-S36-37-INT-SEC"], "shared_interfaces": "pasted /mui log", "group": "after final gate", "order": 46, "validation": "G-S37-GAME steps 1-9"}
   ],
   "tasks": [
     {"id": "T-00", "ws": "WS-00", "text": "Run S0 probes; report outputs, testable classes, GitHub owner/name"},
@@ -4391,7 +4862,13 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "T-45", "ws": "WS-37", "text": "3 FontLogic specs first; FontLogic GLOBAL/Resolve/Values label; Util/Media.lua module, page, API, relay, checks; TOC version + Media line; Debug enabled-state guard; RangeText adopts; OptionsWindow setPreviewFont + drop local LSM"},
     {"id": "T-46", "ws": "WS-38", "text": "windowFont at build(); setFont order; LSM30_Statusbar previews with item.preview; font check"},
     {"id": "T-47", "ws": "WS-39", "text": "Nameplates font/barTexture defaults and options 21-22; ApplySize via ns.Media with barPath and cast colour; count fonts tracked; MEDIA_CHANGED handler; media check; then integrated gates S31-S33"},
-    {"id": "T-48", "ws": "WS-40", "text": "commit, push, tag v<Version>-s33.1, restart client, G-S33-GAME steps 1-9; paste /mui log"}
+    {"id": "T-48", "ws": "WS-40", "text": "commit, push, tag v<Version>-s33.1, restart client, G-S33-GAME steps 1-9; paste /mui log"},
+    {"id": "T-53", "ws": "WS-43", "section": "S36", "assignee": "implementor", "skills": ["backend","behavioral-validation"], "owned": ["MerrinxUI/Modules/DamageMeter.lua"], "depends_on": [], "contract_partners": [], "acs": ["AC-129","AC-138"], "checks": ["nix develop -c luacheck MerrinxUI/Modules/DamageMeter.lua","nix develop -c stylua --check MerrinxUI/Modules/DamageMeter.lua","nix develop -c luac -p MerrinxUI/Modules/DamageMeter.lua","nix develop -c busted spec","S36 T-53 grep gates"], "text": "defaults bgOpacity/headerOpacity; store self.bg/self.headerBg, drop SetAlpha(0.75); Layout SetAlpha; options 10/11, reset 12; background check"},
+    {"id": "T-54", "ws": "WS-44", "section": "S36", "assignee": "implementor", "skills": ["backend","behavioral-validation"], "owned": ["MerrinxUI/Modules/Professions.lua"], "depends_on": [], "contract_partners": [], "acs": ["AC-130","AC-138"], "checks": ["nix develop -c luacheck MerrinxUI/Modules/Professions.lua","nix develop -c stylua --check MerrinxUI/Modules/Professions.lua","nix develop -c luac -p MerrinxUI/Modules/Professions.lua","nix develop -c busted spec","S36 T-54 grep gates"], "text": "as T-53 with options 4/5"},
+    {"id": "T-55", "ws": "WS-45", "section": "S36", "assignee": "implementor", "skills": ["backend","behavioral-validation"], "owned": ["MerrinxUI/Modules/Nameplates.lua"], "depends_on": [], "contract_partners": [], "acs": ["AC-131","AC-138"], "checks": ["nix develop -c luacheck MerrinxUI/Modules/Nameplates.lua","nix develop -c stylua --check MerrinxUI/Modules/Nameplates.lua","nix develop -c luac -p MerrinxUI/Modules/Nameplates.lua","nix develop -c busted spec","S36 T-55 grep gates"], "text": "default bgOpacity 80; vertex alpha 1; store frame.healthBg/powerBg/castBg; ApplySize SetAlpha; option 23; background check"},
+    {"id": "T-56", "ws": "WS-46", "section": "S37", "assignee": "implementor", "skills": ["backend","behavioral-validation"], "owned": ["MerrinxUI/Modules/ActionBarLogic.lua","spec/actionbars_spec.lua"], "depends_on": [], "contract_partners": ["T-57"], "acs": ["AC-132"], "checks": ["nix develop -c busted spec/actionbars_spec.lua","nix develop -c busted spec","nix develop -c luacheck MerrinxUI/Modules/ActionBarLogic.lua spec/actionbars_spec.lua","nix develop -c stylua --check MerrinxUI/Modules/ActionBarLogic.lua spec/actionbars_spec.lua"], "text": "2 it blocks first; L.VisibilityDriver, L.BarAlpha after BindingPrefix"},
+    {"id": "T-57", "ws": "WS-47", "section": "S37", "assignee": "implementor", "skills": ["backend","behavioral-validation"], "owned": ["MerrinxUI/Modules/ActionBars.lua","MerrinxUI/Bindings.xml",".luacheckrc","MerrinxUI/MerrinxUI.toc"], "depends_on": [], "contract_partners": ["T-56"], "acs": ["AC-133","AC-134","AC-135","AC-136","AC-137","AC-138","AC-139"], "checks": ["nix develop -c luacheck MerrinxUI/Modules/ActionBars.lua","nix develop -c stylua --check MerrinxUI/Modules/ActionBars.lua","nix develop -c luac -p MerrinxUI/Modules/ActionBars.lua","nix develop -c busted spec/debug_coverage_spec.lua","nix build --no-link --print-out-paths path:/home/merrinx/Projects/merrinxui#merrinxui (Bindings.xml + 0.20.0)","S37 T-57 grep gates"], "text": "BINDING_* globals; per-bar defaults; _onstate-vis; toggle button + _onclick; vis driver per bar; disabled branches; fader + UpdateAlphas; ApplyBindings toggle keys; options 5..8; visibility/alpha/toggle checks; Bindings.xml; .luacheckrc globals; TOC 0.20.0"},
+    {"id": "T-58", "ws": "WS-48", "section": "S37", "assignee": "user", "skills": [], "owned": [], "depends_on": ["G-S36-37-INT-VER","G-S36-37-INT-REV","G-S36-37-INT-SEC"], "depends_on_reason": "game gate tests the integrated, reviewed release; not an implementation dependency", "acs": ["AC-140"], "text": "stage Bindings.xml, commit groups (a) S36 and (b) S37, push, tag v0.20.0-s37.1, full client restart, G-S37-GAME steps 1-9; paste /mui log"}
   ],
   "evidence": [
     {"id": "E-S0-USER", "gate": "G-S0-USER", "expect": "probe outputs, class list, spell names, testable classes, repo name", "value": "interface 16001; nine classic classes; all 9 D-15 spell IDs resolve; APIs and frames present (MainMenuBar absent); repo Gako358/merrinxui; testable Druid, Mage; verifier PASSED, reviewer CLEAR, security CLEAR"},
@@ -4545,7 +5022,7 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "E-S27-30-INT-VER", "gate": "G-S27-30-INT-VER", "expect": "PASSED on the whole S27-S30 change set", "value": null},
     {"id": "E-S27-30-INT-REV", "gate": "G-S27-30-INT-REV", "expect": "CLEAR", "value": null},
     {"id": "E-S27-30-INT-SEC", "gate": "G-S27-30-INT-SEC", "expect": "CLEAR", "value": null},
-    {"id": "E-S30-GAME", "gate": "G-S30-GAME", "expect": "tag v0.16.0-s30.1, CI run id, pasted /mui log, lines for steps 1-8", "value": null},
+    {"id": "E-S30-GAME", "gate": "G-S30-GAME", "expect": "tag v0.16.0-s30.1, CI run id, pasted /mui log, lines for steps 1-8", "value": "PASSED on user instruction (D-112): 0.19.0 paste 20:17:38 in combat, 171 checks 0 FAIL; CooldownVoice enabled state/apis/voices/ticker PASS, spells/cooldown info SKIP no spells; steps 1-3, 5, 7, 8 not itemised"},
     {"id": "E-FU-NP", "gate": "G-FU-NP", "expect": "G-FU-NP steps 1-5 from the G-S9-GAME paste (steps 16-20; D-90 moved them from G-S30-GAME)", "value": null},
     {"id": "E-S31-33-PLAN", "gate": "planning", "expect": "media design facts", "value": "planning facts, not gate evidence: user answers Q-18/Q-19; planner read of LSM r182 (statusbar defaults, Register checks); architect (opus) critique adopted (key-filtered relay, no Media Refresh, count fonts, cast colour, List counts, separate 0.17.0)"},
     {"id": "E-S31-HUNKS", "gate": "G-S31-VER", "expect": "FontLogic additions; Util/Media.lua; TOC version + Media line; Debug guard; RangeText adoption; OptionsWindow setPreviewFont", "value": null},
@@ -4563,7 +5040,23 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "E-S31-33-INT-VER", "gate": "G-S31-33-INT-VER", "expect": "PASSED on the S31-S33 change set", "value": null},
     {"id": "E-S31-33-INT-REV", "gate": "G-S31-33-INT-REV", "expect": "CLEAR", "value": null},
     {"id": "E-S31-33-INT-SEC", "gate": "G-S31-33-INT-SEC", "expect": "CLEAR", "value": null},
-    {"id": "E-S33-GAME", "gate": "G-S33-GAME", "expect": "tag, CI run id, pasted /mui log, lines for steps 1-9; cast bar orange after texture change; counts follow global font", "value": null}
+    {"id": "E-S33-GAME", "gate": "G-S33-GAME", "expect": "tag, CI run id, pasted /mui log, lines for steps 1-9; cast bar orange after texture change; counts follow global font", "value": "PASSED on user instruction (D-112): 0.19.0 paste 20:17:38 in combat, 171 checks 117 PASS 0 FAIL 6 SKIP 48 INFO; Media global font/statusbar, Nameplates/media, RangeText/font, OptionsWindow/font, DamageMeter/font, Debug/interface PASS; steps 2-9 not itemised"},
+    {"id": "E-PLAN-S36-37", "gate": "planning", "expect": "design facts", "value": "planning facts, not gate evidence: planner read of DamageMeter/Professions/Nameplates/ActionBars/ActionBarLogic/Mover/OptionsLogic/flake.nix/.luacheckrc at HEAD 14a0c2d; user answer Q-22 'Bar opacity'; researcher (haiku) warcraft.wiki.gg findings (Bindings.xml, SecureHandler templates, SetFrameRef, state drivers, SetAlpha AllowedWhenTainted); architect (opus) design D-113..D-126"},
+    {"id": "E-PLAN-BASE-3", "gate": "planning", "expect": "busted successes/failures/errors and luacheck warnings/errors/files before dispatch", "value": "HEAD 14a0c2d: busted 224/0/0/0; luacheck 0 warnings / 0 errors in 59 files; stylua --check MerrinxUI spec exit 0; owned paths clean (verifier haiku, PASSED)"},
+    {"id": "E-S36-T53-HUNKS", "gate": "G-S36-VER-T53", "expect": "DamageMeter.lua only: defaults, self.bg/headerBg, no SetAlpha(0.75), Layout alphas, options 10/11/12, background check", "value": "as expected; background check appended after redraw (real last check)"},
+    {"id": "E-S36-T53-VER", "gate": "G-S36-VER-T53", "expect": "luacheck 0/0, stylua 0, luac 0, busted 0 failures, grep gates", "value": "PASSED: luacheck 0/0, stylua 0, luac 0, busted 226/0/0, grep gates C-5..C-23"},
+    {"id": "E-S36-T54-HUNKS", "gate": "G-S36-VER-T54", "expect": "Professions.lua only: as T-53 with options 4/5", "value": "as expected"},
+    {"id": "E-S36-T54-VER", "gate": "G-S36-VER-T54", "expect": "luacheck 0/0, stylua 0, luac 0, busted 0 failures, grep gates", "value": "PASSED: luacheck 0/0, stylua 0, luac 0, busted 226/0/0, gates P1..P18"},
+    {"id": "E-S36-T55-HUNKS", "gate": "G-S36-VER-T55", "expect": "Nameplates.lua only: default, vertex alpha 1 x3, frame.*Bg, ApplySize alphas, option 23, background check", "value": "as expected; background check appended after media"},
+    {"id": "E-S36-T55-VER", "gate": "G-S36-VER-T55", "expect": "luacheck 0/0, stylua 0, luac 0, busted 0 failures, grep gates", "value": "PASSED: luacheck 0/0, stylua 0, luac 0, busted 226/0/0, vertex 0.8 x0 / 1 x3, gates"},
+    {"id": "E-S37-T56-HUNKS", "gate": "G-S37-VER-T56", "expect": "ActionBarLogic.lua two functions; actionbars_spec.lua two it blocks", "value": "as expected; red 11/0/2 then green 13/0/0"},
+    {"id": "E-S37-T56-VER", "gate": "G-S37-VER-T56", "expect": "actionbars_spec 13/0/0; busted baseline + 2/0/0; luacheck/stylua 0", "value": "PASSED: actionbars_spec 13/0/0; busted 226/0/0; luacheck 0/0; stylua 0; no WoW global"},
+    {"id": "E-S37-T57-HUNKS", "gate": "G-S37-VER-T57", "expect": "ActionBars.lua per contract; Bindings.xml; .luacheckrc globals; TOC version line", "value": "as expected; stylua reflowed the two snippet SetAttribute calls (bodies unchanged)"},
+    {"id": "E-S37-T57-VER", "gate": "G-S37-VER-T57", "expect": "luacheck/stylua/luac 0; coverage spec 0 failures; path: build lists Bindings.xml and 0.20.0; grep gates", "value": "PASSED: luacheck 0/0, stylua 0, luac 0, coverage 4/0/0, path: build qrb222bc... has Bindings.xml + 0.20.0, grep gates exact"},
+    {"id": "E-S36-37-INT-VER", "gate": "G-S36-37-INT-VER", "expect": "busted baseline + 2/0/0; luacheck 0/0; stylua 0; path: flake check 0; zip lists Bindings.xml, TOC 0.20.0; changed set = 9 owned paths; diagnostics clean; git-tree packaging UNVERIFIED until staged (R-70)", "value": "PASSED: busted 226/0/0; luacheck 0/0 in 59 files; stylua 0; luac 0 x5; path: flake check 0; release 581xlrm2... zip has Bindings.xml + 0.20.0; changed set = 9 paths; diagnostics clean; git-tree packaging UNVERIFIED (R-70)"},
+    {"id": "E-S36-37-INT-REV", "gate": "G-S36-37-INT-REV", "expect": "CLEAR", "value": "CLEAR (opus): no actionable findings"},
+    {"id": "E-S36-37-INT-SEC", "gate": "G-S36-37-INT-SEC", "expect": "CLEAR (restricted snippets, override bindings, globals, taint, AC-37, read-only checks, no secret compare)", "value": "CLEAR (sonnet): no actionable findings"},
+    {"id": "E-S37-GAME", "gate": "G-S37-GAME", "expect": "tag v0.20.0-s37.1, CI run id, pasted /mui log, lines for steps 1-9", "value": null}
   ],
   "gates": [
     {"id": "G-S0-USER", "type": "user", "status": "PASSED"},
@@ -4600,17 +5093,26 @@ WS-37..WS-39 run strictly one after another with one lua-wow owner: WS-37 and WS
     {"id": "G-S25-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S25-REV", "type": "reviewer", "status": "PASSED"}, {"id": "G-S25-SEC", "type": "security", "status": "PASSED"}, {"id": "G-S25-GAME", "type": "user-manual", "status": "PASSED"},
     {"id": "G-S26-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S26-REV", "type": "reviewer", "status": "PASSED"}, {"id": "G-S26-SEC", "type": "security", "status": "PASSED"}, {"id": "G-S26-GAME", "type": "user-manual", "status": "PASSED"},
     {"id": "G-FU-NP", "type": "user-manual", "status": "PENDING", "note": "D-61 follow-up on the next release: P4 sub-rows, P5a, P5b, P5c-e, P5f/g, BugSack/taint, SEC-RB3-01, ADV-RB3-03; a failure reopens S25; runs inside G-S9-GAME steps 16-20 (D-90; was G-S30-GAME step 6, D-69); G-S30-GAME no longer carries it unless G-S9-GAME leaves it unanswered"},
-    {"id": "G-S27-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S27-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S27-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S28-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S28-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S28-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S29-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S29-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S29-SEC", "type": "security", "status": "PENDING"},
+    {"id": "G-S27-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S27-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S27-SEC", "type": "security", "status": "CLEAR"},
+    {"id": "G-S28-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S28-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S28-SEC", "type": "security", "status": "CLEAR"},
+    {"id": "G-S29-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S29-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S29-SEC", "type": "security", "status": "CLEAR"},
     {"id": "G-S30-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S30-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S30-SEC", "type": "security", "status": "PENDING"},
     {"id": "G-S27-30-INT-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S27-30-INT-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S27-30-INT-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S30-GAME", "type": "user-manual", "status": "PENDING", "note": "closes S27-S30 (D-69); G-FU-NP only as fallback if G-S9-GAME left it unanswered (D-90)"},
-    {"id": "G-S31-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S31-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S31-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S32-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S32-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S32-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S33-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S33-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S33-SEC", "type": "security", "status": "PENDING"},
+    {"id": "G-S30-GAME", "type": "user-manual", "status": "PASSED", "note": "closes S27-S30 (D-69); PASSED on user instruction with the 0.19.0 paste 20:17:38 (D-112); G-FU-NP fallback step 6 not run"},
+    {"id": "G-S31-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S31-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S31-SEC", "type": "security", "status": "CLEAR"},
+    {"id": "G-S32-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S32-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S32-SEC", "type": "security", "status": "CLEAR"},
+    {"id": "G-S33-VER", "type": "verifier", "status": "PASSED"}, {"id": "G-S33-REV", "type": "reviewer", "status": "CLEAR"}, {"id": "G-S33-SEC", "type": "security", "status": "CLEAR"},
     {"id": "G-S31-33-INT-VER", "type": "verifier", "status": "PENDING"}, {"id": "G-S31-33-INT-REV", "type": "reviewer", "status": "PENDING"}, {"id": "G-S31-33-INT-SEC", "type": "security", "status": "PENDING"},
-    {"id": "G-S33-GAME", "type": "user-manual", "status": "PENDING", "note": "closes S31-S33 (D-77)"}
+    {"id": "G-S33-GAME", "type": "user-manual", "status": "PASSED", "note": "closes S27-S29, S31-S35 (D-77, D-103); PASSED on user instruction with the 0.19.0 paste 20:17:38 (D-112)"},
+    {"id": "G-S36-VER-T53", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "T-53 on completion"},
+    {"id": "G-S36-VER-T54", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "T-54 on completion"},
+    {"id": "G-S36-VER-T55", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "T-55 on completion"},
+    {"id": "G-S37-VER-T56", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "T-56 on completion"},
+    {"id": "G-S37-VER-T57", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "T-57 on completion"},
+    {"id": "G-S36-37-INT-VER", "type": "verifier", "status": "PASSED", "intent": "verification", "scope": "integrated S36-S37 change set after all per-task verifiers PASSED"},
+    {"id": "G-S36-37-INT-REV", "type": "reviewer", "status": "CLEAR", "intent": "review", "scope": "full S36-S37 diff", "parallel_with": "G-S36-37-INT-SEC"},
+    {"id": "G-S36-37-INT-SEC", "type": "security", "status": "CLEAR", "intent": "security", "scope": "full S36-S37 diff (required)", "parallel_with": "G-S36-37-INT-REV"},
+    {"id": "G-S37-GAME", "type": "user-manual", "status": "PASSED", "note": "closes S36 and S37 (D-126); passed on user instruction, D-128"}
   ]
 }
 #+end_src
@@ -4636,7 +5138,39 @@ Every security review covers:
 - license compliance (no copied third-party code or media).
 
 * Handoff
-- *Current continuation point (run S27-S29, S31-S35 started; S27 IN_PROGRESS):* the user asked to carry out S27, S28, S29, S31, S32 and S33 (not S30), then test everything in game with =/mui test= and paste the log. During planning they added "a debug log printing the game version" and answered Q-20 = yes (DamageMeter via Media). Architect replan (WF-PLAN, opus) adopted:
+- *S39 addendum (uncommitted, same 0.22.0 release):* user asked for the ElvUI and EllesmereUI fonts and textures; Q-26 answered "Free fonts + look-alike textures". ElvUI (=LICENSE.md=) and EllesmereUI (=license.txt=) are "all rights reserved", so none of their textures or own files are copied, and their commercial or unclear fonts (Expressway, Continuum, Action Man, Die Die Die!, Homespun, Avant Garde, Arial Bold, Gotham, Future X, HWT Artz, KMT) are left out. Added: the OFL fonts they also use, fetched by =pkgs.fetchurl= with SRI hashes from google/fonts rev =47d54ca1= (no =flake.lock= change), each with its family =OFL.txt=: PT Sans Narrow (2), Russo One, Changa (2, static instances from the variable font via =fonttools varLib.instancer= wght 400/700), Cinzel Decorative (2), Exo (2, instanced), Barlow Condensed (4). 12 original generated textures in the same styles: Minimal, Soft, Glass, Gradient Down/Up/Right/Left, Sharp, Diamonds, Plating, Divide, Sheer (alpha 0.55).
+  - E-S39b-VER = lead: =nix__flake_check= exit 0; =nix__build release= exit 0, zip 6.2 MB with 36 TTF, 18 TGA (32786 bytes each), 5 OGG, TOC 0.22.0; Changa/Exo instances have no =fvar=/=gvar= and weight classes 400/700.
+  - Expected at the game check: =Media/bundled= PASS =36/36 18/18 5/5=, =Media/fonts= 47, =Media/statusbars= 22.
+- *Current continuation point (S38 committed as =ee08c1c=; S39 uncommitted; both wait for one game check on 0.22.0):* user asked to also use what the standalone LibSharedMedia-3.0 addon (and any pack) provides, including sounds; Q-25 answered "Both" (CooldownVoice and EnemyCooldowns). MerrinxUI's embedded LSM and the standalone addon are one LibStub instance (same MAJOR; highest MINOR wins), so every font, statusbar and sound any addon registers is already in =LSM:HashTable=; the standalone addon itself only adds Blizzard defaults (sound: ="None"= only).
+  - S39 changes: =flake.nix= =soundEffects= (Python synthesizes Chime, Ding, Bell, Alert, Blip; =oggenc -s 1= to =Media/Sounds/*.ogg=), package check covers =Sounds\\= paths; =Media.lua= =bundled.sound=, =Media:SoundValues= / =SoundPath= / =PlaySound= (="None"= and unknown keys play nothing, channel Master), checks =sounds= and =bundled= (3 counts); =CooldownVoice.lua= =alert= (=voice= default / =sound=) and =sound= (default "MerrinxUI Chime"), options Alert / Sound / Test sound with voice-only rows disabled in sound mode, check =alert=; =EnemyCooldowns.lua= =sound= (default ="None"=, opt-in), played on every tracked hit, options Alert sound / Test sound, check =sound=; =.luacheckrc= =PlaySoundFile=; TOC =0.22.0=.
+  - E-S39-VER = lead: =nix__flake_check= exit 0 (after =nix fmt flake.nix=, which reindented only the =addonMedia= block); =nix__build release= exit 0, zip 5.3 MB with the 5 =Media/Sounds/*.ogg= (Ogg Vorbis mono 44.1 kHz) and =## Version: 0.22.0=; editor diagnostics clean.
+  - *G-S38-GAME (covers S39 too), extra steps:* =/mui test=: =Media/sounds= INFO >= 6, =Media/bundled= PASS =23/23 6/6 5/5=. CooldownVoice: Alert "Play sound", pick a sound (it plays on select), Test sound; a tracked spell coming off cooldown plays it; =CooldownVoice/alert= PASS. EnemyCooldowns: pick an Alert sound, Test sound; a tracked enemy cooldown plays it; =EnemyCooldowns/sound= INFO key and path.
+  - *Unverified until the game:* =PlaySoundFile= on Forever accepting addon =.ogg= paths on the Master channel; LSM =IsKnownFile= accepting the new loose files.
+- *Earlier continuation point (S36, S37 PASSED per D-128; S38 IN_PROGRESS, waiting for G-S38-GAME):* S38 changes, uncommitted: =flake.nix= (=statusbarTextures=, =addonMedia=, copy into =MerrinxUI/Media=, package check that every =Fonts\\= / =Textures\\= path in =Media.lua= exists), =MerrinxUI/Util/Media.lua= (=Media.bundled=, =LSM:Register= loop, check =bundled=), TOC =0.21.0=. No new tracked file: the media is built by Nix, so the git-tree flake sees everything.
+  - E-S38-VER = lead: =nix__flake_check= exit 0 (busted, lua-syntax, merrinxui, pre-commit); =nix__build release= exit 0 with =MerrinxUI/Media/Fonts= (23 TTF + 2 licenses) and =MerrinxUI/Media/Textures= (6 TGA) in the zip; negative test: a wrong texture name in =Media.lua= fails =checks.merrinxui= with =missing: Media/Textures/Insetx.tga=.
+  - *Next (user):* commit, tag =v0.21.0-s38.1=, CI green, install, *full client restart* (new loose files are indexed at startup), then G-S38-GAME: =/mui= → Media → Global font lists Roboto, Fira Sans, Ubuntu, Lato, Poppins, PT Sans, Liberation Sans; Global bar texture lists the six =MerrinxUI *= textures; pick one of each and check RangeText, Nameplates and DamageMeter change with no "is unavailable" chat line and no LSM "Attempt to register" error; =/mui test=: =Media/bundled= PASS =23/23 6/6=, =Media/fonts= 34, =Media/statusbars= 10, =font registrations= =23 23 0 0 ...=, =media addons= =1 MerrinxUI=.
+  - *Unverified until G-S38-GAME:* that =C_UIFileAsset.IsKnownFile= accepts MerrinxUI's loose files on Forever (if not, =bundled= FAILs and =font registrations= shows them as rejected); that the generated TGAs load (uncompressed 32-bit, top-left origin).
+- *Previous continuation point (S36 PASSED; S37 IN_PROGRESS waiting only for T-58, the user's step):* E-PLAN-BASE-3 = busted 224/0/0, luacheck 0/0 in 59 files. T-53..T-57 ran in one wave on =merrinxui-s36-37=. All five per-task verifiers PASSED (the lead spawned them, because implementors had no =eca__spawn_agent=). G-S36-37-INT-VER PASSED (busted 226/0/0, luacheck 0/0 in 59 files, stylua, path: flake check, release zip with =Bindings.xml= and 0.20.0). INT-REV and INT-SEC are CLEAR with no findings. Evidence is in the S36, S37 and Final gate sections.
+  - *Next (user, T-58):*
+    1. =git add MerrinxUI/Bindings.xml= (R-70: the git-tree build can't see it until it is staged).
+    2. Commit group (a): S36 paths. Commit group (b): S37 paths (lead protocol step 7).
+    3. Push, tag =v0.20.0-s37.1=, wait for CI to go green.
+    4. Install, then restart the client fully (=Bindings.xml= is read at startup).
+    5. Run G-S37-GAME steps 1-9 and paste =/mui log=.
+    Then: mark S37 =PASSED= and record E-S37-GAME. A FAIL or a stop condition (R-64/R-65/R-69, A-45) reopens the affected task.
+  - *Unverified until G-S37-GAME:* A-43..A-49, R-64..R-66, R-68, R-69, R-74; git-tree packaging of =Bindings.xml= (R-70).
+- *Earlier state (S36-S37 planned, PENDING; nothing dispatched):* the user asked for background transparency on every module (not the options window) and action bar options "show on mouseover", "hide in combat" and "hide with key toggle"; answer Q-22 = "Bar opacity". Design D-113..D-127, contract "Shared interfaces: S36-S37", ACs AC-129..AC-140, risks R-64..R-74, assumptions A-43..A-49.
+  - *Ready now (one wave, all concurrent, one =implementor= each on channel =merrinxui-s36-37=):* T-53 (DamageMeter), T-54 (Professions), T-55 (Nameplates), T-56 (ActionBarLogic + spec), T-57 (ActionBars runtime, =Bindings.xml=, =.luacheckrc=, TOC 0.20.0). No depends-on edges. Follow "S36-S37 lead protocol": record E-PLAN-BASE-3 first, mark S36 and S37 =IN_PROGRESS=, dispatch, verify each task as it completes, then G-S36-37-INT-VER → G-S36-37-INT-REV ∥ G-S36-37-INT-SEC.
+  - *Blocked until the final gate is PASSED/CLEAR/CLEAR:* T-58 (user: stage =MerrinxUI/Bindings.xml=, commit groups (a) S36 paths and (b) S37 paths, push, tag =v0.20.0-s37.1=, full client restart, G-S37-GAME steps 1-9, paste =/mui log=).
+  - *Optional confirmation before dispatch (non-blocking; defaults apply):* Q-23 (key toggle state session-only), Q-24 (two sliders, body and header, on DamageMeter / Professions).
+  - *Unverified until G-S37-GAME:* A-43..A-49 (Bindings.xml listing, =[combat]= driver, keybinds on hidden bars, toggle button clicks, alpha cascade, =SetAlpha= / =IsMouseOver= in combat); git-tree packaging of =Bindings.xml= (R-70).
+  - Still open from before: =G-FU-NP= =PENDING= (S25 "conditional on G-FU-NP"); A-36, A-39.
+- *Previous continuation point (S27-S35 PASSED; every board section closed):* the user pasted a =/mui test= run (20:17:38, addon 0.19.0, client 1.60.1 build 70425 Oct 14 2026, interface 16001, MAGE enUS, in combat: 171 checks, 117 PASS, 0 FAIL, 6 SKIP, 48 INFO) and asked to pass the open and in-progress sections. D-112: S27, S28, S29, S30, S31, S32, S33, S34 and S35 are =PASSED= on that instruction (D-42/D-100 precedent). G-S30-GAME and G-S33-GAME are recorded as PASSED with the per-section values in E-S27-GAME..E-S33-GAME and E-S30-GAME. S30 had no planned code gates (CooldownVoice shipped in =27e68e8=); the lead's check on HEAD =14a0c2d= is in E-S30-VER, and G-S30-REV/SEC are waived.
+  - E-S34-GAME = PASSED (D-112): =DamageMeter/font= PASS =Fonts\ARIALN.TTF 11 Arial Narrow 130871 Solid Interface\Buttons\WHITE8X8=, =window=, =title=, =rows= PASS. UNVERIFIED: a font or texture change applied live.
+  - E-S35-GAME = PASSED (D-112): =test run= line logs =0.19.0 1.60.1 70425 Oct 14 2026 16001 MAGE enUS combat true=; =Debug/interface= PASS =16001 16001=; =Debug/game version= INFO =1.60.1 70425 Oct 14 2026 16001=.
+  - Still open outside the board: =G-FU-NP= stays =PENDING= (not run in G-S9-GAME, G-S30-GAME or this paste), so S25 keeps "conditional on G-FU-NP". Unproven assumptions A-36 (cooldown events) and A-39 (=CROWD_CONTROL= filters, =cc filters= SKIP while auras were secret) stay open; F-CC1 stays pre-approved.
+  - UNVERIFIED (not itemised by the user): the visual lines of G-S30-GAME and G-S33-GAME, CooldownVoice speech, in-combat media changes, profiles, BugSack, =ADDON_ACTION_BLOCKED=, =taint.log=.
+- *Previous continuation point (run S27-S29, S31-S35 started; S27 IN_PROGRESS):* the user asked to carry out S27, S28, S29, S31, S32 and S33 (not S30), then test everything in game with =/mui test= and paste the log. During planning they added "a debug log printing the game version" and answered Q-20 = yes (DamageMeter via Media). Architect replan (WF-PLAN, opus) adopted:
   - D-101 run rules: no Git writes; checks as =nix flake check -L --no-update-lock-file path:/home/merrinx/Projects/merrinxui= and =nix build --no-link --print-out-paths "path:/home/merrinx/Projects/merrinxui#release"=; git-tree form UNVERIFIED from S31 until the user stages =MerrinxUI/Util/Media.lua= (DU-S31); one section at a time S27 → S28 → S29 → S31 → S32 → S33 → S34 → S35 → G-S27-33-INT-VER/REV/SEC → user; between-section prompt pre-answered "continue"; sections stay =IN_PROGRESS= after code gates until G-S33-GAME.
   - D-102 versions: one release =## Version: 0.17.0= (S27 sets it; S31 only confirms), tag =v0.17.0-s33.1=. Supersedes D-69/D-77/D-81 tags for this run. S30 later becomes 0.18.0.
   - D-103: S30 deferred by the user (stays PENDING); S31 depends on S29 code gates; G-S27-30-INT-* and G-S31-33-INT-* replaced by G-S27-33-INT-* (scope S27-S35); G-S33-GAME is the only game gate and carries G-S30-GAME steps 1-4, 6 (G-FU-NP fallback) and the Nameplates part of 7.

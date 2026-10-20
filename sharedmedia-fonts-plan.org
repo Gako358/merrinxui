@@ -1,0 +1,540 @@
+#+TITLE: MerrinxUI - SharedMedia fonts and bar textures on Forever (implementation plan)
+#+STARTUP: overview
+#+OPTIONS: toc:2
+
+* Status board
+| Section | Title                                                         | Status  | Depends on               | Next |
+|---------+---------------------------------------------------------------+---------+--------------------------+------|
+| SM1     | Media diagnostics in =/mui test=, release 0.17.1               | PASSED  | -                        | SM2  |
+| SM2     | Branch fix chosen by the SM1 verdict (W1 or P), release 0.17.2 | PASSED (not needed, row 1) | G-SM1-GAME verdict (D-SM-01) | -    |
+
+Closed. The SM1 diagnostics shipped (they are in =Media.lua= on HEAD =fbdf98a=). E-SM1-GAME = the 0.20.0 paste (16:41:09): =Media/lsm INFO 12000004 function true=, =media addons INFO 0=, =font registrations INFO 0 0 0 0 0 0 0 0 nil=, =font probe control INFO true error=. E-SM-VERDICT = row 1 (B1): no SharedMedia pack is installed, only the standalone LibSharedMedia-3.0, which ships no media of its own. SM2 is not needed. More fonts and bar textures now come from MerrinxUI's own bundled media (master plan S38, D-129). Note: the font probe control reads =true error= rather than the =true false= this plan expected, i.e. =SetFont= raises for a missing file on 1.60.1; =probeFont= already handles that with =pcall=.
+
+Allowed statuses: =PENDING=, =IN_PROGRESS=, =PASSED=, =BLOCKED=.
+
+This file is standalone. It doesn't change =merrinxui-plan.org= (the master plan). Every ID here has an =SM= prefix, so nothing collides with the master plan's IDs. Master-plan IDs it cites (D-35, D-50, D-51, D-70, D-72..D-79, D-111, A-25, A-26, Q-11) keep their meaning.
+
+* Goal
+The user has the *SharedMedia* font pack (Elkano) installed, together with the standalone *LibSharedMedia-3.0* addon. None of the pack's fonts show up in MerrinxUI's font lists (Media "Global font" and the per-module Font selects).
+
+Goal: every font and bar texture the pack ships that actually loads on the Forever client can be selected and applied in MerrinxUI.
+
+The root cause is not visible in the code, and the candidate causes need different fixes (see "Decision table"). So the plan has two parts:
+1. A diagnostic release (SM1), checked with =/mui test= at a game gate.
+2. The fix for the branch that the evidence selects (SM2).
+
+The user pre-approved the MerrinxUI-side workaround (W1) for *fonts and bar textures* (D-SM-05).
+
+* Scope
+- SM1:
+  - read-only =/mui test= diagnostics in =Media=;
+  - a post-hook on =LSM.Register= that only counts registrations;
+  - pure path helpers in =FontLogic= with specs;
+  - =C_UIFileAsset= added to luacheck globals;
+  - TOC =## Version: 0.17.1=.
+  - The visible lists don't change.
+- SM2 (one branch):
+  - *W1*: Media captures pack fonts and statusbars that LSM rejected and serves the usable ones through =ns.Media=. Adds =FontLogic.Merge= and TOC =0.17.2=.
+  - *P*: makes the font probe sticky and warms it up. TOC =0.17.2=.
+  - Branches B1, B2-abort, B2-missing, B3-hard and B4 need no code; they end with a user action, an upstream report or a replan.
+
+* Acceptance criteria (observable)
+| ID       | Section | Criterion |
+|----------+---------+-----------|
+| AC-SM-01 | SM1 | =/mui test= lists 7 new =Media= checks after the existing five, all =INFO=, in the order and value shapes of "Shared interfaces: SM1 checks". There is no new =FAIL= anywhere. |
+| AC-SM-02 | SM1 | The 5 existing Media checks (=fonts=, =statusbars=, =global font=, =global statusbar=, =options font=) keep their names, order and values. |
+| AC-SM-03 | SM1 | The lists don't change. Each =Values= call returns the same table as before SM1. The six Q-11 default fonts stay hidden, the stored key stays listed, and the statusbar lists stay unfiltered. |
+| AC-SM-04 | SM1 | The =Register= post-hook is installed exactly once, at file scope in =Media.lua=. It handles only string =mediatype= / =key=, a non-nil =data= and the types =font= and =statusbar=. It does plain table work plus guarded =IsKnownFile= calls, and contains no =SetFont=, =SetTexture=, =SendMessage= or =error=. |
+| AC-SM-05 | SM1 | No =GetDebugChecks= function calls =SetFont=, =SetTexture=, =SetStatusBarTexture=, =SendMessage= or =IsKnownFile=. The probe controls and the probes of rejected entries run only inside =Media:Values=. |
+| AC-SM-06 | SM1 | =FontLogic.CanonicalAddOnsPath=, =IsAddonPath= and =AddonFolder= are pure, and the spec cases in "Shared interfaces" pass. The 13 existing FontLogic =it= blocks pass unchanged. |
+| AC-SM-07 | SM1 | =## Version: 0.17.1=. =.luacheckrc= =read_globals= contains ="C_UIFileAsset"=. =nix flake check= passes, and the =release= zip builds and contains the TOC with =0.17.1=. |
+| AC-SM-08 | SM1 | (game, G-SM1-GAME) The paste picks exactly one row of the decision table. The verdict is recorded in E-SM-VERDICT and D-SM-13. =EnemyCooldowns/spell table= is =PASS= (D-111 ships in this release). |
+| AC-SM-10 | SM2-W1 | After 0.17.2 and a full restart, every SharedMedia font whose probe passes is listed in Global font and in every module Font select. Picking one applies it (RangeText, Nameplates, DamageMeter, and the options window after =/reload=) with no "is unavailable" chat line, and it survives =/reload=. |
+| AC-SM-11 | SM2-W1 | The SharedMedia statusbars accepted by the chosen statusbar filter (D-SM-13) are listed in Global bar texture and the module Bar texture selects. Picking one changes the Nameplates and DamageMeter bars. |
+| AC-SM-12 | SM2-W1 | Regressions: Q-11 fonts stay hidden; every LSM-registered entry is unchanged and LSM wins on key conflicts; no consumer file changes; no new =FAIL=. A new =Media/extra media= INFO check reports the captured and listed counts. |
+| AC-SM-13 | SM2-W1 | =FontLogic.Merge= specs pass: disjoint merge, LSM wins on conflict, nil/nil gives ={}=, inputs not mutated. |
+| AC-SM-15 | SM2-P  | After 0.17.2, a pack font whose probe once succeeded stays listed on every later open. The flaky count in =Media/addon fonts= no longer hides any font. |
+
+* Non-goals
+- Modifying, patching, forking or re-pinning LibSharedMedia-3.0. D-35 stands: the library ships unmodified from the r182 pin.
+- Writing into LSM's tables (=MediaTable=, =MediaList=, =HashTable= results), or calling =LSM:Register= / =SetGlobal= from MerrinxUI.
+- Making the pack's media visible to *other* addons, or silencing LSM's own "Attempt to register ..." error lines.
+- =## OptionalDeps= in the TOC (D-SM-04).
+- Changing =RangeText:MigrateFont= (it reads =LSM:HashTable("font")= directly, =RangeText.lua:75=). A legacy *path* value that points at a rejected pack font migrates to ="*"= instead of to the pack key. This is accepted (D-SM-11).
+- Sound, background and border media types.
+- =/run= probes (D-51). All evidence comes from =/mui test=.
+
+* Confirmed repository and environment context (observed facts)
+Working directory: =/home/merrinx/Projects/merrinxui=. HEAD =5d8a669= on =main=. The working tree has two uncommitted changes: =MerrinxUI/Modules/EnemyCooldownLogic.lua= (the D-111 War Stomp =cd = 90= fix, "ships with the next release") and =merrinxui-plan.org=. No task touches either file.
+
+** Code
+- =MerrinxUI/MerrinxUI.toc=:
+  - line 1 =## Interface: 16001=; line 4 =## Version: 0.17.0=;
+  - line 7 =embeds.xml= loads before line 16 =Util\FontLogic.lua= and line 17 =Util\Media.lua=;
+  - there is no =## OptionalDeps=.
+- =MerrinxUI/embeds.xml:12= loads =Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua=. That file is built by =flake.nix= =addonLibs= from the =libsharedmedia= input (=!svn/bc/182=), so it is never in the git tree.
+- LSM r182 (=/nix/store/yqi84m25dnimxww5j2l99lii2k0c3xp8-merrinxui-libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua=):
+  - Load:
+    - line 13 =MINOR 12000004=;
+    - line 240 =local IsKnownFile = C_UIFileAsset.IsKnownFile= is read when the file loads.
+  - =Register= (242-288):
+    - a font is rejected when =not IsKnownFile(data)= (251-255); the rejection goes to =geterrorhandler()= and the function returns =false=;
+    - a font is also rejected by langmask (256-259);
+    - statusbars, backgrounds, borders and sounds are rejected when not =IsKnownFile=, or when the path doesn't start with =interface= (261-275);
+    - a key that already exists returns =false= (279-282);
+    - on success it fires =LibSharedMedia_Registered=.
+  - Reads:
+    - =Fetch= (291-296);
+    - =HashTable= returns the live table (302).
+  - Default fonts and statusbars are written directly into =MediaTable= and never go through =Register=.
+- =MerrinxUI/Util/Media.lua=:
+  - =local LSM = LibStub("LibSharedMedia-3.0")= (4); =NewModule("Media", "AceEvent-3.0")= (6); =ns.Media = Media= (7).
+  - =OnInitialize= (17-25) creates the hidden frame =MerrinxUIMediaProbe= and =self.fontProbe=.
+  - =OnEnable= (27-29) registers =LibSharedMedia_Registered= → =MERRINXUI_MEDIA_CHANGED=.
+  - =Fetch= (48-50) is =LSM:Fetch(mt, Resolve(mt, key), true)=.
+  - =FontPath= (52-58), =SetFont= (60-80) and =SetStatusBarTexture= (82-86) all go through =Fetch=.
+  - =Values= (88-100): fonts are filtered by =fontProbe:SetFont(path, 12, "")=; statusbars are not filtered.
+  - =GetDebugChecks= (~162-212) has five checks.
+- =MerrinxUI/Util/FontLogic.lua=:
+  - pure: =DEFAULT=, =GLOBAL=, =IsPath=, =Resolve=, =Values(hash, isUsable, keep, globalLabel)=, =Migrate=;
+  - =spec/font_logic_spec.lua= has 13 =it= blocks and loads the file with =loadfile(...)("MerrinxUI", ns)=.
+- Consumers all go through =ns.Media=:
+  - Nameplates: =Nameplates.lua:256-264, 571-593, 1326-1344=;
+  - DamageMeter: =DamageMeter.lua:162-165, 363-384, 580-598=;
+  - RangeText: =RangeText.lua:79-98, 210-212=; the exception is =MigrateFont= at =:75=;
+  - OptionsWindow: =OptionsWindow.lua:73-80= previews through =ns.Media:Fetch=, =:886= statusbar preview, =:1289= window font.
+- The dropdown scrolls with the mouse wheel and shows at most 10 rows (=OptionsWindow.lua:850-905=, =1202-1213=; =Theme.lua:51= =dropMax = 10=).
+- =.luacheckrc= =read_globals= has =hooksecurefunc= and =C_AddOns= but not =C_UIFileAsset=.
+- =spec/debug_coverage_spec.lua= requires each non-exempt TOC file to have =GetDebugChecks= or =RegisterChecks=. Media already has one.
+- CI (=.github/workflows/ci.yml:35-37=): the tag must match =v<Version>= or =v<Version>-*=; tags with a =-= are published as prereleases.
+- Flake checks (=nix flake show=): =checks.x86_64-linux.{busted,lua-syntax,merrinxui,pre-commit-check}=; packages =default=, =merrinxui=, =release=. The flake evaluates the *git tree*, so new untracked files are invisible. Neither section adds a file.
+- Baseline (planner, =nix__build checks.x86_64-linux.busted= on the dirty tree): exit 0. The last recorded count is 181 / 0 / 0 (master-plan E-S35-VER / D-111).
+- Last game paste (G-S33-GAME, before SharedMedia was installed; client 1.60.1 build 70425, interface 16001, enUS): =Media/fonts INFO 11=, =statusbars 4=. Eleven equals the LSM western defaults (F2 of the architect). Six of them can't be loaded and are hidden (Q-11/D-50).
+
+** External (researcher and planner; URLs)
+- SharedMedia trunk (https://repos.curseforge.com/wow/sharedmedia/trunk/, researcher, the exact lines are UNVERIFIED):
+  - =## Interface: 11509, 16001, 20506, 30405, 38002, 40402, 50504, 120100, 120105=; =## OptionalDeps: LibStub, LibSharedMedia-3.0=;
+  - embeds LSM;
+  - registers =LSM:Register(MediaType_FONT, "Adventure", [[Interface\Addons\SharedMedia\fonts\adventure\Adventure.ttf]])=. Note the =Addons= casing.
+- LSM trunk is still =MINOR 12000004=, and its =Register= is identical to r182 (researcher, https://repos.curseforge.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua).
+- warcraft.wiki.gg (https://warcraft.wiki.gg/wiki/API_C_UIFileAsset.IsKnownFile, researcher): "True if the asset is shipped with the client or refers to a known loose file." Added in 12.0.7.
+- https://github.com/neroxrw/foreverauras/issues/91 (planner, =gh issue view=, 2026-10-10, Forever 16001): a newer LSM rejected a genuinely missing addon =.ogg= through =IsKnownFile= (=LibSharedMedia-3.0.lua:262=). So =IsKnownFile= exists on live Forever and rejects missing files.
+- https://github.com/Legacy-of-Sylvanaar/wow-instant-messenger/issues/291 (planner, 2026-09-22, Forever *beta*): "=C_UIFileAsset.IsKnownFile= ... doesn't exist on Forever". This is superseded for the live client, where LSM r182 loads (A-25).
+- wow-api annotations (architect, store path from =.luarc.json=): =TextureBase:SetTexture= declares =@return boolean success= (=Annotations/Core/Widget/Base/TextureBase.lua:174-179=). =FontString:SetFont= declares no return (=Widget/Font/FontString.lua:156-161=), although A-26 confirmed in game that it returns false for a missing file. =C_UIFileAsset= isn't annotated.
+
+* Decisions
+| ID       | Decision | Basis |
+|----------+----------+-------|
+| D-SM-01 | Diagnose first. SM1 ships only read-only diagnostics; SM2 implements the branch chosen by the G-SM1-GAME evidence. This is an evidence dependency, not an approval checkpoint. | Root cause can't be read from the code; the user couldn't run probes now; D-51 (=/mui test=, no =/run=) |
+| D-SM-02 | The =LSM.Register= post-hook is installed in =Media.lua='s main chunk, right after =ns.Media = Media=, with =hooksecurefunc(LSM, "Register", onRegister)=. It runs while MerrinxUI's files load, so it is in place before a pack that loads later (SharedMedia) runs, whatever the AceAddon init timing. | Planner + architect |
+| D-SM-03 | New checks are INFO-only and only read state. Probing happens only in =Values= (when a list opens). The game gate opens the font and bar-texture lists before =/mui test=. | Master-plan check rule (no =SetFont= in checks) |
+| D-SM-04 | No =## OptionalDeps=. LSM already loads before MerrinxUI alphabetically. Making SharedMedia a dependency would load it before the hook and blind the diagnostics. The lists read LSM live anyway (D-74). | Architect |
+| D-SM-05 | The W1 workaround is pre-approved for *fonts and bar textures*: MerrinxUI captures pack registrations that LSM rejected and serves the usable ones through =ns.Media= only. | User answer |
+| D-SM-06 | W1 capture rule: capture only when LSM did *not* store the key (=hash[key] == nil=), =data= is a string, =FontLogic.IsAddonPath(data)= is true, and =IsKnownFile(data) == false=. Langmask rejections (=known == true=) and duplicates are never captured. When =IsKnownFile(canonical)= is true, store the canonical path. The first capture of a key wins, and LSM wins on conflicts. | Architect + planner (langmask) |
+| D-SM-07 | Never write to LSM tables or modify LSM (D-35). | Architect; D-35 |
+| D-SM-08 | Versions: SM1 =0.17.1=, tag =v0.17.1-sm1.1= (includes the D-111 change); SM2 =0.17.2=, tag =v0.17.2-sm2.1=. S30 keeps =0.18.0=. | Planner + architect |
+| D-SM-09 | SM2 tasks are new task IDs. A file owned by an SM1 task passes to an SM2 task only after the SM1 section is =PASSED=. The two never run at the same time. | Architect |
+| D-SM-10 | This plan is the separate file =sharedmedia-fonts-plan.org=. The planner may write only one file, so the master plan is not edited. | Planner |
+| D-SM-11 | =RangeText:MigrateFont= bypassing Media is a non-goal. | Architect |
+| D-SM-12 | Each release has its own final gate: integrated verifier, then reviewer and security in parallel. The external game verdict separates the two releases. | Planner |
+| D-SM-13 | /Placeholder, filled in by lead from E-SM1-GAME/: the chosen branch and, for W1, the statusbar filter (SF-1 canonical / SF-2 texture probe / SF-3 pack loaded) per the decision table. | Pending G-SM1-GAME |
+
+* Assumptions (unverified until the named gate)
+- A-SM-01 (G-SM1-GAME): addons load alphabetically, so =LibSharedMedia-3.0= → =MerrinxUI= → =SharedMedia=, and the hook sees SharedMedia's registrations. If =media addons= doesn't list =SharedMedia= while the pack is enabled, this is false.
+- A-SM-02 (G-SM1-GAME): =hooksecurefunc= preserves the original's return values and calls the hook after the original. An error in the hook would propagate into the pack's main chunk; R-SM-01 mitigates this by having no error paths.
+- A-SM-03 (G-SM1-GAME): =Texture:SetTexture= returns false for a missing file on Forever. The texture probe control decides this.
+- A-SM-04 (G-SM1-GAME): =FontString:SetFont= still discriminates on 1.60.1. The font probe control decides this; A-26 was confirmed earlier.
+- A-SM-05 (G-SM1-GAME): SharedMedia's embedded LSM is not a higher MINOR than 12000004. If it is, its load redefines =lib.Register=, the hook is dropped (=lsm= hookIntact false), and the counts are only a lower bound.
+- A-SM-06: =LibStub:GetLibrary(major, true)= returns =lib, minor= (LibStub source; the architect read =LibStub.lua:7,17=).
+- A-SM-07 (G-SM1-GAME): the SharedMedia TOC lists 16001 (from the researcher).
+
+* Open questions
+- Q-SM-01 (answered): installed addon and symptom → "SharedMedia pack, fonts missing from lists".
+- Q-SM-02 (answered): workaround if LSM rejects the pack's files → "Yes, fonts and bar textures" (D-SM-05).
+- Q-SM-03 (after G-SM1-GAME, only on the B4 row or an unlisted pattern): replan with the planner. Lead stops and reports the paste.
+
+* Risks
+| ID      | Risk | Mitigation |
+|---------+------+------------|
+| R-SM-01 | An error in the hook aborts the rest of the pack's main chunk. | Type guards only, no method calls except =LSM:HashTable= and the guarded =IsKnownFile=; reviewer focus; AC-SM-04 grep. |
+| R-SM-02 | A higher-MINOR LSM copy replaces =Register= after the hook is installed. | The =lsm= check reports hookIntact; stop condition for W1. |
+| R-SM-03 | LSM's "Attempt to register ..." lines remain under W1. | Accepted (D-SM-05); stated in the handoff. |
+| R-SM-04 | A weak statusbar filter lists missing textures, which draw as solid or green bars. | The filter is chosen from the SM1 controls (D-SM-13); SF-3 is the fallback. |
+| R-SM-05 | Captured media is MerrinxUI-only, so other addons still lack it. | Non-goal, accepted by the user. |
+| R-SM-06 | The diagnostics are noisy (12 Media lines). | Accepted; INFO only. |
+| R-SM-07 | The hook adds a wrapper to a shared library method that every addon calls. | Post-hook, constant work, no taint (insecure code); security focus. |
+
+* Stop conditions
+Lead stops and reports instead of improvising when:
+- the hook needs anything beyond table work and guarded =IsKnownFile= (R-SM-01);
+- a check would need =SetFont=, =SetTexture=, =SendMessage= or =IsKnownFile=;
+- an implementation needs a file outside its task's owned paths, or a change to LSM, =flake.nix=, =flake.lock= or =embeds.xml=;
+- G-SM1-GAME shows =lsm= hookIntact false while W1 is the selected branch;
+- the font probe control is not =true false= (the probe can't be trusted, which also affects Q-11);
+- the paste matches no row of the decision table, or matches B4;
+- a verifier finds failures in files owned by another task.
+
+* Shared interfaces and contracts
+Every task codes against these. A change to any of them requires a message on the coordination channel and lead approval.
+
+** FontLogic (SM1, owner T-SM1-1)
+#+begin_src lua
+-- pure; no LibStub, CreateFrame, C_*, _G
+FontLogic.CanonicalAddOnsPath(path) -> string|nil
+--   string whose first two segments (split on \ or /) are "interface", "addons" (case-insensitive)
+--   and that has a non-empty remainder -> "Interface\\AddOns\\" .. remainder with every "/" turned into "\\".
+--   Anything else (non-string, "", non-addon path, "Interface\\AddOns\\") -> nil.
+FontLogic.IsAddonPath(path) -> boolean      -- CanonicalAddOnsPath(path) ~= nil
+FontLogic.AddonFolder(path) -> string|nil   -- third segment of the canonical path, original casing kept
+#+end_src
+Spec cases (new =it= blocks in =spec/font_logic_spec.lua=; write them first and confirm they fail):
+- ="interface/addons/X/a.ttf"= → ="Interface\\AddOns\\X\\a.ttf"=; =[[Interface\Addons\SharedMedia\fonts\adventure\Adventure.ttf]]= → =[[Interface\AddOns\SharedMedia\fonts\adventure\Adventure.ttf]]=.
+- ="Fonts\\FRIZQT__.TTF"=, ="Interface\\AddOns\\"=, =""=, =nil=, =5= → =nil=.
+- =IsAddonPath=: true for both addon examples; false for the =Fonts\= path and for non-strings.
+- =AddonFolder=: ="Interface/AddOns/SharedMedia/x"= → ="SharedMedia"=; ="Interface\\AddOns\\"= → =nil=; ="Fonts\\X.TTF"= → =nil=.
+
+** Media state and hook (SM1, owner T-SM1-2)
+#+begin_src lua
+-- file scope, directly after `ns.Media = Media`
+Media.registrations = {
+  font      = { seen = 0, stored = 0, duplicate = 0, rejected = {} },
+  statusbar = { seen = 0, stored = 0, duplicate = 0, rejected = {} },
+}
+-- rejected[key] = { path = data, known = bool|nil, canonicalKnown = bool|nil, usable = bool|nil }
+Media.folders = {}            -- [AddonFolder(data)] = true for every string data seen
+-- local isKnown(path): nil unless type(C_UIFileAsset) == "table" and type(C_UIFileAsset.IsKnownFile) == "function";
+--                      otherwise IsKnownFile(path) and true or false
+-- local onRegister(_, mediatype, key, data):
+--   return unless type(mediatype) == "string", type(key) == "string", data ~= nil
+--   mt = mediatype:lower(); stats = Media.registrations[mt]; return unless stats
+--   stats.seen += 1; record folder when type(data) == "string"
+--   hash = LSM:HashTable(mt); cur = hash and hash[key]
+--   cur == data -> stats.stored += 1; stats.rejected[key] = nil
+--   cur ~= nil  -> stats.duplicate += 1
+--   else, if stats.rejected[key] == nil -> rejected[key] = { path = data,
+--        known = string and isKnown(data), canonicalKnown = (canonical and isKnown(canonical)) }
+hooksecurefunc(LSM, "Register", onRegister)
+Media.hookedRegister = LSM.Register
+#+end_src
+- =OnInitialize= adds:
+  - =self.textureProbe = frame:CreateTexture()= on the existing probe frame;
+  - =self.controls = {}=;
+  - =self.probeSeen = {}=, where =path → { ok = bool, fail = bool }=.
+- =Values(mediatype, keep, noGlobal)=:
+  - The returned table is identical to today's.
+  - Side effects:
+    1. *Control*, once per =mediatype= per session:
+       - font: =controls.font = { good = probe(LSM:Fetch("font", FontLogic.DEFAULT)), missing = probe("Interface\\AddOns\\MerrinxUI\\no-such-file.ttf") }=, using =fontProbe:SetFont(p, 12, "")=;
+       - statusbar: =controls.statusbar = { good = SetTexture("Interface\\Buttons\\WHITE8X8"), missing = SetTexture("Interface\\AddOns\\MerrinxUI\\no-such-file.tga") }=, then =textureProbe:SetTexture(nil)=;
+       - every result is normalised with =and true or false=.
+    2. *Rejected entries*, on every call: each entry with a string =path= in =registrations[mt].rejected= is probed the same way, and the result goes into =entry.usable=.
+    3. *Font probe results*: the font =isUsable= closure records the result in =probeSeen[path]= (=ok= or =fail= set to true), then returns the same boolean as today.
+
+** SM1 checks (owner T-SM1-2; appended after the existing five, in this order)
+| # | name                      | returns (in order) |
+|---+---------------------------+--------------------|
+| 1 | =lsm=                     | ="INFO"=, LSM minor (second return of =LibStub:GetLibrary("LibSharedMedia-3.0", true)=), API type (=type(C_UIFileAsset.IsKnownFile)=, or ="no C_UIFileAsset"=), hookIntact (=LSM.Register == Media.hookedRegister=) |
+| 2 | =media addons=            | ="INFO"=, folder count, the folder names sorted |
+| 3 | =font registrations=      | ="INFO"=, seen, stored, duplicate, rejected, rejectedKnown (=known == true=), rejectedCanonicalKnown (=canonicalKnown == true=), probed (=usable ~= nil=), probedUsable (=usable == true=), sample rejected path (first by sorted key) or =nil= |
+| 4 | =font probe control=      | ="INFO"=, good, missing; or ="INFO"=, ="not probed"= |
+| 5 | =statusbar registrations= | same shape as 3, for =statusbar= |
+| 6 | =texture probe control=   | same shape as 4, for =statusbar= |
+| 7 | =addon fonts=             | ="INFO"=, LSM-stored fonts with an addon path, of those: probed ok, probed failed, flaky (both =ok= and =fail=), in =unusableFonts=, sample failed key (first sorted) or =nil= |
+
+Example with no pack: =lsm INFO 12000004 function true=; =media addons INFO 0=; =font registrations INFO 0 0 0 0 0 0 0 0 nil=.
+
+** SM2-W1 contract (owners T-SM2-1, T-SM2-2)
+#+begin_src lua
+FontLogic.Merge(hash, extra) -> table   -- new table; hash entries win; nil inputs = empty; inputs not mutated
+-- Media.lua file scope:
+Media.extra = { font = {}, statusbar = {} }
+-- onRegister, rejected branch, when D-SM-06 holds and Media.extra[mt][key] == nil:
+--   Media.extra[mt][key] = entry.canonicalKnown and canonical or data
+--   Media:SendMessage("MERRINXUI_MEDIA_CHANGED", mt, key)
+function Media:Fetch(mediatype, key)
+  local resolved = self:Resolve(mediatype, key)
+  return LSM:Fetch(mediatype, resolved, true) or (self.extra[mediatype] and self.extra[mediatype][resolved])
+end
+-- Values: FontLogic.Values(FontLogic.Merge(LSM:HashTable(mt), self.extra[mt]), isUsable, keep, label)
+--   font: today's probe for every path (extra included)
+--   statusbar: LSM paths always pass; extra paths pass by the D-SM-13 filter:
+--     SF-1 canonical: the path was stored canonical with canonicalKnown == true
+--     SF-2 texture probe: textureProbe:SetTexture(path) (then SetTexture(nil)); only if the control was `true false`
+--     SF-3 pack loaded: C_AddOns.IsAddOnLoaded(FontLogic.AddonFolder(path))
+-- New check after the SM1 checks: `extra media` -> "INFO", extraFonts, extraFontsListed (last probe ok), extraStatusbars
+#+end_src
+- =FontPath=, =SetFont= and =SetStatusBarTexture= keep their fallback chains. They get the extra entries through =Fetch=.
+- No consumer file changes.
+
+** SM2-P contract (owner T-SM2-2; only on the B3-flaky row)
+- =self.usableFonts[path] = true= after the first successful probe. =isUsable= returns true at once for those paths.
+- =OnMediaRegistered= warms each newly registered font path once on =fontProbe= and records the result only.
+- New check =font cache= → ="INFO"=, number of cached usable paths.
+
+* Decision table (G-SM1-GAME → branch; recorded in D-SM-13)
+| Row | Evidence in the paste (+ BugSack/scriptErrors lines) | Branch | Action |
+|-----+-------------------------------------------------------+--------+--------|
+| 1 | The AddOns list (gate step 1) shows =SharedMedia= disabled, out of date, or absent; =media addons= lacks =SharedMedia= | B1 | User enables it / ticks "Load out of date AddOns" / fixes a nested folder, then fully restarts. No code; SM2 isn't needed. |
+| 2 | The AddOns list shows =SharedMedia= enabled and up to date, but =media addons= lacks it (=font registrations= seen = 0), hookIntact true, plus a Lua error from =SharedMedia.lua= / LSM | B2-abort | Paste the error. Upstream report to SharedMedia/LSM. No code. Lead stops. Without an error line this pattern means A-SM-01 is false (pack loaded before the hook): treat as row 3. |
+| 3 | hookIntact false | B2-blind | Stop. Replan the hook site with the planner. |
+| 4 | rejected > 0, probedUsable > 0, rejectedKnown = 0, rejectedCanonicalKnown > 0 | B2-case | SM2-W1, canonical paths. Statusbar filter SF-1. Upstream note to SharedMedia about =Addons= casing. |
+| 5 | rejected > 0, probedUsable > 0, rejectedKnown = 0, rejectedCanonicalKnown = 0 | B2-index | SM2-W1. Statusbar filter SF-2 if the texture control is =true false=, else SF-3. Upstream note to LSM about Forever loose files. |
+| 6 | rejected > 0, probedUsable = 0 (font control =true false=) | B2-missing | The files can't be loaded: user checks the install and does a full restart; upstream report. No code. |
+| 7 | addon fonts stored > 0, flaky > 0 | B3-flaky | SM2-P. |
+| 8 | addon fonts stored > 0, failed = stored, flaky = 0 | B3-hard | The files are registered but can't be loaded on this client. Upstream. No code. |
+| 9 | addon fonts stored > 0, ok = stored | B4 | Presentational. Stop. Replan (Q-SM-03). |
+| 10 | font probe control is not =true false= | — | Stop condition (probe untrustworthy). |
+Rows 4-5 can hold for fonts and statusbars separately. W1 handles both types when either qualifies.
+
+* Ownership (one owner per writable path at any time)
+| Path                          | SM1 owner | SM2 owner (after SM1 =PASSED=, D-SM-09) |
+|-------------------------------+-----------+------------------------------------------|
+| =MerrinxUI/Util/FontLogic.lua= | T-SM1-1   | T-SM2-1 (W1 only) |
+| =spec/font_logic_spec.lua=     | T-SM1-1   | T-SM2-1 (W1 only) |
+| =MerrinxUI/Util/Media.lua=     | T-SM1-2   | T-SM2-2 |
+| =.luacheckrc=                  | T-SM1-2   | - |
+| =MerrinxUI/MerrinxUI.toc=      | T-SM1-2   | T-SM2-2 |
+| =sharedmedia-fonts-plan.org=   | lead (status and evidence only) | lead |
+Read-only for every task: all other files, including =EnemyCooldownLogic.lua= (D-111, already modified), =merrinxui-plan.org=, =flake.nix=, =flake.lock=, =embeds.xml=, and every consumer module.
+
+* Implementation sections
+** SM1 - Media diagnostics in =/mui test=, release 0.17.1
+- Section ID: SM1
+- Status: PENDING
+- Workstreams: WS-SM1-A, WS-SM1-B
+- Tasks: T-SM1-1, T-SM1-2 (independent; dispatch both at once)
+- Acceptance: AC-SM-01 .. AC-SM-08
+- Dependencies: none (T-SM1-1 and T-SM1-2 have no depends-on edges)
+- Owned paths: =MerrinxUI/Util/FontLogic.lua=, =spec/font_logic_spec.lua=, =MerrinxUI/Util/Media.lua=, =.luacheckrc=, =MerrinxUI/MerrinxUI.toc=
+- Sequencing:
+  1. Lead sets SM1 =IN_PROGRESS=, records E-SM-BASE, and dispatches T-SM1-1 and T-SM1-2 concurrently on channel =merrinxui-sm1=.
+  2. T-SM1-1 writes the specs first (red), then the helpers (green), and posts =contract-ready=.
+  3. T-SM1-2 implements the state, hook, =Values= side effects and the 7 checks against the contract, adds =C_UIFileAsset= to =.luacheckrc=, and sets the TOC version to 0.17.1.
+  4. Each task is verified as soon as it finishes (G-SM1-T1-VER, G-SM1-T2-VER). T-SM1-2's busted and package checks are rerun once T-SM1-1 is done.
+  5. Final gate G-SM1-INT-VER, then G-SM1-REV and G-SM1-SEC in parallel.
+  6. User steps after the final gate: commit (grouping below), tag =v0.17.1-sm1.1=, green CI, install, G-SM1-GAME.
+- Per-task verifier checks:
+  - T-SM1-1:
+    - =nix__build= =checks.x86_64-linux.busted= exit 0, with new cases added and 13 old cases unchanged;
+    - grep =FontLogic.lua= for =LibStub|CreateFrame|C_|_G= → 0 matches;
+    - =eca__editor_diagnostics= on both files is clean.
+  - T-SM1-2:
+    - =nix__build= =checks.x86_64-linux.pre-commit-check= and =checks.x86_64-linux.lua-syntax= exit 0;
+    - =hooksecurefunc(LSM, "Register"= → exactly 1 match in =MerrinxUI/=;
+    - =C_UIFileAsset= appears only in =Media.lua= and =.luacheckrc=;
+    - no =SetFont|SetTexture|SetStatusBarTexture|SendMessage|IsKnownFile= inside the =GetDebugChecks= body or =onRegister= (the =isKnown= helper is the only =IsKnownFile= site);
+    - =## Version: 0.17.1=;
+    - =git diff --stat= shows only owned paths plus the pre-existing two;
+    - diagnostics clean;
+    - busted and =checks.x86_64-linux.merrinxui= are rerun after T-SM1-1 is =PASSED=.
+- Examples and regressions:
+  - No pack installed: lists identical to 0.17.0; =font registrations INFO 0 0 0 0 0 0 0 0 nil=.
+  - SharedMedia rejected by casing: =font registrations INFO N 0 0 N 0 N N N Interface\Addons\SharedMedia\...=.
+  - Q-11: Morpheus and Skurri are still absent from the Global font list.
+  - A stored key such as ="Arial Narrow"= is still listed and applied.
+- Commit grouping (user, after the final gate): one commit with the five owned paths plus =MerrinxUI/Modules/EnemyCooldownLogic.lua= (D-111). The =.org= plan files are left out.
+- G-SM1-GAME steps (user, gaming PC):
+  1. Install the =v0.17.1-sm1.1= zip. In the AddOns list, check that =SharedMedia= and =LibSharedMedia-3.0= are enabled and not "out of date". Note anything that isn't.
+  2. Optional but recommended: install BugSack, or enable "Display Lua errors" (=/console scriptErrors 1=).
+  3. *Fully exit the client and start it again.* =/reload= isn't enough, because the loose-file index is built at startup.
+  4. =/mui debug on= if it's off. Open =/mui= → Media → open the *Global font* dropdown and scroll it, close it, then open the *Global bar texture* dropdown, close it.
+  5. =/mui test=, then paste the log. At minimum include every =Media/...= line, =Debug/game version= and =EnemyCooldowns/spell table=.
+  6. Paste the first three "LibSharedMedia-3.0: Attempt to register ..." or =SharedMedia.lua= error lines, if there are any, and say whether any SharedMedia font was visible in the list.
+- Completion evidence: E-SM-BASE, E-SM1-T1-HUNKS, E-SM1-T1-VER, E-SM1-T2-HUNKS, E-SM1-T2-VER, E-SM1-INT-VER, E-SM1-REV, E-SM1-SEC, E-SM1-REL, E-SM1-GAME, E-SM-VERDICT (see the registers).
+- =PASSED= when: the latest T-SM1-1 and T-SM1-2 verifier reports are =PASSED=, G-SM1-REV and G-SM1-SEC are =CLEAR=, and E-SM1-GAME plus E-SM-VERDICT are recorded.
+- Next: SM2 (or stop, for rows 1-3, 6, 8-10).
+
+** SM2 - Branch fix (W1 or P), release 0.17.2
+- Section ID: SM2
+- Status: PENDING. Its tasks are blocked until E-SM-VERDICT selects row 4, 5 or 7.
+- Workstreams: WS-SM2-A (W1 only), WS-SM2-B
+- Tasks:
+  - W1 (rows 4/5): T-SM2-1 and T-SM2-2, independent of each other.
+  - P (row 7): T-SM2-2 only, with packet P.
+- Acceptance: W1 → AC-SM-10..AC-SM-13; P → AC-SM-15.
+- Dependencies:
+  - T-SM2-1 depends on G-SM1-GAME (verdict) and T-SM1-1 (=PASSED=, same files);
+  - T-SM2-2 depends on G-SM1-GAME and T-SM1-2.
+  - The SM1 ownership handoff (D-SM-09) can't be avoided, and the branch content is unknown before the verdict.
+- Owned paths:
+  - W1: =FontLogic.lua=, =spec/font_logic_spec.lua= (T-SM2-1); =Media.lua=, =MerrinxUI.toc= (T-SM2-2).
+  - P: =Media.lua=, =MerrinxUI.toc= (T-SM2-2).
+- Sequencing:
+  1. Lead records D-SM-13 (branch and statusbar filter), sets SM2 =IN_PROGRESS=, and dispatches the ready tasks concurrently on channel =merrinxui-sm2=.
+  2. T-SM2-1 writes the =Merge= specs first, then =Merge=, and posts =contract-ready=.
+  3. T-SM2-2 implements the W1 or P contract, adds the =extra media= (W1) or =font cache= (P) check, and sets the TOC to 0.17.2.
+  4. Per-task verification, then the final gate G-SM2-INT-VER → G-SM2-REV ∥ G-SM2-SEC.
+  5. User: commit, tag =v0.17.2-sm2.1=, CI, install, full restart, G-SM2-GAME.
+- Per-task verifier checks:
+  - T-SM2-1: busted exit 0 with the =Merge= cases (AC-SM-13); FontLogic still pure.
+  - T-SM2-2:
+    - pre-commit and lua-syntax checks exit 0;
+    - no consumer file in =git diff --stat=;
+    - =LSM:Register(=, =MediaTable= and =SetGlobal(= → 0 matches in =MerrinxUI/= outside =Libs=;
+    - the =SendMessage= in =onRegister= sits only in the D-SM-06 capture branch;
+    - no =SetFont|SetTexture|SetStatusBarTexture|SendMessage|IsKnownFile= inside =GetDebugChecks=;
+    - =## Version: 0.17.2=;
+    - busted and package checks are rerun after T-SM2-1.
+- G-SM2-GAME steps:
+  1. Install, fully restart, =/mui= → Media.
+  2. W1: open Global font and pick a SharedMedia font, such as "Adventure". RangeText, Nameplates and DamageMeter text change, and there is no "unavailable" line in chat. Open Global bar texture and pick a SharedMedia texture: the Nameplates and DamageMeter bars change.
+  3. =/reload=: the choices persist.
+  4. Morpheus and Skurri are still absent.
+  5. =/mui test= and paste. Expect =Media/extra media INFO <fonts> <listed> <statusbars>= and no new FAIL.
+  6. P: reopen the lists 3 times; the SharedMedia fonts stay listed; =Media/font cache= > 0.
+- Completion evidence: E-SM2-T1-HUNKS, E-SM2-T1-VER, E-SM2-T2-HUNKS, E-SM2-T2-VER, E-SM2-INT-VER, E-SM2-REV, E-SM2-SEC, E-SM2-REL, E-SM2-GAME.
+- =PASSED= when: the latest verifier reports for the dispatched tasks are =PASSED=, the reviewer and security reports are =CLEAR=, and E-SM2-GAME confirms AC-SM-10/11 (or AC-SM-15).
+- Next: none.
+
+* Workstreams
+| Field               | WS-SM1-A | WS-SM1-B | WS-SM2-A | WS-SM2-B |
+|---------------------+----------+----------+----------+----------|
+| Workstream ID       | WS-SM1-A | WS-SM1-B | WS-SM2-A | WS-SM2-B |
+| Specialist          | implementor + backend, behavioral-validation | implementor + backend | implementor + backend, behavioral-validation | implementor + backend |
+| Goal                | Pure path helpers + specs | Hook, probe recording, 7 INFO checks, luacheck global, 0.17.1 | =FontLogic.Merge= + specs | W1 capture/serve (fonts + statusbars) or P sticky probe; 0.17.2 |
+| Owned files/modules | =FontLogic.lua=, =spec/font_logic_spec.lua= | =Media.lua=, =.luacheckrc=, =MerrinxUI.toc= | =FontLogic.lua=, =spec/font_logic_spec.lua= | =Media.lua=, =MerrinxUI.toc= |
+| Dependencies        | none | none (codes against the FontLogic contract) | G-SM1-GAME verdict, T-SM1-1 PASSED | G-SM1-GAME verdict, T-SM1-2 PASSED |
+| Shared interfaces   | =CanonicalAddOnsPath=, =IsAddonPath=, =AddonFolder= | Media state, hook, SM1 checks | =Merge(hash, extra)= | =Media.extra=, =Fetch= fallback, =Values= merge, =extra media= / =font cache= |
+| Parallel group      | P-SM1 | P-SM1 | P-SM2 | P-SM2 |
+| Integration order   | 1 (with B) | 1 (with A) | 2 (with B) | 2 (with A) |
+| Targeted validation | busted; purity grep | pre-commit, lua-syntax, greps; busted and package after A | busted; purity grep | pre-commit, lua-syntax, greps; busted and package after A |
+
+* Task register
+| Task    | Section | WS | Skills | Owned paths | Depends on (why) | Contract partners | Acceptance | Verifier checks |
+|---------+---------+----+--------+-------------+------------------+-------------------+------------+-----------------|
+| T-SM1-1 | SM1 | WS-SM1-A | backend, behavioral-validation | =MerrinxUI/Util/FontLogic.lua=, =spec/font_logic_spec.lua= | none | T-SM1-2 | AC-SM-06 | busted exit 0; FontLogic purity grep; diagnostics |
+| T-SM1-2 | SM1 | WS-SM1-B | backend | =MerrinxUI/Util/Media.lua=, =.luacheckrc=, =MerrinxUI/MerrinxUI.toc= | none (the contract fixes the helper signatures) | T-SM1-1 | AC-SM-01..05, AC-SM-07 | pre-commit, lua-syntax, greps, version; busted and package rerun after T-SM1-1 |
+| T-SM2-1 | SM2 | WS-SM2-A | backend, behavioral-validation | =MerrinxUI/Util/FontLogic.lua=, =spec/font_logic_spec.lua= | G-SM1-GAME (branch unknown before the verdict); T-SM1-1 (same files, D-SM-09) | T-SM2-2 | AC-SM-13 | busted exit 0; purity grep |
+| T-SM2-2 | SM2 | WS-SM2-B | backend | =MerrinxUI/Util/Media.lua=, =MerrinxUI/MerrinxUI.toc= | G-SM1-GAME (branch and statusbar filter); T-SM1-2 (same files, D-SM-09) | T-SM2-1 | AC-SM-10..12 (W1) or AC-SM-15 (P) | pre-commit, lua-syntax, greps, version; busted and package rerun after T-SM2-1 |
+All implementors format only their own files (=stylua <owned .lua files>=, through the dev shell or the pre-commit check). None of them runs a whole-tree formatter or rewriter.
+
+* Coordination
+Channel per section: =merrinxui-sm1=, =merrinxui-sm2=. Participants: =lead=, one per task ID.
+| From → To | When | Message carries |
+|-----------+------+-----------------|
+| T-SM1-1 → T-SM1-2 | helpers and specs green | =contract-ready=: final signatures, with spec names as evidence that =CanonicalAddOnsPath= / =IsAddonPath= / =AddonFolder= behave as contracted |
+| T-SM1-2 → T-SM1-1 | a helper edge case is needed (e.g. a forward-slash-only path) | =request-edit=: the input/output pair to add to the spec and helper; T-SM1-2 never edits FontLogic itself |
+| T-SM1-2 → lead | a stop condition is hit (hook needs more than table work; a check needs a forbidden call) | =changed-assumption= with file:line |
+| T-SM2-1 → T-SM2-2 | =Merge= green | =contract-ready= |
+| T-SM2-2 → T-SM2-1 | =Merge= semantics need a change | =request-edit= with the case |
+| either SM2 task → lead | the D-SM-13 filter turns out to be unimplementable | =changed-assumption= |
+
+* Final gates
+Each section has one final gate (D-SM-12). Assignments include =Workflow intent=, the section/task/AC IDs, the owned paths, the commands and the evidence field.
+- G-SM1-INT-VER (=Workflow intent: verification=), over the whole SM1 change set:
+  - =nix__flake_check= exit 0;
+  - =nix__build= =["release"]= exit 0, with the zip containing the TOC =## Version: 0.17.1=;
+  - all SM1 greps;
+  - the diff limited to the owned paths plus the two pre-existing changes;
+  - diagnostics clean.
+- G-SM1-REV (=Workflow intent: review=) and G-SM1-SEC (=Workflow intent: security=) run in parallel after G-SM1-INT-VER.
+  - Reviewer focus: the hook can't raise; checks are read-only; the lists are unchanged; contract fidelity.
+  - Security focus: the hook on a shared library table (taint, behaviour for other addons); no writes to Blizzard or LSM tables; no new globals; no CVars; release zip contents; license unchanged.
+- G-SM2-INT-VER / G-SM2-REV / G-SM2-SEC: the same shape for SM2.
+  - Security also checks that W1 can't serve a path outside =Interface\AddOns= (the =IsAddonPath= guard).
+  - The reviewer also checks that LSM wins on conflicts and that consumers are unchanged.
+- Outcomes: verifier =PASSED= / =FAILED= / =UNVERIFIED=; reviewer and security =CLEAR= / =FINDINGS= / =UNVERIFIED=. Findings go back to the owning task as bounded remediation batches. Verification is then rerun, followed by review and security.
+
+* Working directory and validation commands
+Working directory: =/home/merrinx/Projects/merrinxui=. Builds and checks run through the =nix__*= MCP tools, not the shell. All new and edited files are tracked, so the git-tree flake sees them.
+| Purpose | Tool call | Expected |
+|---------+-----------+----------|
+| Baseline / full checks | =nix__flake_check= =root=/home/merrinx/Projects/merrinxui= | exit 0 |
+| Specs | =nix__build= =attributes=["checks.x86_64-linux.busted"]= | exit 0 (count = 181 + new cases; read it with =nix log <drv>= if needed) |
+| Lint + format | =nix__build= =attributes=["checks.x86_64-linux.pre-commit-check"]= | exit 0 (luacheck 0/0, stylua clean) |
+| Syntax | =nix__build= =attributes=["checks.x86_64-linux.lua-syntax"]= | exit 0 |
+| Package paths | =nix__build= =attributes=["checks.x86_64-linux.merrinxui"]= | exit 0 |
+| Release zip | =nix__build= =attributes=["release"]= | exit 0; zip lists =MerrinxUI/MerrinxUI.toc= with the new version |
+Read-only greps, run with =eca__grep= on =MerrinxUI/=:
+- =hooksecurefunc\(LSM, "Register"= → 1;
+- =C_UIFileAsset= → =Media.lua= only;
+- =LibStub|CreateFrame|C_|_G= in =FontLogic.lua= → 0;
+- =LSM:Register\(|MediaTable|SetGlobal\(= outside =Libs= → 0;
+- =## Version:= in the TOC → the expected value.
+
+* Registers (JSON)
+#+begin_src json
+{
+  "requirements": [
+    {"id": "AC-SM-01", "text": "7 new INFO Media checks after the existing five, documented order and shapes; no new FAIL", "sections": ["SM1"]},
+    {"id": "AC-SM-02", "text": "existing 5 Media checks unchanged", "sections": ["SM1"]},
+    {"id": "AC-SM-03", "text": "Values results unchanged in SM1; Q-11 fonts hidden; stored key listed; statusbars unfiltered", "sections": ["SM1"]},
+    {"id": "AC-SM-04", "text": "Register post-hook once at file scope; guards; no SetFont/SetTexture/SendMessage/error", "sections": ["SM1"]},
+    {"id": "AC-SM-05", "text": "checks call no SetFont/SetTexture/SetStatusBarTexture/SendMessage/IsKnownFile; probing only in Values", "sections": ["SM1"]},
+    {"id": "AC-SM-06", "text": "FontLogic CanonicalAddOnsPath/IsAddonPath/AddonFolder pure with specs; 13 old specs pass", "sections": ["SM1"]},
+    {"id": "AC-SM-07", "text": "Version 0.17.1; C_UIFileAsset in read_globals; flake check and release pass", "sections": ["SM1"]},
+    {"id": "AC-SM-08", "text": "game paste selects exactly one decision-table row; EnemyCooldowns/spell table PASS", "sections": ["SM1"]},
+    {"id": "AC-SM-10", "text": "W1: usable SharedMedia fonts listed and applied in all font selects, persist over /reload", "sections": ["SM2"]},
+    {"id": "AC-SM-11", "text": "W1: filtered SharedMedia statusbars listed and applied", "sections": ["SM2"]},
+    {"id": "AC-SM-12", "text": "W1 regressions: Q-11 hidden, LSM wins, no consumer changes, extra media check, no new FAIL", "sections": ["SM2"]},
+    {"id": "AC-SM-13", "text": "FontLogic.Merge specs", "sections": ["SM2"]},
+    {"id": "AC-SM-15", "text": "P: once-usable pack fonts stay listed; font cache check", "sections": ["SM2"]}
+  ],
+  "sections": [
+    {"id": "SM1", "title": "Media diagnostics, 0.17.1", "status": "PENDING", "deps": [], "workstreams": ["WS-SM1-A", "WS-SM1-B"], "tasks": ["T-SM1-1", "T-SM1-2"], "acs": ["AC-SM-01", "AC-SM-02", "AC-SM-03", "AC-SM-04", "AC-SM-05", "AC-SM-06", "AC-SM-07", "AC-SM-08"], "owned_paths": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua", "MerrinxUI/Util/Media.lua", ".luacheckrc", "MerrinxUI/MerrinxUI.toc"], "gates": ["G-SM1-T1-VER", "G-SM1-T2-VER", "G-SM1-INT-VER", "G-SM1-REV", "G-SM1-SEC", "G-SM1-GAME"], "next": "SM2"},
+    {"id": "SM2", "title": "Branch fix W1 or P, 0.17.2", "status": "PENDING", "deps": ["G-SM1-GAME"], "workstreams": ["WS-SM2-A", "WS-SM2-B"], "tasks": ["T-SM2-1", "T-SM2-2"], "acs": ["AC-SM-10", "AC-SM-11", "AC-SM-12", "AC-SM-13", "AC-SM-15"], "owned_paths": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua", "MerrinxUI/Util/Media.lua", "MerrinxUI/MerrinxUI.toc"], "gates": ["G-SM2-T1-VER", "G-SM2-T2-VER", "G-SM2-INT-VER", "G-SM2-REV", "G-SM2-SEC", "G-SM2-GAME"], "next": null}
+  ],
+  "workstreams": [
+    {"id": "WS-SM1-A", "specialist": "implementor+backend+behavioral-validation", "owned": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua"], "deps": [], "parallel_group": "P-SM1", "integration_order": 1},
+    {"id": "WS-SM1-B", "specialist": "implementor+backend", "owned": ["MerrinxUI/Util/Media.lua", ".luacheckrc", "MerrinxUI/MerrinxUI.toc"], "deps": [], "parallel_group": "P-SM1", "integration_order": 1},
+    {"id": "WS-SM2-A", "specialist": "implementor+backend+behavioral-validation", "owned": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua"], "deps": ["G-SM1-GAME", "T-SM1-1"], "parallel_group": "P-SM2", "integration_order": 2},
+    {"id": "WS-SM2-B", "specialist": "implementor+backend", "owned": ["MerrinxUI/Util/Media.lua", "MerrinxUI/MerrinxUI.toc"], "deps": ["G-SM1-GAME", "T-SM1-2"], "parallel_group": "P-SM2", "integration_order": 2}
+  ],
+  "tasks": [
+    {"id": "T-SM1-1", "section": "SM1", "ws": "WS-SM1-A", "skills": ["backend", "behavioral-validation"], "owned": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua"], "depends_on": [], "partners": ["T-SM1-2"], "acs": ["AC-SM-06"], "status": "PENDING"},
+    {"id": "T-SM1-2", "section": "SM1", "ws": "WS-SM1-B", "skills": ["backend"], "owned": ["MerrinxUI/Util/Media.lua", ".luacheckrc", "MerrinxUI/MerrinxUI.toc"], "depends_on": [], "partners": ["T-SM1-1"], "acs": ["AC-SM-01", "AC-SM-02", "AC-SM-03", "AC-SM-04", "AC-SM-05", "AC-SM-07"], "status": "PENDING"},
+    {"id": "T-SM2-1", "section": "SM2", "ws": "WS-SM2-A", "skills": ["backend", "behavioral-validation"], "owned": ["MerrinxUI/Util/FontLogic.lua", "spec/font_logic_spec.lua"], "depends_on": [{"id": "G-SM1-GAME", "why": "branch unknown before verdict; dispatched only for W1"}, {"id": "T-SM1-1", "why": "same files, ownership handoff D-SM-09"}], "partners": ["T-SM2-2"], "acs": ["AC-SM-13"], "status": "PENDING"},
+    {"id": "T-SM2-2", "section": "SM2", "ws": "WS-SM2-B", "skills": ["backend"], "owned": ["MerrinxUI/Util/Media.lua", "MerrinxUI/MerrinxUI.toc"], "depends_on": [{"id": "G-SM1-GAME", "why": "branch and statusbar filter D-SM-13"}, {"id": "T-SM1-2", "why": "same files, ownership handoff D-SM-09"}], "partners": ["T-SM2-1"], "acs": ["AC-SM-10", "AC-SM-11", "AC-SM-12", "AC-SM-15"], "status": "PENDING"}
+  ],
+  "evidence": [
+    {"id": "E-SM-BASE", "gate": "baseline", "expect": "nix__flake_check exit 0 on the start tree; busted count", "value": null},
+    {"id": "E-SM1-T1-HUNKS", "gate": "T-SM1-1", "expect": "red-then-green spec run; hunks", "value": null},
+    {"id": "E-SM1-T1-VER", "gate": "G-SM1-T1-VER", "expect": "busted exit 0; purity grep 0", "value": null},
+    {"id": "E-SM1-T2-HUNKS", "gate": "T-SM1-2", "expect": "hunks in Media.lua, .luacheckrc, TOC", "value": null},
+    {"id": "E-SM1-T2-VER", "gate": "G-SM1-T2-VER", "expect": "pre-commit, lua-syntax exit 0; greps; rerun busted/package after T-SM1-1", "value": null},
+    {"id": "E-SM1-INT-VER", "gate": "G-SM1-INT-VER", "expect": "flake check + release exit 0; diff scope; greps", "value": null},
+    {"id": "E-SM1-REV", "gate": "G-SM1-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SM1-SEC", "gate": "G-SM1-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SM1-REL", "gate": "user", "expect": "commit sha, tag v0.17.1-sm1.1, CI run id green", "value": null},
+    {"id": "E-SM1-GAME", "gate": "G-SM1-GAME", "expect": "pasted /mui test Media lines + error lines + list observation", "value": null},
+    {"id": "E-SM-VERDICT", "gate": "G-SM1-GAME", "expect": "decision-table row and D-SM-13 filter", "value": null},
+    {"id": "E-SM2-T1-HUNKS", "gate": "T-SM2-1", "expect": "Merge + specs", "value": null},
+    {"id": "E-SM2-T1-VER", "gate": "G-SM2-T1-VER", "expect": "busted exit 0", "value": null},
+    {"id": "E-SM2-T2-HUNKS", "gate": "T-SM2-2", "expect": "W1 or P hunks; TOC 0.17.2", "value": null},
+    {"id": "E-SM2-T2-VER", "gate": "G-SM2-T2-VER", "expect": "pre-commit, lua-syntax; greps; reruns", "value": null},
+    {"id": "E-SM2-INT-VER", "gate": "G-SM2-INT-VER", "expect": "flake check + release exit 0", "value": null},
+    {"id": "E-SM2-REV", "gate": "G-SM2-REV", "expect": "CLEAR", "value": null},
+    {"id": "E-SM2-SEC", "gate": "G-SM2-SEC", "expect": "CLEAR", "value": null},
+    {"id": "E-SM2-REL", "gate": "user", "expect": "tag v0.17.2-sm2.1, CI green", "value": null},
+    {"id": "E-SM2-GAME", "gate": "G-SM2-GAME", "expect": "AC-SM-10/11 or AC-SM-15 observed; paste", "value": null}
+  ],
+  "gates": [
+    {"id": "G-SM1-T1-VER", "intent": "verification", "after": ["T-SM1-1"]},
+    {"id": "G-SM1-T2-VER", "intent": "verification", "after": ["T-SM1-2"], "rerun_after": ["T-SM1-1"]},
+    {"id": "G-SM1-INT-VER", "intent": "verification", "after": ["G-SM1-T1-VER", "G-SM1-T2-VER"]},
+    {"id": "G-SM1-REV", "intent": "review", "after": ["G-SM1-INT-VER"], "parallel_with": "G-SM1-SEC"},
+    {"id": "G-SM1-SEC", "intent": "security", "after": ["G-SM1-INT-VER"], "parallel_with": "G-SM1-REV"},
+    {"id": "G-SM1-GAME", "intent": "user", "after": ["G-SM1-REV", "G-SM1-SEC", "E-SM1-REL"]},
+    {"id": "G-SM2-T1-VER", "intent": "verification", "after": ["T-SM2-1"]},
+    {"id": "G-SM2-T2-VER", "intent": "verification", "after": ["T-SM2-2"], "rerun_after": ["T-SM2-1"]},
+    {"id": "G-SM2-INT-VER", "intent": "verification", "after": ["G-SM2-T1-VER", "G-SM2-T2-VER"]},
+    {"id": "G-SM2-REV", "intent": "review", "after": ["G-SM2-INT-VER"], "parallel_with": "G-SM2-SEC"},
+    {"id": "G-SM2-SEC", "intent": "security", "after": ["G-SM2-INT-VER"], "parallel_with": "G-SM2-REV"},
+    {"id": "G-SM2-GAME", "intent": "user", "after": ["G-SM2-REV", "G-SM2-SEC", "E-SM2-REL"]}
+  ]
+}
+#+end_src
+
+* Handoff
+- *Current continuation point:* nothing executed yet; SM1 and SM2 are =PENDING=. HEAD =5d8a669=. The uncommitted D-111 change in =EnemyCooldownLogic.lua= ships with SM1's release.
+- *Ready now:* T-SM1-1 and T-SM1-2 (SM1). Mark SM1 =IN_PROGRESS=, record E-SM-BASE, and dispatch both concurrently, one =implementor= each, on =merrinxui-sm1=. Verify each task as soon as it completes. Then run G-SM1-INT-VER, then G-SM1-REV and G-SM1-SEC in parallel.
+- *Blocked:* T-SM2-1 and T-SM2-2 wait for E-SM-VERDICT from G-SM1-GAME (user, gaming PC).
+  - Rows 4/5 → dispatch both (W1, fonts and statusbars, pre-approved).
+  - Row 7 → only T-SM2-2 with packet P.
+  - Rows 1, 2, 6, 8 → no code. Tell the user the action or upstream report and close SM2 as not needed.
+  - Rows 3, 9, 10 → stop and replan.
+- *Requires confirmation:* only the user's Git and release steps (commit, tag, push) after each final gate. No other approval is pending.
+- *Optional free pre-check (user, no code, doesn't block SM1):* fully restart the client with 0.17.0 and run =/mui test=.
+  - =Media/fonts= greater than 11 means the pack's fonts are registered (rows 7-9 likely).
+  - Exactly 11 means they never reached LSM (rows 1-6).
+- Lead updates this file only in the status board, section statuses, the D-SM-13 row, and the evidence =value= fields. Planned expectations are not completion evidence.
