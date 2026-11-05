@@ -88,6 +88,10 @@ read_globals = {
 	"GameTooltip",
 	"C_VoiceChat",
 	"PlaySoundFile",
+	"UnitIsEnemy",
+	"IsInInstance",
+	"UNKNOWNOBJECT",
+	"time",
 }
 
 globals = {

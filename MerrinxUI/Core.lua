@@ -66,6 +66,8 @@ function MerrinxUI:SlashCommand(input)
 		local verb, arg = command:match("^(%S*)%s*(.-)$")
 		if verb == "debug" or verb == "test" or verb == "log" then
 			ns.Debug:Slash(verb, arg)
+		elseif verb == "kos" then
+			self:GetModule("EnemySpotter"):Slash(arg)
 		else
 			self:OpenOptions()
 		end

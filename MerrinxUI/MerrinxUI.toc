@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.23.0
+## Version: 0.24.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -34,6 +34,8 @@ Modules\ActionBarLogic.lua
 Modules\ActionBars.lua
 Modules\DamageMeterLogic.lua
 Modules\DamageMeter.lua
+Modules\EnemySpotterLogic.lua
+Modules\EnemySpotter.lua
 Modules\ProfessionLogic.lua
 Modules\ProfessionData\Alchemy.lua
 Modules\ProfessionData\Blacksmithing.lua
