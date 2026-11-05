@@ -23,6 +23,8 @@ local GROUP_NAMES = {
 	micro = "Micro Menu",
 	xp = "XP Bar",
 	actionBars = "Action Bars",
+	stanceBar = "Stance Bar",
+	petBar = "Pet Bar",
 	damageMeter = "Damage Meter",
 }
 

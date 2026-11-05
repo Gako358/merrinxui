@@ -6,6 +6,15 @@ ns.ActionBarLogic = ActionBarLogic
 local L = ActionBarLogic
 
 L.PAGES = { 1, 6, 5, 3, 4, 13, 14, 15 }
+L.PET_BAR = 9
+L.BAR_COUNT = 9
+
+function L.ButtonCount(bar)
+	if bar == L.PET_BAR then
+		return 10
+	end
+	return 12
+end
 
 function L.Slot(page, i)
 	return (page - 1) * 12 + i
@@ -74,11 +83,19 @@ function L.BindingPrefix(bar)
 		return "ACTIONBUTTON"
 	elseif bar >= 2 and bar <= 8 then
 		return "MULTIACTIONBAR" .. (bar - 1) .. "BUTTON"
+	elseif bar == L.PET_BAR then
+		return "BONUSACTIONBUTTON"
 	end
 	return nil
 end
 
 function L.VisibilityDriver(b, hideInCombat)
+	if b == L.PET_BAR then
+		if hideInCombat then
+			return "[overridebar][vehicleui][petbattle] hide; [combat] hide; [pet] show; hide"
+		end
+		return "[overridebar][vehicleui][petbattle] hide; [pet] show; hide"
+	end
 	if b == 1 then
 		if hideInCombat then
 			return "[overridebar][vehicleui][petbattle] hide; [combat] hide; show"

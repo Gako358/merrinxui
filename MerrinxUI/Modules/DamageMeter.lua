@@ -436,7 +436,7 @@ function DamageMeter:Redraw()
 		row.bar:SetMinMaxValues(0, src[1][field])
 		row.bar:SetValue(s[field])
 
-		row.right:SetText(L.ValueText(kind, s.totalAmount, s.amountPerSecond, AbbreviateNumbers))
+		row.right:SetText(L.ValueText(kind, s.totalAmount, s.amountPerSecond, AbbreviateLargeNumbers))
 		if issecretvalue(s.name) then
 			row.left:SetText(s.name)
 		else
@@ -689,7 +689,7 @@ function DamageMeter:GetDebugChecks()
 				checkFn("C_DamageMeter.IsDamageMeterAvailable", cdm.IsDamageMeterAvailable)
 				checkTbl("Enum.DamageMeterSessionType", type(Enum) == "table" and Enum.DamageMeterSessionType)
 				checkTbl("Enum.DamageMeterType", type(Enum) == "table" and Enum.DamageMeterType)
-				checkFn("AbbreviateNumbers", AbbreviateNumbers)
+				checkFn("AbbreviateLargeNumbers", AbbreviateLargeNumbers)
 				checkTbl("CLASS_ICON_TCOORDS", CLASS_ICON_TCOORDS)
 				checkTbl("RAID_CLASS_COLORS", RAID_CLASS_COLORS)
 				checkFn("MenuUtil.CreateContextMenu", menuUtil.CreateContextMenu)

@@ -20,6 +20,8 @@ HideBlizzardLogic.GROUPS = {
 			"MultiBar7",
 		},
 	},
+	{ key = "stanceBar", frames = { "StanceBar" } },
+	{ key = "petBar", frames = { "PetActionBar" } },
 	{ key = "damageMeter", frames = {} },
 }
 

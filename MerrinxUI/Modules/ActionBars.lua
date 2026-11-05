@@ -7,12 +7,47 @@ BINDING_NAME_MERRINXUI_TOGGLEBARS = "Toggle action bars"
 
 local ActionBars = ns.addon:NewModule("ActionBars", "AceEvent-3.0")
 
-local defaults = { profile = { enabled = false, bars = {} } }
-for b = 1, 8 do
+local PET = L.PET_BAR
+
+local PET_EVENTS = {
+	"PET_BAR_UPDATE",
+	"PET_BAR_UPDATE_COOLDOWN",
+	"PET_BAR_UPDATE_USABLE",
+	"PET_UI_UPDATE",
+	"PLAYER_CONTROL_LOST",
+	"PLAYER_CONTROL_GAINED",
+	"PLAYER_FARSIGHT_FOCUS_CHANGED",
+	"PLAYER_TARGET_CHANGED",
+	"PLAYER_MOUNT_DISPLAY_CHANGED",
+	"UPDATE_VEHICLE_ACTIONBAR",
+}
+
+local function barLabel(b)
+	if b == PET then
+		return "Pet Bar"
+	end
+	return "Bar " .. b
+end
+
+local function hotkeyUpdater(command)
+	return function(button)
+		local text = GetBindingText(GetBindingKey(command), 1)
+		if text == "" then
+			button.HotKey:SetText(RANGE_INDICATOR)
+			button.HotKey:Hide()
+		else
+			button.HotKey:SetText(text)
+			button.HotKey:Show()
+		end
+	end
+end
+
+local defaults = { profile = { enabled = false, hideStanceBar = false, bars = {} } }
+for b = 1, L.BAR_COUNT do
 	defaults.profile.bars[b] = {
 		enabled = b <= 3,
-		perRow = 12,
-		size = 36,
+		perRow = L.ButtonCount(b),
+		size = b == PET and 30 or 36,
 		spacing = 2,
 		position = L.DefaultPosition(b),
 		opacity = 100,
@@ -27,7 +62,12 @@ function ActionBars:OnInitialize()
 	self:SetEnabledState(self.db.profile.enabled)
 	self.headers = {}
 	self.buttons = {}
+	self.natives = {}
 	self.bindingOwner = CreateFrame("Frame")
+	self.petEvents = CreateFrame("Frame")
+	self.petEvents:SetScript("OnEvent", function()
+		self:UpdatePetButtons()
+	end)
 	self.bindingApplies = 0
 	self.alphas = {}
 	self.visDrivers = {}
@@ -95,28 +135,36 @@ function ActionBars:CreateBar(b)
 
 	local buttons = {}
 	self.buttons[b] = buttons
-	for i = 1, 12 do
-		local button = CreateFrame(
-			"CheckButton",
-			"MerrinxUIBar" .. b .. "Button" .. i,
-			h,
-			"ActionBarButtonTemplate, SecureActionButtonTemplate"
-		)
-		button:SetAttribute("type", "action")
-		button:SetAttribute("index", i)
-		if b == 1 then
-			button:SetAttribute(
-				"_childupdate-actionpage",
-				[[ self:SetAttribute("action", (tonumber(message) - 1) * 12 + self:GetAttribute("index")) ]]
-			)
+	for i = 1, L.ButtonCount(b) do
+		local name = "MerrinxUIBar" .. b .. "Button" .. i
+		local button
+		if b == PET then
+			button = CreateFrame("CheckButton", name, h, "PetActionButtonTemplate")
+			button:SetID(i)
+			button.index = i
+			button:SetHotkeys()
+		else
+			button = CreateFrame("CheckButton", name, h, "ActionBarButtonTemplate, SecureActionButtonTemplate")
+			button:SetAttribute("type", "action")
+			button:SetAttribute("index", i)
+			if b == 1 then
+				button:SetAttribute(
+					"_childupdate-actionpage",
+					[[ self:SetAttribute("action", (tonumber(message) - 1) * 12 + self:GetAttribute("index")) ]]
+				)
+			end
+			button:RegisterForClicks("AnyUp", "AnyDown")
+			-- Blizzard's UpdateHotkeys derives the command from GetID(), which must stay 0 so
+			-- SecureActionButton uses our "action" attribute instead of paging by ID.
+			button.UpdateHotkeys = hotkeyUpdater(L.BindingPrefix(b) .. i)
+			button:UpdateHotkeys()
 		end
-		button:RegisterForClicks("AnyUp", "AnyDown")
 		buttons[i] = button
-		self.native = self.native or button:GetWidth()
+		self.natives[b] = self.natives[b] or button:GetWidth()
 	end
 
 	self:LayoutBar(b)
-	ns.Mover:Register(h, "Bar " .. b, function()
+	ns.Mover:Register(h, barLabel(b), function()
 		return self.db.profile.bars[b].position
 	end)
 
@@ -126,13 +174,14 @@ end
 function ActionBars:LayoutBar(b)
 	local profile = self.db.profile.bars[b]
 	local h = self.headers[b]
+	local n = L.ButtonCount(b)
 	local scale, positions, width, height =
-		L.BarGeometry(12, profile.perRow, profile.size, profile.spacing, self.native)
+		L.BarGeometry(n, profile.perRow, profile.size, profile.spacing, self.natives[b])
 
 	h:SetSize(width, height)
 
 	local buttons = self.buttons[b]
-	for i = 1, 12 do
+	for i = 1, n do
 		local button = buttons[i]
 		local pos = positions[i]
 		button:SetScale(scale)
@@ -144,25 +193,33 @@ end
 function ActionBars:Apply()
 	local profile = self.db.profile
 	local enabledCount = 0
-	for b = 1, 8 do
+	for b = 1, L.BAR_COUNT do
 		if profile.bars[b].enabled then
 			enabledCount = enabledCount + 1
 		end
 	end
 
 	if self:IsEnabled() then
-		ns.addon:GetModule("HideBlizzard"):Ensure("actionBars")
+		local hideBlizzard = ns.addon:GetModule("HideBlizzard")
+		hideBlizzard:Ensure("actionBars")
+		if profile.hideStanceBar then
+			hideBlizzard:Ensure("stanceBar")
+		end
+		if profile.bars[PET].enabled then
+			hideBlizzard:Ensure("petBar")
+		end
 		self.applied = true
 
 		if not self.toggle then
 			local t = CreateFrame("Button", "MerrinxUIBarToggle", UIParent, "SecureHandlerClickTemplate")
 			t:RegisterForClicks("AnyDown")
+			t:SetAttribute("barcount", L.BAR_COUNT)
 			t:SetAttribute(
 				"_onclick",
 				[[
 				local hidden = not self:GetAttribute("barshidden")
 				self:SetAttribute("barshidden", hidden)
-				for b = 1, 8 do
+				for b = 1, self:GetAttribute("barcount") do
 					local h = self:GetFrameRef("bar" .. b)
 					if h and h:GetAttribute("keytoggle") then
 						h:SetAttribute("userhidden", hidden)
@@ -179,7 +236,7 @@ function ActionBars:Apply()
 		end
 		local barsHidden = self.toggle:GetAttribute("barshidden") == true
 
-		for b = 1, 8 do
+		for b = 1, L.BAR_COUNT do
 			local barProfile = profile.bars[b]
 			if barProfile.enabled then
 				local h = self.headers[b]
@@ -198,7 +255,7 @@ function ActionBars:Apply()
 					end
 					self.pagingDriver = L.PagingDriver(o, v, t)
 					RegisterStateDriver(h, "page", self.pagingDriver)
-				else
+				elseif b ~= PET then
 					local buttons = self.buttons[b]
 					for i = 1, 12 do
 						buttons[i]:SetAttribute("action", L.Slot(L.PAGES[b], i))
@@ -220,7 +277,7 @@ function ActionBars:Apply()
 			end
 		end
 
-		for b = 1, 8 do
+		for b = 1, L.BAR_COUNT do
 			if not profile.bars[b].enabled then
 				local h = self.headers[b]
 				if h then
@@ -237,7 +294,7 @@ function ActionBars:Apply()
 		end
 
 		local anyMouseover = false
-		for b = 1, 8 do
+		for b = 1, L.BAR_COUNT do
 			if profile.bars[b].enabled and profile.bars[b].mouseover then
 				anyMouseover = true
 				break
@@ -249,6 +306,17 @@ function ActionBars:Apply()
 			self.fader:Hide()
 		end
 		self:UpdateAlphas()
+
+		self.petEvents:UnregisterAllEvents()
+		if profile.bars[PET].enabled then
+			for _, event in ipairs(PET_EVENTS) do
+				self.petEvents:RegisterEvent(event)
+			end
+			self.petEvents:RegisterUnitEvent("UNIT_PET", "player")
+			self.petEvents:RegisterUnitEvent("UNIT_FLAGS", "pet")
+			self.petEvents:RegisterUnitEvent("UNIT_AURA", "pet")
+			self:UpdatePetButtons()
+		end
 
 		if not self.petBattleOwner then
 			local pb = CreateFrame("Frame", nil, UIParent, "SecureHandlerStateTemplate")
@@ -272,7 +340,7 @@ function ActionBars:Apply()
 
 		self:ApplyBindings()
 	else
-		for b = 1, 8 do
+		for b = 1, L.BAR_COUNT do
 			local h = self.headers[b]
 			if h then
 				UnregisterStateDriver(h, "page")
@@ -314,10 +382,10 @@ function ActionBars:ApplyBindings()
 	local count = 0
 	if self:IsEnabled() then
 		local profile = self.db.profile
-		for b = 1, 8 do
+		for b = 1, L.BAR_COUNT do
 			if profile.bars[b].enabled and self.headers[b] then
 				local prefix = L.BindingPrefix(b)
-				for i = 1, 12 do
+				for i = 1, L.ButtonCount(b) do
 					local buttonName = "MerrinxUIBar" .. b .. "Button" .. i
 					for _, key in ipairs({ GetBindingKey(prefix .. i) }) do
 						SetOverrideBindingClick(self.bindingOwner, false, key, buttonName, "LeftButton")
@@ -341,7 +409,7 @@ end
 
 function ActionBars:UpdateAlphas()
 	local unlocked = ns.Mover:IsUnlocked()
-	for b = 1, 8 do
+	for b = 1, L.BAR_COUNT do
 		local h = self.headers[b]
 		local p = self.db.profile.bars[b]
 		if h and p.enabled then
@@ -358,6 +426,18 @@ function ActionBars:UpdateAlphas()
 	end
 end
 
+function ActionBars:UpdatePetButtons()
+	local buttons = self.buttons[PET]
+	if not buttons then
+		return
+	end
+	for i = 1, L.ButtonCount(PET) do
+		local button = buttons[i]
+		button:UpdateButtonState()
+		CooldownFrame_Set(button.cooldown, GetPetActionCooldown(i))
+	end
+end
+
 function ActionBars:GetOptions()
 	local function barDisabled(b)
 		return function()
@@ -368,19 +448,23 @@ function ActionBars:GetOptions()
 	local function barGroup(b)
 		return {
 			type = "group",
-			name = "Bar " .. b,
+			name = barLabel(b),
 			order = 10 + b,
 			args = {
 				enabled = {
 					type = "toggle",
 					name = "Enabled",
 					order = 1,
+					desc = b == PET and "Hides Blizzard's pet bar. /reload restores it after turning this off." or nil,
 					get = function()
 						return self.db.profile.bars[b].enabled
 					end,
 					set = function(_, value)
 						self.db.profile.bars[b].enabled = value
 						self:Refresh()
+						if b == PET and not value and ns.addon:GetModule("HideBlizzard").forced.petBar then
+							ns.addon:Print("ActionBars: /reload restores Blizzard's pet bar")
+						end
 					end,
 				},
 				perRow = {
@@ -388,7 +472,7 @@ function ActionBars:GetOptions()
 					name = "Per row",
 					order = 2,
 					min = 1,
-					max = 12,
+					max = L.ButtonCount(b),
 					step = 1,
 					disabled = barDisabled(b),
 					get = function()
@@ -505,8 +589,27 @@ function ActionBars:GetOptions()
 				self:Refresh()
 			end,
 		},
+		hideStanceBar = {
+			type = "toggle",
+			name = "Hide stance bar",
+			order = 2,
+			desc = "Hides Blizzard's stance bar. /reload restores it after turning this off.",
+			disabled = function()
+				return not self.db.profile.enabled
+			end,
+			get = function()
+				return self.db.profile.hideStanceBar
+			end,
+			set = function(_, value)
+				self.db.profile.hideStanceBar = value
+				self:Refresh()
+				if not value and ns.addon:GetModule("HideBlizzard").forced.stanceBar then
+					ns.addon:Print("ActionBars: /reload restores Blizzard's stance bar")
+				end
+			end,
+		},
 	}
-	for b = 1, 8 do
+	for b = 1, L.BAR_COUNT do
 		args["bar" .. b] = barGroup(b)
 	end
 
@@ -555,6 +658,9 @@ function ActionBars:GetDebugChecks()
 				check("ClearOverrideBindings", ClearOverrideBindings)
 				check("GetBindingKey", GetBindingKey)
 				check("GetBindingAction", GetBindingAction)
+				check("GetBindingText", GetBindingText)
+				check("GetPetActionCooldown", GetPetActionCooldown)
+				check("CooldownFrame_Set", CooldownFrame_Set)
 
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
@@ -581,7 +687,7 @@ function ActionBars:GetDebugChecks()
 
 				local enabledCount, createdCount = 0, 0
 				local ok = true
-				for b = 1, 8 do
+				for b = 1, L.BAR_COUNT do
 					local barProfile = self.db.profile.bars[b]
 					local h = self.headers[b]
 					if h then
@@ -589,7 +695,7 @@ function ActionBars:GetDebugChecks()
 					end
 					if barProfile.enabled then
 						enabledCount = enabledCount + 1
-						if not h or not self.buttons[b] or #self.buttons[b] ~= 12 then
+						if not h or not self.buttons[b] or #self.buttons[b] ~= L.ButtonCount(b) then
 							ok = false
 						end
 					elseif h and h:IsShown() then
@@ -597,7 +703,61 @@ function ActionBars:GetDebugChecks()
 					end
 				end
 
-				return ok and "PASS" or "FAIL", enabledCount, createdCount, self.native
+				return ok and "PASS" or "FAIL", enabledCount, createdCount, self.natives[1]
+			end,
+		},
+		{
+			name = "blizzard stance and pet bars",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local profile = self.db.profile
+				local forced = ns.addon:GetModule("HideBlizzard").forced
+				local ok = (not profile.hideStanceBar or forced.stanceBar == true)
+					and (not profile.bars[PET].enabled or forced.petBar == true)
+				return ok and "PASS" or "FAIL", profile.hideStanceBar, forced.stanceBar == true, forced.petBar == true
+			end,
+		},
+		{
+			name = "hotkeys",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local ok, total = 0, 0
+				local firstBad
+				for b = 1, L.BAR_COUNT do
+					if self.db.profile.bars[b].enabled and self.headers[b] then
+						local prefix = L.BindingPrefix(b)
+						for i = 1, L.ButtonCount(b) do
+							local key = GetBindingKey(prefix .. i)
+							local hotkey = self.buttons[b][i].HotKey
+							local text, shown = hotkey:GetText(), hotkey:IsShown()
+							if issecretvalue(key) or issecretvalue(text) or issecretvalue(shown) then
+								return "INFO", "secret"
+							end
+							if key then
+								total = total + 1
+								local expected = GetBindingText(key, 1)
+								if text == expected and shown then
+									ok = ok + 1
+								elseif not firstBad then
+									firstBad = prefix .. i
+								end
+							end
+						end
+					end
+				end
+
+				if total == 0 then
+					return "INFO", "no keys bound"
+				end
+				if ok == total then
+					return "PASS", ok, total
+				end
+				return "FAIL", ok, total, firstBad
 			end,
 		},
 		{
@@ -667,10 +827,10 @@ function ActionBars:GetDebugChecks()
 				local ok, total = 0, 0
 				local secret = false
 				local firstBadKey, firstBadAction
-				for b = 1, 8 do
+				for b = 1, L.BAR_COUNT do
 					if self.db.profile.bars[b].enabled and self.headers[b] then
 						local prefix = L.BindingPrefix(b)
-						for i = 1, 12 do
+						for i = 1, L.ButtonCount(b) do
 							local expected = (b == 1 and inBattle) and ("ACTIONBUTTON" .. i)
 								or ("CLICK MerrinxUIBar" .. b .. "Button" .. i .. ":LeftButton")
 							for _, key in ipairs({ GetBindingKey(prefix .. i) }) do
@@ -765,7 +925,7 @@ function ActionBars:GetDebugChecks()
 		},
 	}
 
-	for b = 1, 8 do
+	for b = 1, L.BAR_COUNT do
 		if self.db.profile.bars[b].enabled and self.headers[b] then
 			table.insert(checks, {
 				name = "layout " .. b,
@@ -776,8 +936,9 @@ function ActionBars:GetDebugChecks()
 
 					local profile = self.db.profile.bars[b]
 					local h = self.headers[b]
+					local n = L.ButtonCount(b)
 					local expectedScale, positions, expectedW, expectedH =
-						L.BarGeometry(12, profile.perRow, profile.size, profile.spacing, self.native)
+						L.BarGeometry(n, profile.perRow, profile.size, profile.spacing, self.natives[b])
 
 					local w, ht = h:GetWidth(), h:GetHeight()
 					local ok = math.abs(h:GetScale() - 1) <= 0.001
@@ -787,7 +948,7 @@ function ActionBars:GetDebugChecks()
 					local secret = false
 					local pointsRestricted = false
 					local buttons = self.buttons[b]
-					for i = 1, 12 do
+					for i = 1, n do
 						if math.abs(buttons[i]:GetScale() - expectedScale) > 0.001 then
 							ok = false
 						end

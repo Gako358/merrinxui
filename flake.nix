@@ -68,6 +68,11 @@
 
             cp -r ${inputs.librangecheck}/LibRangeCheck-3.0 $out/LibRangeCheck-3.0
             cp ${inputs.librangecheck}/LICENSE $out/LibRangeCheck-3.0-LICENSE.txt
+            # Forever also returns secret GUIDs, but upstream only guards the cache key on Midnight.
+            chmod u+w $out/LibRangeCheck-3.0/LibRangeCheck-3.0.lua
+            substituteInPlace $out/LibRangeCheck-3.0/LibRangeCheck-3.0.lua \
+              --replace-fail '(isMidnight and issecretvalue(guid) and unit or guid)' \
+                '(issecretvalue(guid) and unit or guid)'
 
             mkdir -p $out/LibSharedMedia-3.0
             cp ${inputs.libsharedmedia} $out/LibSharedMedia-3.0/LibSharedMedia-3.0.lua

@@ -91,8 +91,25 @@ describe("ActionBarLogic", function()
 		assert.are.equal("MULTIACTIONBAR4BUTTON", L.BindingPrefix(5))
 		assert.are.equal("MULTIACTIONBAR5BUTTON", L.BindingPrefix(6))
 		assert.are.equal("MULTIACTIONBAR7BUTTON", L.BindingPrefix(8))
+		assert.are.equal("BONUSACTIONBUTTON", L.BindingPrefix(9))
 		assert.is_nil(L.BindingPrefix(0))
-		assert.is_nil(L.BindingPrefix(9))
+		assert.is_nil(L.BindingPrefix(10))
+	end)
+
+	it("ButtonCount gives the pet bar 10 buttons and every other bar 12", function()
+		assert.are.equal(9, L.PET_BAR)
+		assert.are.equal(9, L.BAR_COUNT)
+		assert.are.equal(12, L.ButtonCount(1))
+		assert.are.equal(12, L.ButtonCount(8))
+		assert.are.equal(10, L.ButtonCount(9))
+	end)
+
+	it("VisibilityDriver shows the pet bar only with a pet, outside override/vehicle/pet battle", function()
+		assert.are.equal("[overridebar][vehicleui][petbattle] hide; [pet] show; hide", L.VisibilityDriver(9, false))
+		assert.are.equal(
+			"[overridebar][vehicleui][petbattle] hide; [combat] hide; [pet] show; hide",
+			L.VisibilityDriver(9, true)
+		)
 	end)
 
 	it("VisibilityDriver keeps bar 1's override/vehicle/pet-battle hide and adds [combat] on request", function()
