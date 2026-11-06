@@ -30,6 +30,22 @@ local defaults = {
 		cc = true,
 		ccSize = 26,
 		ccMax = 2,
+		raidMarkerPos = "TOPRIGHT",
+		raidMarkerSize = 20,
+		classificationIcon = true,
+		targetScale = 100,
+		nonTargetAlpha = 100,
+		border = true,
+		borderSize = 1,
+		darkenOOC = true,
+		executeLine = false,
+		executePercent = 30,
+		castIcon = true,
+		castSpark = true,
+		castUninterruptible = true,
+		castInterruptFlash = true,
+		threatColors = true,
+		threatRole = "auto",
 	},
 }
 
@@ -44,6 +60,20 @@ local DEBUFF_GROUP = "debuffs"
 local CC_GROUP = "cc"
 local DEBUFF_COUNT_SIZE = 10
 local LEVEL_GAP = 2
+local RAID_TARGET_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+local MARKER_GAP = 2
+local CLASSIFICATION_SIZE = 14
+local CLASSIFICATION_GAP = 2
+local TARGET_HIGHLIGHT_WIDTH = 2
+local BORDER_COLOR = { 0.067, 0.067, 0.067 }
+local SPARK_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Spark"
+local SPARK_WIDTH = 12
+local CAST_ICON_GAP = 1
+local CAST_COLOR = { 0.9, 0.6, 0.1 }
+local UNINTERRUPTIBLE_COLOR = { 0.45, 0.45, 0.45 }
+local INTERRUPTED_COLOR = { 0.8, 0, 0 }
+local INTERRUPTED_HOLD = 1
+local INTERRUPTED_TEXT = "Interrupted"
 
 local CAST_EVENTS = {
 	UNIT_SPELLCAST_START = "OnCastStart",
@@ -52,7 +82,7 @@ local CAST_EVENTS = {
 	UNIT_SPELLCAST_CHANNEL_UPDATE = "OnChannelStart",
 	UNIT_SPELLCAST_STOP = "OnCastStop",
 	UNIT_SPELLCAST_FAILED = "OnCastStop",
-	UNIT_SPELLCAST_INTERRUPTED = "OnCastStop",
+	UNIT_SPELLCAST_INTERRUPTED = "OnCastInterrupted",
 	UNIT_SPELLCAST_CHANNEL_STOP = "OnChannelStop",
 	UNIT_SPELLCAST_INTERRUPTIBLE = "OnInterruptibleChanged",
 	UNIT_SPELLCAST_NOT_INTERRUPTIBLE = "OnInterruptibleChanged",
@@ -73,6 +103,21 @@ local LEVEL_EVENTS = {
 	UNIT_CLASSIFICATION_CHANGED = "OnUnitLevel",
 	PLAYER_LEVEL_UP = "OnPlayerLevelUp",
 }
+
+local THREAT_EVENTS = {
+	UNIT_THREAT_LIST_UPDATE = "OnUnitThreat",
+	UNIT_THREAT_SITUATION_UPDATE = "OnUnitThreat",
+	GROUP_ROSTER_UPDATE = "OnColorContextChanged",
+	PLAYER_ROLES_ASSIGNED = "OnColorContextChanged",
+	UNIT_PET = "OnColorContextChanged",
+}
+
+local function Plain(value)
+	if issecretvalue(value) then
+		return nil
+	end
+	return value
+end
 
 local reapplyingAlpha = false
 
@@ -123,12 +168,15 @@ function Nameplates:OnEnable()
 	self:RegisterEvent("UNIT_NAME_UPDATE", "OnUnitNameUpdate")
 	self:RegisterEvent("UNIT_FACTION", "OnUnitFaction")
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
+	self:RegisterEvent("RAID_TARGET_UPDATE", "OnRaidTargetUpdate")
+	self:RegisterEvent("UNIT_FLAGS", "OnUnitFlags")
 	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
 
 	self:SetCastEventsEnabled(self.db.profile.castBar)
 	self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
 	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
-	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText)
+	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
+	self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
 
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.unitToken
@@ -163,7 +211,8 @@ function Nameplates:Refresh()
 		self:SetCastEventsEnabled(self.db.profile.castBar)
 		self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
 		self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
-		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText)
+		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
+		self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
 		for _, frame in pairs(self.plateFrames) do
 			self:ApplySize(frame)
 		end
@@ -172,6 +221,9 @@ function Nameplates:Refresh()
 			local frame = self.plateFrames[plate]
 			if frame then
 				self:UpdateHealth(unit, frame)
+				self:UpdateColor(unit, frame)
+				self:UpdateTargetState(unit, frame)
+				self:UpdateMarkers(unit, frame)
 				self:UpdateLevel(unit, frame)
 				self:UpdatePower(unit, frame)
 				self:UpdateDebuffs(unit, frame)
@@ -212,6 +264,7 @@ function Nameplates:OnUnitLevel(_, unit)
 	local frame = plate and self.plateFrames[plate]
 	if frame then
 		self:UpdateLevel(unit, frame)
+		self:UpdateMarkers(unit, frame)
 	end
 end
 
@@ -248,6 +301,41 @@ function Nameplates:OnTargetChanged()
 		local frame = self.plateFrames[plate]
 		if frame then
 			self:UpdateHighlight(unit, frame)
+			self:UpdateTargetState(unit, frame)
+		end
+	end
+end
+
+function Nameplates:OnRaidTargetUpdate()
+	for unit, plate in pairs(self.unitPlates) do
+		local frame = self.plateFrames[plate]
+		if frame then
+			self:UpdateMarkers(unit, frame)
+		end
+	end
+end
+
+function Nameplates:OnUnitFlags(_, unit)
+	local frame = self:GetCastFrame(unit)
+	if frame then
+		self:UpdateColor(unit, frame)
+	end
+end
+
+function Nameplates:OnUnitThreat(_, unit)
+	local frame = self:GetCastFrame(unit)
+	if frame then
+		self:UpdateColor(unit, frame)
+	else
+		self:OnColorContextChanged()
+	end
+end
+
+function Nameplates:OnColorContextChanged()
+	for unit, plate in pairs(self.unitPlates) do
+		local frame = self.plateFrames[plate]
+		if frame then
+			self:UpdateColor(unit, frame)
 		end
 	end
 end
@@ -328,6 +416,8 @@ function Nameplates:StyleUnit(unit)
 	self:UpdateLevel(unit, frame)
 	self:UpdateColor(unit, frame)
 	self:UpdateHighlight(unit, frame)
+	self:UpdateTargetState(unit, frame)
+	self:UpdateMarkers(unit, frame)
 	self:SyncCastBar(unit, frame)
 	self:UpdatePower(unit, frame)
 	self:UpdateDebuffs(unit, frame)
@@ -479,11 +569,29 @@ function Nameplates:CreateStyledFrame(plate)
 	levelText:SetPoint("LEFT", healthBar, "RIGHT", LEVEL_GAP, 0)
 
 	local highlight = frame:CreateTexture(nil, "OVERLAY")
-	highlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
-	highlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 2, -2)
 	highlight:SetTexture(BAR_TEXTURE)
 	highlight:SetVertexColor(1, 1, 1, 0.5)
 	highlight:SetAlpha(0)
+
+	local border = {}
+	for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+		local edge = healthBar:CreateTexture(nil, "OVERLAY")
+		edge:SetColorTexture(BORDER_COLOR[1], BORDER_COLOR[2], BORDER_COLOR[3], 1)
+		border[side] = edge
+	end
+
+	local executeLine = healthBar:CreateTexture(nil, "OVERLAY")
+	executeLine:SetColorTexture(1, 1, 1, 0.9)
+	executeLine:SetWidth(1)
+
+	local raidMarker = healthBar:CreateTexture(nil, "OVERLAY")
+	raidMarker:SetTexture(RAID_TARGET_TEXTURE)
+	raidMarker:Hide()
+
+	local classification = healthBar:CreateTexture(nil, "OVERLAY")
+	classification:SetSize(CLASSIFICATION_SIZE, CLASSIFICATION_SIZE)
+	classification:SetPoint("BOTTOMLEFT", healthBar, "TOPLEFT", 0, CLASSIFICATION_GAP)
+	classification:Hide()
 
 	local nameText = frame:CreateFontString(nil, "OVERLAY")
 	nameText:SetPoint("BOTTOM", frame, "TOP", 0, 2)
@@ -506,13 +614,31 @@ function Nameplates:CreateStyledFrame(plate)
 	local castBar = CreateFrame("StatusBar", nil, frame)
 	castBar:SetHeight(CAST_BAR_HEIGHT)
 	castBar:SetStatusBarTexture(BAR_TEXTURE)
-	castBar:SetStatusBarColor(0.9, 0.6, 0.1)
+	castBar:SetStatusBarColor(CAST_COLOR[1], CAST_COLOR[2], CAST_COLOR[3])
 	castBar:Hide()
 
 	local castBg = castBar:CreateTexture(nil, "BACKGROUND")
 	castBg:SetAllPoints(castBar)
 	castBg:SetTexture(BAR_TEXTURE)
 	castBg:SetVertexColor(0.1, 0.1, 0.1, 1)
+
+	local castUninterruptible = castBar:CreateTexture(nil, "ARTWORK", nil, 6)
+	castUninterruptible:SetColorTexture(UNINTERRUPTIBLE_COLOR[1], UNINTERRUPTIBLE_COLOR[2], UNINTERRUPTIBLE_COLOR[3], 1)
+	castUninterruptible:SetAlpha(0)
+
+	local castFlash = castBar:CreateTexture(nil, "ARTWORK", nil, 7)
+	castFlash:SetAllPoints(castBar)
+	castFlash:SetColorTexture(INTERRUPTED_COLOR[1], INTERRUPTED_COLOR[2], INTERRUPTED_COLOR[3], 1)
+	castFlash:SetAlpha(0)
+
+	local castSpark = castBar:CreateTexture(nil, "OVERLAY")
+	castSpark:SetTexture(SPARK_TEXTURE)
+	castSpark:SetBlendMode("ADD")
+	castSpark:SetSize(SPARK_WIDTH, CAST_BAR_HEIGHT * 2)
+
+	local castIcon = castBar:CreateTexture(nil, "ARTWORK")
+	castIcon:SetPoint("BOTTOMRIGHT", castBar, "BOTTOMLEFT", -CAST_ICON_GAP, 0)
+	castIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
 	local castText = castBar:CreateFontString(nil, "OVERLAY")
 	castText:SetPoint("CENTER", castBar)
@@ -528,14 +654,23 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.healthText = healthText
 	frame.levelText = levelText
 	frame.highlight = highlight
+	frame.border = border
+	frame.executeLine = executeLine
+	frame.raidMarker = raidMarker
+	frame.classification = classification
 	frame.nameText = nameText
 	frame.powerBar = powerBar
 	frame.powerBg = powerBg
 	frame.powerText = powerText
 	frame.castBar = castBar
 	frame.castBg = castBg
+	frame.castUninterruptible = castUninterruptible
+	frame.castFlash = castFlash
+	frame.castSpark = castSpark
+	frame.castIcon = castIcon
 	frame.castText = castText
 	frame.castShield = castShield
+	self:AnchorCastFill(frame)
 
 	local profile = self.db.profile
 	local ok, debuffs = pcall(
@@ -588,6 +723,25 @@ function Nameplates:ApplySize(frame)
 	frame.castBar:SetPoint("TOPLEFT", castAnchor, "BOTTOMLEFT", 0, -CAST_BAR_GAP)
 	frame.castBar:SetPoint("TOPRIGHT", castAnchor, "BOTTOMRIGHT", 0, -CAST_BAR_GAP)
 
+	local iconSize = NameplateLogic.CastIconSize(
+		profile.height,
+		profile.powerBar and profile.powerHeight or nil,
+		POWER_BAR_GAP,
+		CAST_BAR_GAP,
+		CAST_BAR_HEIGHT
+	)
+	frame.castIcon:SetSize(iconSize, iconSize)
+	frame.castIcon:SetShown(profile.castIcon)
+	frame.castSpark:SetShown(profile.castSpark)
+
+	self:ApplyBorder(frame)
+
+	frame.executeLine:ClearAllPoints()
+	local executeX = NameplateLogic.ExecuteOffset(profile.width, profile.executePercent)
+	frame.executeLine:SetPoint("TOP", frame.healthBar, "TOPLEFT", executeX, 0)
+	frame.executeLine:SetPoint("BOTTOM", frame.healthBar, "BOTTOMLEFT", executeX, 0)
+	frame.executeLine:SetShown(profile.executeLine)
+
 	-- SetStatusBarTexture replaces the bar's texture object and resets its vertex colour, so
 	-- only touch the bars when the resolved path actually changes, and restore colours after
 	local barPath = ns.Media:Fetch("statusbar", profile.barTexture) or BAR_TEXTURE
@@ -601,10 +755,52 @@ function Nameplates:ApplySize(frame)
 
 		frame.healthBar:SetStatusBarColor(hr, hg, hb)
 		frame.powerBar:SetStatusBarColor(pr, pg, pb)
-		frame.castBar:SetStatusBarColor(0.9, 0.6, 0.1)
+		frame.castBar:SetStatusBarColor(CAST_COLOR[1], CAST_COLOR[2], CAST_COLOR[3])
+		self:AnchorCastFill(frame)
 
 		frame.barPath = barPath
 	end
+end
+
+-- the spark and the uninterruptible tint follow the fill texture, which SetStatusBarTexture replaces
+function Nameplates:AnchorCastFill(frame)
+	local fill = frame.castBar:GetStatusBarTexture()
+	frame.castSpark:ClearAllPoints()
+	frame.castSpark:SetPoint("CENTER", fill, "RIGHT", 0, 0)
+	frame.castUninterruptible:ClearAllPoints()
+	frame.castUninterruptible:SetAllPoints(fill)
+end
+
+function Nameplates:ApplyBorder(frame)
+	local profile = self.db.profile
+	local border = frame.border
+	local size = profile.borderSize
+	local bar = frame.healthBar
+
+	border.top:ClearAllPoints()
+	border.top:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", -size, 0)
+	border.top:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", size, 0)
+	border.top:SetHeight(size)
+	border.bottom:ClearAllPoints()
+	border.bottom:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", -size, 0)
+	border.bottom:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", size, 0)
+	border.bottom:SetHeight(size)
+	border.left:ClearAllPoints()
+	border.left:SetPoint("TOPRIGHT", bar, "TOPLEFT", 0, 0)
+	border.left:SetPoint("BOTTOMRIGHT", bar, "BOTTOMLEFT", 0, 0)
+	border.left:SetWidth(size)
+	border.right:ClearAllPoints()
+	border.right:SetPoint("TOPLEFT", bar, "TOPRIGHT", 0, 0)
+	border.right:SetPoint("BOTTOMLEFT", bar, "BOTTOMRIGHT", 0, 0)
+	border.right:SetWidth(size)
+	for _, edge in pairs(border) do
+		edge:SetShown(profile.border)
+	end
+
+	local outset = (profile.border and size or 0) + TARGET_HIGHLIGHT_WIDTH
+	frame.highlight:ClearAllPoints()
+	frame.highlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
+	frame.highlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
 end
 
 function Nameplates:UpdateHealth(unit, frame)
@@ -776,27 +972,39 @@ function Nameplates:UpdateLevel(unit, frame)
 	frame.levelText:SetText(NameplateLogic.LevelText(level, classification))
 end
 
+local colorState = {}
+
+-- the returned table is reused by every call
+function Nameplates:ColorState(unit)
+	local profile = self.db.profile
+	local state = colorState
+	state.reaction = Plain(UnitReaction(unit, "player"))
+	state.isPlayer = Plain(UnitIsPlayer(unit))
+	state.classFile = Plain(select(2, UnitClass(unit)))
+	state.tapDenied = Plain(UnitIsTapDenied(unit))
+	state.inCombat = Plain(UnitAffectingCombat(unit))
+	state.darkenOOC = profile.darkenOOC
+	state.threat = nil
+	state.threatRole = nil
+	state.threatShared = nil
+	state.offTank = nil
+
+	if profile.threatColors then
+		state.threat = Plain(UnitThreatSituation("player", unit))
+		state.threatRole = NameplateLogic.ThreatRole(profile.threatRole, Plain(UnitGroupRolesAssigned("player")))
+		state.threatShared = IsInGroup() or Plain(UnitExists("pet")) == true
+		if state.threatRole == "tank" and type(state.threat) == "number" and state.threat < 2 then
+			local mobTarget = unit .. "target"
+			state.offTank = Plain(UnitExists(mobTarget)) == true
+				and Plain(UnitIsUnit(mobTarget, "player")) == false
+				and Plain(UnitGroupRolesAssigned(mobTarget)) == "TANK"
+		end
+	end
+	return state
+end
+
 function Nameplates:UpdateColor(unit, frame)
-	local reaction = UnitReaction(unit, "player")
-	local isPlayer = UnitIsPlayer(unit)
-	local classFile = select(2, UnitClass(unit))
-	local tapDenied = UnitIsTapDenied(unit)
-
-	if issecretvalue(reaction) then
-		reaction = nil
-	end
-	if issecretvalue(isPlayer) then
-		isPlayer = nil
-	end
-	if issecretvalue(classFile) then
-		classFile = nil
-	end
-	if issecretvalue(tapDenied) then
-		tapDenied = nil
-	end
-
-	local r, g, b = NameplateLogic.Color(reaction, isPlayer, classFile, tapDenied, RAID_CLASS_COLORS)
-	frame.healthBar:SetStatusBarColor(r, g, b)
+	frame.healthBar:SetStatusBarColor(NameplateLogic.PlateColor(self:ColorState(unit), RAID_CLASS_COLORS))
 end
 
 function Nameplates:UpdateHighlight(unit, frame)
@@ -806,6 +1014,63 @@ function Nameplates:UpdateHighlight(unit, frame)
 	else
 		frame.highlight:SetAlpha(isTarget and 1 or 0)
 	end
+end
+
+function Nameplates:UpdateTargetState(unit, frame)
+	local profile = self.db.profile
+	local isTarget = UnitIsUnit(unit, "target")
+	local secret = issecretvalue(isTarget)
+
+	frame:SetScale((not secret and isTarget) and profile.targetScale / 100 or 1)
+
+	local fade = profile.nonTargetAlpha / 100
+	if fade >= 1 or not UnitExists("target") then
+		frame:SetAlpha(1)
+	elseif secret then
+		frame:SetAlphaFromBoolean(isTarget, 1, fade)
+	else
+		frame:SetAlpha(isTarget and 1 or fade)
+	end
+end
+
+-- GetRaidTargetIndex is always secret for addon code; type() can still tell a marker from none
+function Nameplates:UpdateMarkers(unit, frame)
+	local profile = self.db.profile
+	local marker = frame.raidMarker
+	local point, relPoint, x, y = NameplateLogic.MarkerLayout(profile.raidMarkerPos, MARKER_GAP)
+	local index = point and GetRaidTargetIndex(unit)
+	local markerShown = type(index) ~= "nil"
+
+	if markerShown then
+		SetRaidTargetIconTexture(marker, index)
+		marker:SetSize(profile.raidMarkerSize, profile.raidMarkerSize)
+		marker:ClearAllPoints()
+		marker:SetPoint(point, self:MarkerAnchor(frame, profile), relPoint, x, y)
+		marker:Show()
+	else
+		marker:Hide()
+	end
+
+	local atlas = nil
+	if profile.classificationIcon and not (markerShown and profile.raidMarkerPos == "TOPLEFT") then
+		atlas = NameplateLogic.ClassificationAtlas(Plain(UnitClassification(unit)))
+	end
+	if atlas then
+		frame.classification:SetAtlas(atlas)
+		frame.classification:Show()
+	else
+		frame.classification:Hide()
+	end
+end
+
+function Nameplates:MarkerAnchor(frame, profile)
+	local position = profile.raidMarkerPos
+	if position == "LEFT" then
+		return (profile.cc and frame.cc) or frame
+	elseif position == "RIGHT" then
+		return profile.levelText and frame.levelText or frame
+	end
+	return frame
 end
 
 function Nameplates:GetCastFrame(unit)
@@ -818,11 +1083,52 @@ end
 
 function Nameplates:ApplyShield(frame, notInterruptible)
 	local shield = frame.castShield
+	local tint = frame.castUninterruptible
+	local tintAlpha = self.db.profile.castUninterruptible and 1 or 0
 	if issecretvalue(notInterruptible) then
 		shield:SetAlphaFromBoolean(notInterruptible, 1, 0)
+		tint:SetAlphaFromBoolean(notInterruptible, tintAlpha, 0)
 	else
 		shield:SetAlpha(notInterruptible and 1 or 0)
+		tint:SetAlpha(notInterruptible and tintAlpha or 0)
 	end
+end
+
+function Nameplates:ShowCast(frame, name, texture, notInterruptible)
+	frame.castFlash:SetAlpha(0)
+	frame.castSpark:SetShown(self.db.profile.castSpark)
+	frame.castIcon:SetTexture(texture)
+	frame.castText:SetText(name)
+	self:ApplyShield(frame, notInterruptible)
+	frame.castBar:Show()
+end
+
+function Nameplates:OnCastInterrupted(_, unit)
+	local frame = self:GetCastFrame(unit)
+	if not frame then
+		return
+	end
+	if not self.db.profile.castInterruptFlash then
+		self:OnCastStop(nil, unit)
+		return
+	end
+
+	self.castMode[unit] = "interrupted"
+	local token = (frame.interruptToken or 0) + 1
+	frame.interruptToken = token
+
+	frame.castFlash:SetAlpha(1)
+	frame.castSpark:Hide()
+	frame.castShield:SetAlpha(0)
+	frame.castUninterruptible:SetAlpha(0)
+	frame.castText:SetText(INTERRUPTED_TEXT)
+	frame.castBar:Show()
+
+	C_Timer.After(INTERRUPTED_HOLD, function()
+		if frame.interruptToken == token and self.castMode[unit] == "interrupted" then
+			self:HideCastBar(unit, frame)
+		end
+	end)
 end
 
 function Nameplates:HideCastBar(unit, frame)
@@ -930,11 +1236,9 @@ function Nameplates:OnCastStart(event, unit)
 	self.castMode[unit] = "cast"
 	local d = UnitCastingDuration(unit)
 	frame.castBar:SetTimerDuration(d, Enum.StatusBarInterpolation.Immediate, Enum.StatusBarTimerDirection.ElapsedTime)
-	frame.castBar:Show()
 
-	local name, _, _, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
-	frame.castText:SetText(name)
-	self:ApplyShield(frame, notInterruptible)
+	local name, _, texture, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
+	self:ShowCast(frame, name, texture, notInterruptible)
 
 	if event == "UNIT_SPELLCAST_START" and ns.Debug:IsActive() then
 		local isTarget = UnitIsUnit(unit, "target")
@@ -953,11 +1257,9 @@ function Nameplates:OnChannelStart(event, unit)
 	self.castMode[unit] = "channel"
 	local d = UnitChannelDuration(unit)
 	frame.castBar:SetTimerDuration(d, Enum.StatusBarInterpolation.Immediate, Enum.StatusBarTimerDirection.RemainingTime)
-	frame.castBar:Show()
 
-	local name, _, _, _, _, _, notInterruptible = UnitChannelInfo(unit)
-	frame.castText:SetText(name)
-	self:ApplyShield(frame, notInterruptible)
+	local name, _, texture, _, _, _, notInterruptible = UnitChannelInfo(unit)
+	self:ShowCast(frame, name, texture, notInterruptible)
 
 	if event == "UNIT_SPELLCAST_CHANNEL_START" and ns.Debug:IsActive() then
 		local isTarget = UnitIsUnit(unit, "target")
@@ -1004,7 +1306,7 @@ function Nameplates:OnInterruptibleChanged(_, unit)
 end
 
 function Nameplates:GetOptions()
-	return {
+	local options = {
 		type = "group",
 		name = "Nameplates",
 		args = {
@@ -1375,6 +1677,115 @@ function Nameplates:GetOptions()
 			},
 		},
 	}
+
+	local function option(key, spec)
+		spec.get = function()
+			return self.db.profile[key]
+		end
+		spec.set = function(_, value)
+			self.db.profile[key] = value
+			self:Refresh()
+		end
+		options.args[key] = spec
+	end
+
+	local function isOff(key)
+		return function()
+			return not self.db.profile[key]
+		end
+	end
+
+	local function castExtraOff()
+		return not self.db.profile.castBar
+	end
+
+	options.args.markerHeader = { type = "header", name = "Markers", order = 30 }
+	option("raidMarkerPos", {
+		type = "select",
+		name = "Raid marker",
+		order = 31,
+		values = {
+			TOPRIGHT = "Top right",
+			TOPLEFT = "Top left",
+			LEFT = "Left",
+			RIGHT = "Right",
+			NONE = "Hidden",
+		},
+	})
+	option("raidMarkerSize", {
+		type = "range",
+		name = "Raid marker size",
+		order = 32,
+		min = 10,
+		max = 40,
+		step = 1,
+		disabled = function()
+			return self.db.profile.raidMarkerPos == "NONE"
+		end,
+	})
+	option("classificationIcon", { type = "toggle", name = "Elite and rare icon", order = 33 })
+
+	options.args.targetHeader = { type = "header", name = "Target", order = 35 }
+	option("targetScale", { type = "range", name = "Target scale (%)", order = 36, min = 100, max = 150, step = 5 })
+	option("nonTargetAlpha", {
+		type = "range",
+		name = "Non-target opacity (%)",
+		order = 37,
+		min = 20,
+		max = 100,
+		step = 5,
+	})
+
+	options.args.barHeader = { type = "header", name = "Health bar", order = 40 }
+	option("border", { type = "toggle", name = "Border", order = 41 })
+	option("borderSize", {
+		type = "range",
+		name = "Border size",
+		order = 42,
+		min = 1,
+		max = 3,
+		step = 1,
+		disabled = isOff("border"),
+	})
+	option("darkenOOC", { type = "toggle", name = "Darken enemies out of combat", order = 43 })
+	option("executeLine", { type = "toggle", name = "Execute line", order = 44 })
+	option("executePercent", {
+		type = "range",
+		name = "Execute line health (%)",
+		order = 45,
+		min = 5,
+		max = 90,
+		step = 5,
+		disabled = isOff("executeLine"),
+	})
+
+	options.args.castHeader = { type = "header", name = "Cast bar details", order = 50 }
+	option("castIcon", { type = "toggle", name = "Spell icon", order = 51, disabled = castExtraOff })
+	option("castSpark", { type = "toggle", name = "Spark", order = 52, disabled = castExtraOff })
+	option("castUninterruptible", {
+		type = "toggle",
+		name = "Grey uninterruptible casts",
+		order = 53,
+		disabled = castExtraOff,
+	})
+	option("castInterruptFlash", { type = "toggle", name = "Interrupted flash", order = 54, disabled = castExtraOff })
+
+	options.args.threatHeader = { type = "header", name = "Threat", order = 60 }
+	option("threatColors", { type = "toggle", name = "Threat colours", order = 61 })
+	option("threatRole", {
+		type = "select",
+		name = "Threat role",
+		desc = "Auto uses your assigned group role.",
+		order = 62,
+		values = {
+			auto = "Auto",
+			tank = "Tank",
+			dps = "Damage or healer",
+		},
+		disabled = isOff("threatColors"),
+	})
+
+	return options
 end
 
 function Nameplates:GetDebugChecks()
@@ -1428,6 +1839,11 @@ function Nameplates:GetDebugChecks()
 					"UnitEffectiveLevel",
 					"UnitClassification",
 					"GetCreatureDifficultyColor",
+					"GetRaidTargetIndex",
+					"SetRaidTargetIconTexture",
+					"UnitThreatSituation",
+					"UnitGroupRolesAssigned",
+					"UnitAffectingCombat",
 				}
 
 				local missing = {}
@@ -1605,30 +2021,159 @@ function Nameplates:GetDebugChecks()
 					return "SKIP", "target not styled"
 				end
 
-				local unit = "target"
-				local reaction = UnitReaction(unit, "player")
-				local isPlayer = UnitIsPlayer(unit)
-				local classFile = select(2, UnitClass(unit))
-				local tapDenied = UnitIsTapDenied(unit)
-
-				if issecretvalue(reaction) then
-					reaction = nil
-				end
-				if issecretvalue(isPlayer) then
-					isPlayer = nil
-				end
-				if issecretvalue(classFile) then
-					classFile = nil
-				end
-				if issecretvalue(tapDenied) then
-					tapDenied = nil
-				end
-
-				local er, eg, eb = NameplateLogic.Color(reaction, isPlayer, classFile, tapDenied, RAID_CLASS_COLORS)
+				local state = self:ColorState("target")
+				local er, eg, eb = NameplateLogic.PlateColor(state, RAID_CLASS_COLORS)
 				local cr, cg, cb = frame.healthBar:GetStatusBarColor()
 
 				local ok = math.abs(cr - er) <= 0.01 and math.abs(cg - eg) <= 0.01 and math.abs(cb - eb) <= 0.01
-				return ok and "PASS" or "FAIL", cr, cg, cb, er, eg, eb
+				return ok and "PASS" or "FAIL",
+					cr,
+					cg,
+					cb,
+					er,
+					eg,
+					eb,
+					state.inCombat,
+					state.threat,
+					state.threatRole,
+					state.threatShared
+			end,
+		},
+		{
+			name = "raid marker",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local index = GetRaidTargetIndex("target")
+				local hasMarker = type(index) ~= "nil"
+				local point, relPoint, expX, expY = NameplateLogic.MarkerLayout(profile.raidMarkerPos, MARKER_GAP)
+				local expected = point ~= nil and hasMarker
+				local shown = frame.raidMarker:IsShown() == true
+
+				local ok = shown == expected
+				if not ok or not shown then
+					return ok and "PASS" or "FAIL", shown, hasMarker, profile.raidMarkerPos, issecretvalue(index)
+				end
+
+				local ptOk, p, relTo, rp, x, y = readPoint(frame.raidMarker)
+				if not ptOk then
+					return "PASS", shown, hasMarker, profile.raidMarkerPos, issecretvalue(index), "points restricted"
+				end
+				ok = p == point
+					and relTo == self:MarkerAnchor(frame, profile)
+					and rp == relPoint
+					and not issecretvalue(x)
+					and not issecretvalue(y)
+					and math.abs(x - expX) <= 0.5
+					and math.abs(y - expY) <= 0.5
+				return ok and "PASS" or "FAIL", shown, hasMarker, profile.raidMarkerPos, issecretvalue(index)
+			end,
+		},
+		{
+			name = "classification icon",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local classification = UnitClassification("target")
+				if issecretvalue(classification) then
+					return "INFO", "secret", frame.classification:IsShown()
+				end
+
+				local markerAtIcon = frame.raidMarker:IsShown() and profile.raidMarkerPos == "TOPLEFT"
+				local atlas = NameplateLogic.ClassificationAtlas(classification)
+				local expected = profile.classificationIcon and not markerAtIcon and atlas ~= nil
+				local shown = frame.classification:IsShown() == true
+				local ok = shown == expected
+				if shown then
+					ok = ok and frame.classification:GetAtlas() == atlas
+				end
+				return ok and "PASS" or "FAIL", shown, classification, atlas
+			end,
+		},
+		{
+			name = "target state",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local profile = self.db.profile
+				local scale = frame:GetScale()
+				local alpha = frame:GetAlpha()
+				if
+					issecretvalue(scale)
+					or issecretvalue(alpha)
+					or issecretvalue(UnitIsUnit(plate.unitToken, "target"))
+				then
+					return "INFO", "secret"
+				end
+
+				local ok = math.abs(scale - profile.targetScale / 100) <= 0.01 and math.abs(alpha - 1) <= 0.01
+				return ok and "PASS" or "FAIL", scale, alpha, profile.targetScale, profile.nonTargetAlpha
+			end,
+		},
+		{
+			name = "cast details",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+				local mode = self.castMode[plate.unitToken]
+				if not mode then
+					return "SKIP", "not casting"
+				end
+
+				local profile = self.db.profile
+				local iconShown = frame.castIcon:IsShown() == true
+				local ok = iconShown == profile.castIcon
+				if mode == "interrupted" then
+					local flash = frame.castFlash:GetAlpha()
+					return (ok and not issecretvalue(flash) and flash == 1) and "PASS" or "FAIL", mode, iconShown
+				end
+				ok = ok and (frame.castSpark:IsShown() == true) == profile.castSpark
+				return ok and "PASS" or "FAIL",
+					mode,
+					iconShown,
+					frame.castSpark:IsShown(),
+					issecretvalue(frame.castIcon:GetTexture())
 			end,
 		},
 		{

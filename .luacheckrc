@@ -105,6 +105,10 @@ read_globals = {
 	"IsSpellKnownOrOverridesKnown",
 	"RegisterUnitWatch",
 	"UnregisterUnitWatch",
+	"GetRaidTargetIndex",
+	"SetRaidTargetIconTexture",
+	"UnitThreatSituation",
+	"UnitGroupRolesAssigned",
 }
 
 globals = {

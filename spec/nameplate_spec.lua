@@ -6,41 +6,198 @@ describe("NameplateLogic", function()
 		assert(loadfile("MerrinxUI/Modules/NameplateLogic.lua"))("MerrinxUI", ns)
 	end)
 
-	describe("Color", function()
+	describe("PlateColor", function()
 		local classColors = {
 			MAGE = { r = 0.25, g = 0.78, b = 0.92 },
 			WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
 		}
+		local HOSTILE = { 0.8, 0.137, 0.137 }
+		local NEUTRAL = { 0.81, 0.72, 0.19 }
+		local FRIENDLY = { 0.314, 0.8, 0.408 }
+		local TAPPED = { 0.5, 0.5, 0.5 }
+
+		local function color(state, colors)
+			return { ns.NameplateLogic.PlateColor(state, colors) }
+		end
 
 		it("is grey when tap-denied, regardless of other inputs", function()
-			assert.are.same({ 0.5, 0.5, 0.5 }, { ns.NameplateLogic.Color(5, true, "MAGE", true, classColors) })
-			assert.are.same({ 0.5, 0.5, 0.5 }, { ns.NameplateLogic.Color(nil, nil, nil, true, nil) })
+			assert.are.same(
+				TAPPED,
+				color({
+					tapDenied = true,
+					isPlayer = true,
+					classFile = "MAGE",
+					reaction = 5,
+					threatRole = "dps",
+					threat = 3,
+					threatShared = true,
+				}, classColors)
+			)
+			assert.are.same(TAPPED, color({ tapDenied = true }, nil))
 		end)
 
 		it("uses the class colour for a player with a known class", function()
-			assert.are.same({ 0.25, 0.78, 0.92 }, { ns.NameplateLogic.Color(5, true, "MAGE", false, classColors) })
+			assert.are.same(
+				{ 0.25, 0.78, 0.92 },
+				color(
+					{ isPlayer = true, classFile = "MAGE", reaction = 2, inCombat = false, darkenOOC = true },
+					classColors
+				)
+			)
 		end)
 
-		it("falls back to reaction for a player with an unknown or nil class", function()
-			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.Color(3, true, "DRUID", false, classColors) })
-			assert.are.same({ 0, 1, 0 }, { ns.NameplateLogic.Color(5, true, nil, false, classColors) })
+		it("falls back to reaction for a player with an unknown, nil class or no class table", function()
+			assert.are.same(HOSTILE, color({ isPlayer = true, classFile = "DRUID", reaction = 2 }, classColors))
+			assert.are.same(FRIENDLY, color({ isPlayer = true, reaction = 5 }, classColors))
+			assert.are.same(NEUTRAL, color({ isPlayer = true, classFile = "MAGE", reaction = 4 }, nil))
 		end)
 
-		it("falls back to reaction when classColors is nil", function()
-			assert.are.same({ 1, 1, 0 }, { ns.NameplateLogic.Color(4, true, "MAGE", false, nil) })
+		it("colours neutral units hostile once they are in combat", function()
+			assert.are.same(NEUTRAL, color({ reaction = 4, inCombat = false }))
+			assert.are.same(NEUTRAL, color({ reaction = 4 }))
+			assert.are.same(HOSTILE, color({ reaction = 4, inCombat = true, darkenOOC = true }))
 		end)
 
-		it("colours by reaction when not a player", function()
-			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.Color(1, false, nil, false, classColors) })
-			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.Color(3, false, nil, false, classColors) })
-			assert.are.same({ 1, 1, 0 }, { ns.NameplateLogic.Color(4, false, nil, false, classColors) })
-			assert.are.same({ 0, 1, 0 }, { ns.NameplateLogic.Color(5, false, nil, false, classColors) })
-			assert.are.same({ 0, 1, 0 }, { ns.NameplateLogic.Color(8, false, nil, false, classColors) })
+		it("colours friendly reactions green and everything else hostile", function()
+			assert.are.same(FRIENDLY, color({ reaction = 5 }))
+			assert.are.same(FRIENDLY, color({ reaction = 8 }))
+			assert.are.same(HOSTILE, color({ reaction = 1 }))
+			assert.are.same(HOSTILE, color({ reaction = 3 }))
+			assert.are.same(HOSTILE, color({}))
 		end)
 
-		it("defaults a nil reaction to red", function()
-			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.Color(nil, false, nil, false, classColors) })
-			assert.are.same({ 1, 0, 0 }, { ns.NameplateLogic.Color(nil, nil, nil, nil, nil) })
+		it("darkens hostile units that are not known to be in combat when darkenOOC is on", function()
+			local dark = color({ reaction = 2, inCombat = false, darkenOOC = true })
+			assert.are.near(0.48, dark[1], 1e-9)
+			assert.are.near(0.0822, dark[2], 1e-9)
+			assert.are.near(0.0822, dark[3], 1e-9)
+			assert.are.same(dark, color({ reaction = 2, darkenOOC = true }))
+			assert.are.same(HOSTILE, color({ reaction = 2, inCombat = true, darkenOOC = true }))
+			assert.are.same(HOSTILE, color({ reaction = 2, inCombat = false, darkenOOC = false }))
+		end)
+
+		it("lets threat colours win over class and reaction colours", function()
+			assert.are.same(
+				{ 1, 0.5, 0 },
+				color({
+					isPlayer = true,
+					classFile = "MAGE",
+					reaction = 2,
+					threatRole = "dps",
+					threat = 3,
+					threatShared = true,
+				}, classColors)
+			)
+			assert.are.same({ 1, 0.22, 0.17 }, color({ reaction = 4, threatRole = "tank", threat = 0 }))
+		end)
+
+		it("keeps the normal colour when threat gives no override", function()
+			assert.are.same(HOSTILE, color({ reaction = 2, inCombat = true, threatRole = "tank", threat = 3 }))
+			assert.are.same(HOSTILE, color({ reaction = 2, inCombat = true, threatRole = "dps", threat = 3 }))
+		end)
+	end)
+
+	describe("ThreatRole", function()
+		it("returns an explicit setting unchanged", function()
+			assert.are.equal("tank", ns.NameplateLogic.ThreatRole("tank", "DAMAGER"))
+			assert.are.equal("dps", ns.NameplateLogic.ThreatRole("dps", "TANK"))
+		end)
+
+		it("follows the assigned group role on auto", function()
+			assert.are.equal("tank", ns.NameplateLogic.ThreatRole("auto", "TANK"))
+			assert.are.equal("dps", ns.NameplateLogic.ThreatRole("auto", "HEALER"))
+			assert.are.equal("dps", ns.NameplateLogic.ThreatRole("auto", "NONE"))
+			assert.are.equal("dps", ns.NameplateLogic.ThreatRole("auto", nil))
+		end)
+	end)
+
+	describe("ThreatColorKey", function()
+		local key = function(...)
+			return ns.NameplateLogic.ThreatColorKey(...)
+		end
+
+		it("returns nil without a numeric threat status", function()
+			assert.is_nil(key("tank", nil, true, false))
+			assert.is_nil(key("dps", "3", true, false))
+		end)
+
+		it("warns a tank that is losing or lacks aggro", function()
+			assert.is_nil(key("tank", 3, false, false))
+			assert.are.equal("tankLosingAggro", key("tank", 2, false, false))
+			assert.are.equal("tankNoAggro", key("tank", 1, false, false))
+			assert.are.equal("tankNoAggro", key("tank", 0, true, false))
+			assert.are.equal("offTankAggro", key("tank", 0, true, true))
+			assert.are.equal("tankLosingAggro", key("tank", 2, true, true))
+		end)
+
+		it("warns a damage dealer with or near aggro only when threat is shared", function()
+			assert.are.equal("dpsHasAggro", key("dps", 3, true, false))
+			assert.are.equal("dpsNearAggro", key("dps", 2, true, false))
+			assert.is_nil(key("dps", 1, true, false))
+			assert.is_nil(key("dps", 0, true, false))
+			assert.is_nil(key("dps", 3, false, false))
+		end)
+
+		it("names a colour defined in COLORS for every key it returns", function()
+			for _, k in ipairs({ "tankLosingAggro", "tankNoAggro", "offTankAggro", "dpsHasAggro", "dpsNearAggro" }) do
+				assert.are.equal(3, #ns.NameplateLogic.COLORS[k])
+			end
+		end)
+	end)
+
+	describe("ClassificationAtlas", function()
+		it("maps elite, boss and rare classifications to Blizzard atlases", function()
+			assert.are.equal("nameplates-icon-elite-gold", ns.NameplateLogic.ClassificationAtlas("elite"))
+			assert.are.equal("nameplates-icon-elite-gold", ns.NameplateLogic.ClassificationAtlas("worldboss"))
+			assert.are.equal("nameplates-icon-elite-silver", ns.NameplateLogic.ClassificationAtlas("rareelite"))
+			assert.are.equal(
+				"UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
+				ns.NameplateLogic.ClassificationAtlas("rare")
+			)
+		end)
+
+		it("returns nil for ordinary or unknown classifications", function()
+			assert.is_nil(ns.NameplateLogic.ClassificationAtlas("normal"))
+			assert.is_nil(ns.NameplateLogic.ClassificationAtlas("trivial"))
+			assert.is_nil(ns.NameplateLogic.ClassificationAtlas("minus"))
+			assert.is_nil(ns.NameplateLogic.ClassificationAtlas(nil))
+		end)
+	end)
+
+	describe("MarkerLayout", function()
+		it("places the marker in each supported position", function()
+			assert.are.same({ "BOTTOMRIGHT", "TOPRIGHT", 0, 2 }, { ns.NameplateLogic.MarkerLayout("TOPRIGHT", 2) })
+			assert.are.same({ "BOTTOMLEFT", "TOPLEFT", 0, 2 }, { ns.NameplateLogic.MarkerLayout("TOPLEFT", 2) })
+			assert.are.same({ "RIGHT", "LEFT", -2, 0 }, { ns.NameplateLogic.MarkerLayout("LEFT", 2) })
+			assert.are.same({ "LEFT", "RIGHT", 2, 0 }, { ns.NameplateLogic.MarkerLayout("RIGHT", 2) })
+		end)
+
+		it("returns nil for NONE or unknown positions", function()
+			assert.is_nil(ns.NameplateLogic.MarkerLayout("NONE", 2))
+			assert.is_nil(ns.NameplateLogic.MarkerLayout(nil, 2))
+		end)
+	end)
+
+	describe("ExecuteOffset", function()
+		it("scales the percentage to the bar width", function()
+			assert.are.equal(39, ns.NameplateLogic.ExecuteOffset(130, 30))
+			assert.are.equal(0, ns.NameplateLogic.ExecuteOffset(130, 0))
+			assert.are.equal(130, ns.NameplateLogic.ExecuteOffset(130, 100))
+		end)
+
+		it("clamps the percentage to 0-100", function()
+			assert.are.equal(0, ns.NameplateLogic.ExecuteOffset(130, -10))
+			assert.are.equal(130, ns.NameplateLogic.ExecuteOffset(130, 150))
+		end)
+	end)
+
+	describe("CastIconSize", function()
+		it("spans the health bar, the gap and the cast bar", function()
+			assert.are.equal(20, ns.NameplateLogic.CastIconSize(10, nil, 1, 2, 8))
+		end)
+
+		it("includes the power bar when it is shown", function()
+			assert.are.equal(25, ns.NameplateLogic.CastIconSize(10, 4, 1, 2, 8))
 		end)
 	end)
 

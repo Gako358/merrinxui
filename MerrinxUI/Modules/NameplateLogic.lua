@@ -3,22 +3,119 @@ local addonName, ns = ...
 local NameplateLogic = {}
 ns.NameplateLogic = NameplateLogic
 
-function NameplateLogic.Color(reaction, isPlayer, classFile, tapDenied, classColors)
-	if tapDenied then
-		return 0.5, 0.5, 0.5
+local COLORS = {
+	hostile = { 0.8, 0.137, 0.137 },
+	neutral = { 0.81, 0.72, 0.19 },
+	friendly = { 0.314, 0.8, 0.408 },
+	tapped = { 0.5, 0.5, 0.5 },
+	tankLosingAggro = { 0.81, 0.72, 0.19 },
+	tankNoAggro = { 1, 0.22, 0.17 },
+	offTankAggro = { 0.188, 0.761, 0.812 },
+	dpsHasAggro = { 1, 0.5, 0 },
+	dpsNearAggro = { 0.81, 0.72, 0.19 },
+}
+NameplateLogic.COLORS = COLORS
+
+local DARKEN_FACTOR = 0.6
+
+function NameplateLogic.ThreatRole(setting, assignedRole)
+	if setting == "tank" or setting == "dps" then
+		return setting
+	end
+	return assignedRole == "TANK" and "tank" or "dps"
+end
+
+-- status is UnitThreatSituation's 0-3; a tank holding aggro gets no override so the mob keeps its normal colour
+function NameplateLogic.ThreatColorKey(role, status, shared, offTank)
+	if type(status) ~= "number" then
+		return nil
+	end
+	if role == "tank" then
+		if status >= 3 then
+			return nil
+		elseif status >= 2 then
+			return "tankLosingAggro"
+		end
+		return offTank and "offTankAggro" or "tankNoAggro"
+	end
+	if not shared then
+		return nil
+	end
+	if status >= 3 then
+		return "dpsHasAggro"
+	elseif status >= 2 then
+		return "dpsNearAggro"
+	end
+	return nil
+end
+
+local function rgb(color)
+	return color[1], color[2], color[3]
+end
+
+function NameplateLogic.PlateColor(state, classColors)
+	if state.tapDenied then
+		return rgb(COLORS.tapped)
 	end
 
-	if isPlayer and classColors and classColors[classFile] then
-		local color = classColors[classFile]
-		return color.r, color.g, color.b
+	local threatKey = NameplateLogic.ThreatColorKey(state.threatRole, state.threat, state.threatShared, state.offTank)
+	if threatKey then
+		return rgb(COLORS[threatKey])
 	end
 
-	if reaction == nil or reaction <= 3 then
-		return 1, 0, 0
-	elseif reaction == 4 then
-		return 1, 1, 0
+	local classColor = state.isPlayer and classColors and state.classFile and classColors[state.classFile]
+	if classColor then
+		return classColor.r, classColor.g, classColor.b
 	end
-	return 0, 1, 0
+
+	local reaction = state.reaction
+	if reaction == 4 then
+		return rgb(state.inCombat == true and COLORS.hostile or COLORS.neutral)
+	elseif reaction ~= nil and reaction >= 5 then
+		return rgb(COLORS.friendly)
+	end
+
+	local r, g, b = rgb(COLORS.hostile)
+	if state.darkenOOC and state.inCombat ~= true then
+		return r * DARKEN_FACTOR, g * DARKEN_FACTOR, b * DARKEN_FACTOR
+	end
+	return r, g, b
+end
+
+local CLASSIFICATION_ATLAS = {
+	elite = "nameplates-icon-elite-gold",
+	worldboss = "nameplates-icon-elite-gold",
+	rareelite = "nameplates-icon-elite-silver",
+	rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
+}
+
+function NameplateLogic.ClassificationAtlas(classification)
+	return CLASSIFICATION_ATLAS[classification]
+end
+
+function NameplateLogic.MarkerLayout(position, gap)
+	if position == "TOPRIGHT" then
+		return "BOTTOMRIGHT", "TOPRIGHT", 0, gap
+	elseif position == "TOPLEFT" then
+		return "BOTTOMLEFT", "TOPLEFT", 0, gap
+	elseif position == "LEFT" then
+		return "RIGHT", "LEFT", -gap, 0
+	elseif position == "RIGHT" then
+		return "LEFT", "RIGHT", gap, 0
+	end
+	return nil
+end
+
+function NameplateLogic.ExecuteOffset(width, percent)
+	return width * math.max(0, math.min(100, percent)) / 100
+end
+
+function NameplateLogic.CastIconSize(healthHeight, powerHeight, powerGap, castGap, castHeight)
+	local size = healthHeight + castGap + castHeight
+	if powerHeight then
+		size = size + powerGap + powerHeight
+	end
+	return size
 end
 
 function NameplateLogic.FormatValue(mode, numberText, percent)
