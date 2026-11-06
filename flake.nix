@@ -258,6 +258,221 @@
                 write(f"{out}/{name}.tga", shade)
           '';
 
+          glyphIcons = pkgs.writeText "icons.py" ''
+            import math
+            import struct
+            import sys
+
+            S = 64
+            SS = 4
+
+
+            def seg(ax, ay, bx, by, w):
+                def f(x, y):
+                    dx, dy = bx - ax, by - ay
+                    t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)
+                    t = max(0.0, min(1.0, t))
+                    px, py = ax + t * dx - x, ay + t * dy - y
+                    return px * px + py * py <= (w / 2) ** 2
+
+                return f
+
+
+            def circle(cx, cy, r):
+                return lambda x, y: (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+
+            def ring(cx, cy, r1, r2):
+                return lambda x, y: r1 * r1 <= (x - cx) ** 2 + (y - cy) ** 2 <= r2 * r2
+
+
+            def rect(x0, y0, x1, y1):
+                return lambda x, y: x0 <= x <= x1 and y0 <= y <= y1
+
+
+            def arc(cx, cy, r, w, a0, a1):
+                def f(x, y):
+                    d = math.hypot(x - cx, y - cy)
+                    if abs(d - r) > w / 2:
+                        return False
+                    a = math.degrees(math.atan2(y - cy, x - cx)) % 360
+                    return (a0 <= a <= a1) if a0 <= a1 else (a >= a0 or a <= a1)
+
+                return f
+
+
+            def poly(points):
+                def f(x, y):
+                    inside = False
+                    n = len(points)
+                    for i in range(n):
+                        x1, y1 = points[i]
+                        x2, y2 = points[(i + 1) % n]
+                        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+                            inside = not inside
+                    return inside
+
+                return f
+
+
+            def union(*fs):
+                return lambda x, y: any(f(x, y) for f in fs)
+
+
+            def minus(a, *bs):
+                return lambda x, y: a(x, y) and not any(b(x, y) for b in bs)
+
+
+            def cog():
+                def teeth(x, y):
+                    d = math.hypot(x - 0.5, y - 0.5)
+                    if not 0.26 <= d <= 0.42:
+                        return False
+                    a = math.degrees(math.atan2(y - 0.5, x - 0.5)) % 45
+                    return a < 11 or a > 34
+
+                return minus(union(ring(0.5, 0.5, 0.0, 0.32), teeth), circle(0.5, 0.5, 0.13))
+
+
+            def sheet():
+                outline = minus(rect(0.2, 0.14, 0.8, 0.86), rect(0.27, 0.21, 0.73, 0.79))
+                lines = [seg(0.34, y, 0.66, y, 0.06) for y in (0.36, 0.5, 0.64)]
+                return union(outline, *lines)
+
+
+            def reset():
+                head = poly([(0.66, 0.12), (0.86, 0.32), (0.6, 0.38)])
+                return union(arc(0.5, 0.52, 0.28, 0.1, 300, 220), head)
+
+
+            def plus(w):
+                return union(seg(0.2, 0.5, 0.8, 0.5, w), seg(0.5, 0.2, 0.5, 0.8, w))
+
+
+            def cross():
+                return union(seg(0.24, 0.24, 0.76, 0.76, 0.1), seg(0.76, 0.24, 0.24, 0.76, 0.1))
+
+
+            def lock(opened):
+                body = rect(0.24, 0.46, 0.76, 0.86)
+                keyhole = union(circle(0.5, 0.62, 0.06), rect(0.47, 0.62, 0.53, 0.74))
+                if opened:
+                    shackle = union(arc(0.5, 0.3, 0.17, 0.08, 180, 360), seg(0.67, 0.3, 0.67, 0.46, 0.08), seg(0.33, 0.3, 0.33, 0.34, 0.08))
+                else:
+                    shackle = union(arc(0.5, 0.4, 0.17, 0.08, 180, 360), seg(0.33, 0.4, 0.33, 0.46, 0.08), seg(0.67, 0.4, 0.67, 0.46, 0.08))
+                return union(minus(body, keyhole), shackle)
+
+
+            def grip():
+                return union(*[seg(c - 0.86, 0.86, 0.86, c - 0.86, 0.07) for c in (1.22, 1.46, 1.7)])
+
+
+            def width_arrows():
+                return union(
+                    seg(0.18, 0.5, 0.82, 0.5, 0.08),
+                    poly([(0.1, 0.5), (0.3, 0.32), (0.3, 0.68)]),
+                    poly([(0.9, 0.5), (0.7, 0.32), (0.7, 0.68)]),
+                )
+
+
+            def chevron():
+                return union(seg(0.38, 0.24, 0.64, 0.5, 0.1), seg(0.64, 0.5, 0.38, 0.76, 0.1))
+
+
+            def sword():
+                return union(
+                    seg(0.3, 0.7, 0.82, 0.18, 0.1),
+                    seg(0.2, 0.6, 0.4, 0.8, 0.08),
+                    seg(0.3, 0.7, 0.18, 0.82, 0.07),
+                )
+
+
+            def shield():
+                return poly([(0.5, 0.1), (0.84, 0.24), (0.78, 0.6), (0.5, 0.9), (0.22, 0.6), (0.16, 0.24)])
+
+
+            def warning():
+                tri = poly([(0.5, 0.1), (0.9, 0.84), (0.1, 0.84)])
+                return minus(tri, rect(0.46, 0.36, 0.54, 0.62), circle(0.5, 0.72, 0.045))
+
+
+            def crosshair():
+                return union(
+                    ring(0.5, 0.5, 0.2, 0.28),
+                    seg(0.5, 0.08, 0.5, 0.3, 0.07),
+                    seg(0.5, 0.7, 0.5, 0.92, 0.07),
+                    seg(0.08, 0.5, 0.3, 0.5, 0.07),
+                    seg(0.7, 0.5, 0.92, 0.5, 0.07),
+                    circle(0.5, 0.5, 0.06),
+                )
+
+
+            def forbidden():
+                return union(ring(0.5, 0.5, 0.27, 0.37), seg(0.3, 0.3, 0.7, 0.7, 0.1))
+
+
+            def sparkle():
+                pts = []
+                for i in range(8):
+                    a = math.radians(i * 45 - 90)
+                    r = 0.42 if i % 2 == 0 else 0.12
+                    pts.append((0.5 + r * math.cos(a), 0.5 + r * math.sin(a)))
+                return poly(pts)
+
+
+            def skull():
+                head = union(circle(0.5, 0.42, 0.3), rect(0.34, 0.5, 0.66, 0.84))
+                return minus(
+                    head,
+                    circle(0.39, 0.44, 0.075),
+                    circle(0.61, 0.44, 0.075),
+                    poly([(0.5, 0.54), (0.45, 0.64), (0.55, 0.64)]),
+                    rect(0.44, 0.74, 0.47, 0.84),
+                    rect(0.53, 0.74, 0.56, 0.84),
+                )
+
+
+            def write(path, shape):
+                header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, S, S, 32, 0x28)
+                rows = bytearray()
+                for py in range(S):
+                    for px in range(S):
+                        hits = 0
+                        for sy in range(SS):
+                            for sx in range(SS):
+                                x = (px + (sx + 0.5) / SS) / S
+                                y = (py + (sy + 0.5) / SS) / S
+                                if shape(x, y):
+                                    hits += 1
+                        rows += bytes((255, 255, 255, round(255 * hits / (SS * SS))))
+                with open(path, "wb") as f:
+                    f.write(header + rows)
+
+
+            out = sys.argv[1]
+            for name, shape in [
+                ("DMSettings", cog()),
+                ("DMSegment", sheet()),
+                ("DMReset", reset()),
+                ("DMOpen", plus(0.1)),
+                ("DMClose", cross()),
+                ("DMLocked", lock(False)),
+                ("DMUnlocked", lock(True)),
+                ("DMResize", grip()),
+                ("DMWidth", width_arrows()),
+                ("DMArrow", chevron()),
+                ("DMDamage", sword()),
+                ("DMHealing", plus(0.22)),
+                ("DMTaken", shield()),
+                ("DMAvoidable", warning()),
+                ("DMEnemyTaken", crosshair()),
+                ("DMInterrupt", forbidden()),
+                ("DMDispel", sparkle()),
+                ("DMDeaths", skull()),
+            ]:
+                write(f"{out}/{name}.tga", shape)
+          '';
+
           soundEffects = pkgs.writeText "sounds.py" ''
             import math
             import struct
@@ -370,6 +585,7 @@
                 done
 
                 python3 ${statusbarTextures} $out/Textures
+                python3 ${glyphIcons} $out/Textures
 
                 mkdir wav
                 python3 ${soundEffects} wav

@@ -78,6 +78,14 @@ function Mover:Register(frame, label, getPosition)
 	end
 end
 
+function Mover:Unregister(frame)
+	local entry = entries[frame]
+	if entry then
+		entry.overlay:Hide()
+		entries[frame] = nil
+	end
+end
+
 function Mover:Apply(frame)
 	local entry = entries[frame]
 	if not entry then

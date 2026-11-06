@@ -12,6 +12,7 @@ local defaults = {
 		xp = false,
 		actionBars = false,
 		damageMeter = false,
+		unitFrames = false,
 	},
 	global = {
 		meterCVarOwned = false,
@@ -26,6 +27,7 @@ local GROUP_NAMES = {
 	stanceBar = "Stance Bar",
 	petBar = "Pet Bar",
 	damageMeter = "Damage Meter",
+	unitFrames = "Unit Frames",
 }
 
 function HideBlizzard:OnInitialize()
@@ -177,6 +179,7 @@ function HideBlizzard:GetOptions()
 				"Hides all Blizzard action bars. Without MerrinxUI's action bars enabled, you will have none."
 			),
 			damageMeter = groupToggle("damageMeter", 6),
+			unitFrames = groupToggle("unitFrames", 7),
 		},
 	}
 end

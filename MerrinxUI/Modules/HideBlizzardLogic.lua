@@ -23,6 +23,11 @@ HideBlizzardLogic.GROUPS = {
 	{ key = "stanceBar", frames = { "StanceBar" } },
 	{ key = "petBar", frames = { "PetActionBar" } },
 	{ key = "damageMeter", frames = {} },
+	{
+		key = "unitFrames",
+		frames = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" },
+		unregisterEvents = true,
+	},
 }
 
 local VALID_KEYS = {}

@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.24.1
+## Version: 0.25.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -33,7 +33,16 @@ Modules\CooldownVoice.lua
 Modules\ActionBarLogic.lua
 Modules\ActionBars.lua
 Modules\DamageMeterLogic.lua
+Modules\DamageMeterMenu.lua
+Modules\DamageMeterData.lua
+Modules\DamageMeterTooltip.lua
+Modules\DamageMeterWindow.lua
+Modules\DamageMeterTimer.lua
 Modules\DamageMeter.lua
+Modules\SpellHistoryLogic.lua
+Modules\SpellHistory.lua
+Modules\UnitFrameLogic.lua
+Modules\UnitFrames.lua
 Modules\EnemySpotterLogic.lua
 Modules\EnemySpotter.lua
 Modules\ProfessionLogic.lua

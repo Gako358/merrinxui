@@ -92,11 +92,26 @@ read_globals = {
 	"IsInInstance",
 	"UNKNOWNOBJECT",
 	"time",
+	"GetCursorPosition",
+	"IsShiftKeyDown",
+	"IsMouseButtonDown",
+	"C_DeathRecap",
+	"IsInGroup",
+	"IsInRaid",
+	"GetNumGroupMembers",
+	"UnitAffectingCombat",
+	"wipe",
+	"IsPlayerSpell",
+	"IsSpellKnownOrOverridesKnown",
+	"RegisterUnitWatch",
+	"UnregisterUnitWatch",
 }
 
 globals = {
 	"BINDING_HEADER_MERRINXUI",
 	"BINDING_NAME_MERRINXUI_TOGGLEBARS",
+	"BINDING_NAME_MERRINXUI_DM_TOGGLE",
+	"BINDING_NAME_MERRINXUI_DM_RESET",
 }
 
 files["spec"] = {

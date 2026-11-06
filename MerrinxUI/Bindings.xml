@@ -1,4 +1,10 @@
 <Bindings>
 	<Binding name="MERRINXUI_TOGGLEBARS" header="MERRINXUI" category="ADDONS">
 	</Binding>
+	<Binding name="MERRINXUI_DM_TOGGLE" category="ADDONS">
+		LibStub("AceAddon-3.0"):GetAddon("MerrinxUI"):GetModule("DamageMeter"):BindingToggle()
+	</Binding>
+	<Binding name="MERRINXUI_DM_RESET" category="ADDONS">
+		LibStub("AceAddon-3.0"):GetAddon("MerrinxUI"):GetModule("DamageMeter"):BindingReset()
+	</Binding>
 </Bindings>

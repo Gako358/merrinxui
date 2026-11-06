@@ -127,6 +127,32 @@ Media.bundled = {
 	},
 }
 
+Media.icons = {
+	settings = "Textures\\DMSettings.tga",
+	segment = "Textures\\DMSegment.tga",
+	reset = "Textures\\DMReset.tga",
+	open = "Textures\\DMOpen.tga",
+	close = "Textures\\DMClose.tga",
+	locked = "Textures\\DMLocked.tga",
+	unlocked = "Textures\\DMUnlocked.tga",
+	resize = "Textures\\DMResize.tga",
+	width = "Textures\\DMWidth.tga",
+	arrow = "Textures\\DMArrow.tga",
+	damage = "Textures\\DMDamage.tga",
+	healing = "Textures\\DMHealing.tga",
+	taken = "Textures\\DMTaken.tga",
+	avoidable = "Textures\\DMAvoidable.tga",
+	enemyTaken = "Textures\\DMEnemyTaken.tga",
+	interrupt = "Textures\\DMInterrupt.tga",
+	dispel = "Textures\\DMDispel.tga",
+	deaths = "Textures\\DMDeaths.tga",
+}
+
+function Media:Icon(name)
+	local file = Media.icons[name]
+	return file and ("Interface\\AddOns\\" .. addonName .. "\\Media\\" .. file)
+end
+
 Media.preload = { ok = 0, fail = 0, error = 0, failed = {} }
 
 do

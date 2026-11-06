@@ -1432,6 +1432,16 @@ function W:Open()
 	renderNow()
 end
 
+function W:OpenPage(label)
+	self:Open()
+	for i, page in ipairs(pages) do
+		if page.label == label then
+			switchToPage(i)
+			return
+		end
+	end
+end
+
 function W:Close()
 	if frame then
 		frame:Hide()
