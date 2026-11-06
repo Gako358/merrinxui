@@ -1203,7 +1203,7 @@ local function selfTestLogic()
 	local _, isNew = L.Spot(nearby, { name = "Tester", class = "ROGUE", level = 60 }, 100, 60)
 	local _, isRefresh = L.Spot(nearby, { name = "tester" }, 150, 60)
 	local _, isExpired = L.Spot(nearby, { name = "Tester" }, 300, 60)
-	if not isNew or isRefresh or not isExpired or nearby.tester.class ~= "ROGUE" then
+	if not isNew or isRefresh or not isExpired or nearby.tester.class ~= nil then
 		return false, "spot"
 	end
 
