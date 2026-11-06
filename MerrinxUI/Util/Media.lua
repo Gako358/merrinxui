@@ -146,6 +146,7 @@ Media.icons = {
 	interrupt = "Textures\\DMInterrupt.tga",
 	dispel = "Textures\\DMDispel.tga",
 	deaths = "Textures\\DMDeaths.tga",
+	glow = "Textures\\NPGlow.tga",
 }
 
 function Media:Icon(name)

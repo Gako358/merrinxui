@@ -109,6 +109,16 @@ read_globals = {
 	"SetRaidTargetIconTexture",
 	"UnitThreatSituation",
 	"UnitGroupRolesAssigned",
+	"C_SwingTimer",
+	"UnitAttackSpeed",
+	"UnitXP",
+	"UnitXPMax",
+	"GetXPExhaustion",
+	"GetQuestLogRewardXP",
+	"GetMaxLevelForPlayerExpansion",
+	"IsXPUserDisabled",
+	"BreakUpLargeNumbers",
+	"C_QuestLog",
 }
 
 globals = {

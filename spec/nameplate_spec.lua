@@ -191,6 +191,43 @@ describe("NameplateLogic", function()
 		end)
 	end)
 
+	describe("GLOW_PIECES", function()
+		local function words(point)
+			return point:match("TOP") or point:match("BOTTOM"), point:match("LEFT") or point:match("RIGHT")
+		end
+
+		it("samples the glow's centre on every side that faces the bar", function()
+			local edge = { LEFT = 1, RIGHT = 2, TOP = 3, BOTTOM = 4 }
+			assert.are.equal(8, #ns.NameplateLogic.GLOW_PIECES)
+			for _, piece in ipairs(ns.NameplateLogic.GLOW_PIECES) do
+				for _, pair in ipairs(piece.points) do
+					local pv, ph = words(pair[1])
+					local bv, bh = words(pair[2])
+					if pv ~= bv then
+						assert.are.equal(0.5, piece.coords[edge[pv]])
+					end
+					if ph ~= bh then
+						assert.are.equal(0.5, piece.coords[edge[ph]])
+					end
+				end
+			end
+		end)
+	end)
+
+	describe("BorderMode", function()
+		it("reads none, thin and shadow from the toggle and the style", function()
+			assert.are.equal("none", ns.NameplateLogic.BorderMode(false, "shadow"))
+			assert.are.equal("thin", ns.NameplateLogic.BorderMode(true, nil))
+			assert.are.equal("shadow", ns.NameplateLogic.BorderMode(true, "shadow"))
+		end)
+
+		it("round-trips through BorderSetting", function()
+			for mode in pairs(ns.NameplateLogic.BORDER_MODES) do
+				assert.are.equal(mode, ns.NameplateLogic.BorderMode(ns.NameplateLogic.BorderSetting(mode)))
+			end
+		end)
+	end)
+
 	describe("CastIconSize", function()
 		it("spans the health bar, the gap and the cast bar", function()
 			assert.are.equal(20, ns.NameplateLogic.CastIconSize(10, nil, 1, 2, 8))

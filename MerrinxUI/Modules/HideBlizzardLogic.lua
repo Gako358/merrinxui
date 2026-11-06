@@ -28,6 +28,8 @@ HideBlizzardLogic.GROUPS = {
 		frames = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" },
 		unregisterEvents = true,
 	},
+	-- Edit Mode re-parents the cast bar on layout changes; without its events it stays empty.
+	{ key = "castBar", frames = { "PlayerCastingBarFrame" }, unregisterEvents = true },
 }
 
 local VALID_KEYS = {}

@@ -13,6 +13,7 @@ local defaults = {
 		actionBars = false,
 		damageMeter = false,
 		unitFrames = false,
+		castBar = false,
 	},
 	global = {
 		meterCVarOwned = false,
@@ -28,6 +29,7 @@ local GROUP_NAMES = {
 	petBar = "Pet Bar",
 	damageMeter = "Damage Meter",
 	unitFrames = "Unit Frames",
+	castBar = "Cast Bar",
 }
 
 function HideBlizzard:OnInitialize()
@@ -180,6 +182,7 @@ function HideBlizzard:GetOptions()
 			),
 			damageMeter = groupToggle("damageMeter", 6),
 			unitFrames = groupToggle("unitFrames", 7),
+			castBar = groupToggle("castBar", 8),
 		},
 	}
 end

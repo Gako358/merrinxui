@@ -10,6 +10,7 @@ local TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local POOL = 40
 local MIN_W, MIN_H = 150, 50
 local SNAP = 6
+local DOCK_TOL = 1
 local ICON_ALPHA, ICON_HOVER_ALPHA = 0.4, 0.9
 local CARD_H, CARD_GAP, CARD_PAD = 26, 4, 8
 
@@ -220,6 +221,8 @@ function Window.New(dm, idx)
 
 	ns.Mover:Register(frame, "Damage Meter " .. idx, function()
 		return dm:WindowDB(w.idx).position
+	end, function()
+		w:AfterMove()
 	end)
 	return w
 end
@@ -508,6 +511,7 @@ function Window:BuildGrips()
 		newW = math.min(newW, math.max(MIN_W, (UIParent:GetRight() or newW) - w.sizeStart.left))
 		newH = math.min(newH, math.max(MIN_H, w.sizeStart.top - (UIParent:GetBottom() or 0)))
 		frame:SetSize(newW, newH)
+		w.dm:FollowDocks(w, rectOf(frame, w.sizeStart.left, w.sizeStart.top), false)
 	end)
 	grip:SetScript("OnMouseDown", function(_, button)
 		if button ~= "LeftButton" or w.locked then
@@ -571,12 +575,84 @@ function Window:SavePosition()
 	)
 	pos.point, pos.x, pos.y = "CENTER", x, y
 	ns.Mover:Apply(frame)
+	self:AfterMove()
 end
 
-function Window:ClosestWindow(left, top)
+-- Computed from left/top rather than the frame, which may be hidden.
+function Window:PlaceAt(left, top, save)
+	local frame = self.frame
+	if not save then
+		frame:ClearAllPoints()
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		return
+	end
+	local width, height = frame:GetWidth(), frame:GetHeight()
+	local x, y = MoverLogic.CenterOffset(
+		left + width / 2,
+		top - height / 2,
+		frame:GetEffectiveScale(),
+		UIParent:GetWidth(),
+		UIParent:GetHeight(),
+		UIParent:GetEffectiveScale()
+	)
+	local pos = self:DB().position
+	pos.point, pos.x, pos.y = "CENTER", x, y
+	ns.Mover:Apply(frame)
+end
+
+-- Flush against another window, or dropped onto one, it docks there and
+-- moves with that window from then on.
+function Window:UpdateDock()
+	local rect = rectOf(self.frame)
+	local below = self.dm:DockedTo(self)
+	local candidates = {}
+	for _, other in ipairs(self.dm.windows) do
+		if other ~= self and not below[other.idx] and other.frame:IsShown() and other.frame:GetLeft() then
+			table.insert(candidates, other)
+		end
+	end
+	local dock, parent
+	for _, other in ipairs(candidates) do
+		local side, offset = L.DockSide(rect, rectOf(other.frame), DOCK_TOL)
+		if side and not dock then
+			dock, parent = { to = other.idx, side = side, offset = offset }, other
+		end
+	end
+	for _, other in ipairs(candidates) do
+		local side, offset = L.DropDock(rect, rectOf(other.frame))
+		if side and not dock then
+			dock, parent = { to = other.idx, side = side, offset = offset }, other
+		end
+	end
+	local before = self.dm:DockOf(self.idx)
+	if (before and before.to) ~= (dock and dock.to) then
+		ns.Debug:Log("DamageMeter", "dock", self.idx, dock and dock.to or "none", dock and dock.side or "")
+	end
+	self:DB().dock = dock
+	if dock then
+		local left, top =
+			L.DockedTopLeft(rectOf(parent.frame), self.frame:GetWidth(), self.frame:GetHeight(), dock.side, dock.offset)
+		self:PlaceAt(left, top, true)
+	end
+end
+
+function Window:AfterMove()
+	if not self.frame:GetLeft() then
+		return
+	end
+	self:UpdateDock()
+	self.dm:FollowDocks(self, rectOf(self.frame), true)
+end
+
+function Window:ClosestWindow(left, top, exclude)
 	local others, list = {}, {}
 	for _, other in ipairs(self.dm.windows) do
-		if other ~= self and other.frame:IsShown() and other.frame:GetLeft() then
+		if
+			other ~= self
+			and not (exclude and exclude[other.idx])
+			and other.frame:IsShown()
+			and other.frame:GetLeft()
+		then
 			table.insert(others, rectOf(other.frame))
 			table.insert(list, other)
 		end
@@ -600,12 +676,12 @@ function Window:BuildDrag()
 		local x, y = cursor(frame)
 		local left = w.dragStart.left + (x - w.dragStart.x)
 		local top = w.dragStart.top + (y - w.dragStart.y)
-		local near = not w:DB().snapDisabled and w:ClosestWindow(left, top)
+		local near = not w:DB().snapDisabled and w:ClosestWindow(left, top, w.dragStart.below)
 		if near then
 			left, top = L.SnapPosition(left, top, frame:GetWidth(), frame:GetHeight(), rectOf(near.frame), SNAP)
 		end
-		frame:ClearAllPoints()
-		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		w:PlaceAt(left, top, false)
+		w.dm:FollowDocks(w, rectOf(frame, left, top), false)
 	end)
 	header:SetScript("OnMouseDown", function(_, button)
 		if button ~= "LeftButton" or w.locked or ns.Mover:IsUnlocked() then
@@ -616,7 +692,7 @@ function Window:BuildDrag()
 			return
 		end
 		local x, y = cursor(frame)
-		w.dragStart = { x = x, y = y, left = left, top = top }
+		w.dragStart = { x = x, y = y, left = left, top = top, below = w.dm:DockedTo(w) }
 		dragger:Show()
 	end)
 	header:SetScript("OnMouseUp", function(_, button)
@@ -1563,6 +1639,8 @@ function Window:Unpark(idx)
 	self:SetIcon()
 	ns.Mover:Register(self.frame, "Damage Meter " .. idx, function()
 		return dm:WindowDB(self.idx).position
+	end, function()
+		self:AfterMove()
 	end)
 	self:UpdateLock()
 end
@@ -1620,6 +1698,23 @@ ns.Debug:RegisterChecks("DamageMeter", function()
 				local expected = L.Title(w.view.type, not w.view.sessionID and w.view.session == "Overall")
 				local ok = text == expected or (type(text) == "string" and text:sub(-3) == "...")
 				return ok and "PASS" or "FAIL", text, expected, w.timer:GetText()
+			end,
+		})
+		table.insert(checks, {
+			name = label .. " dock",
+			run = function()
+				local dock = dm:DockOf(w.idx)
+				if not dock then
+					return "PASS", "none"
+				end
+				local parent = dm.windows[dock.to]
+				if
+					not (w.frame:IsShown() and parent.frame:IsShown() and w.frame:GetLeft() and parent.frame:GetLeft())
+				then
+					return "SKIP", "hidden", dock.to
+				end
+				local side = L.DockSide(rectOf(w.frame), rectOf(parent.frame), DOCK_TOL)
+				return (side == dock.side) and "PASS" or "FAIL", dock.to, dock.side, side
 			end,
 		})
 		table.insert(checks, {

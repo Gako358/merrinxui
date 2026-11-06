@@ -146,3 +146,8 @@ end
 function L.ClampOffset(offset, count, rows)
 	return math.max(0, math.min(offset, count - rows))
 end
+
+-- Unlocked, the window always shows so it can be moved.
+function L.WindowShown(hideWhenEmpty, nearbyCount, unlocked)
+	return unlocked or not hideWhenEmpty or nearbyCount > 0
+end

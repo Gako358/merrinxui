@@ -370,6 +370,7 @@ function DamageMeter:NewWindow(from)
 		UIParent:GetEffectiveScale()
 	)
 	wdb.position = { point = "CENTER", x = x, y = y }
+	wdb.dock = nil
 	self.db.profile.windowCount = idx
 	local w = self:AcquireWindow(idx)
 	w:Layout()
@@ -389,6 +390,9 @@ function DamageMeter:CloseWindow(w)
 	w:Park()
 	table.remove(self.windows, idx)
 	table.remove(self.db.profile.windows, idx)
+	for _, wdb in ipairs(self.db.profile.windows) do
+		wdb.dock = L.RemapDock(wdb.dock, idx)
+	end
 	for i = idx, #self.windows do
 		local other = self.windows[i]
 		ns.Mover:Unregister(other.frame)
@@ -400,6 +404,39 @@ function DamageMeter:CloseWindow(w)
 		other:LayoutButtons()
 	end
 	ns.Debug:Log("DamageMeter", "window", "close", idx)
+end
+
+function DamageMeter:DockOf(idx)
+	local dock = self:WindowDB(idx).dock
+	if L.ValidDock(dock, idx, #self.windows) then
+		return dock
+	end
+	return nil
+end
+
+function DamageMeter:DockedTo(w)
+	local docks = {}
+	for _, other in ipairs(self.windows) do
+		local dock = self:DockOf(other.idx)
+		docks[other.idx] = dock and dock.to
+	end
+	return L.Descendants(docks, w.idx)
+end
+
+-- rect is w's rect; during a drag or resize it is ahead of the saved position.
+function DamageMeter:FollowDocks(w, rect, save, seen)
+	seen = seen or { [w] = true }
+	for _, other in ipairs(self.windows) do
+		local dock = not seen[other] and self:DockOf(other.idx)
+		if dock and dock.to == w.idx then
+			seen[other] = true
+			local width, height = other.frame:GetWidth(), other.frame:GetHeight()
+			local left, top = L.DockedTopLeft(rect, width, height, dock.side, dock.offset)
+			other:PlaceAt(left, top, save)
+			local childRect = { left = left, right = left + width, top = top, bottom = top - height }
+			self:FollowDocks(other, childRect, save, seen)
+		end
+	end
 end
 
 function DamageMeter:SelectSegment(w, session, sessionID)

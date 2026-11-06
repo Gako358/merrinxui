@@ -36,7 +36,12 @@ local defaults = {
 		targetScale = 100,
 		nonTargetAlpha = 100,
 		border = true,
+		borderStyle = "thin",
 		borderSize = 1,
+		borderColor = "111111",
+		targetStyle = "glow",
+		targetColor = "66BFFF",
+		castHeight = 8,
 		darkenOOC = true,
 		executeLine = false,
 		executePercent = 30,
@@ -51,9 +56,7 @@ local defaults = {
 
 local BAR_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local SHIELD_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Small-Shield"
-local CAST_BAR_HEIGHT = 8
 local CAST_BAR_GAP = 2
-local CAST_SHIELD_SIZE = 14
 local POWER_BAR_GAP = 1
 local DEBUFF_SPACING = 2
 local DEBUFF_GROUP = "debuffs"
@@ -66,6 +69,11 @@ local CLASSIFICATION_SIZE = 14
 local CLASSIFICATION_GAP = 2
 local TARGET_HIGHLIGHT_WIDTH = 2
 local BORDER_COLOR = { 0.067, 0.067, 0.067 }
+local TARGET_COLOR = { 0.4, 0.749, 1 }
+local TARGET_GLOW_REACH = 7
+local TARGET_WASH_ALPHA = 0.25
+local SHADOW_ALPHA = 0.8
+local CAST_SHIELD_PAD = 6
 local SPARK_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Spark"
 local SPARK_WIDTH = 12
 local CAST_ICON_GAP = 1
@@ -222,6 +230,7 @@ function Nameplates:Refresh()
 			if frame then
 				self:UpdateHealth(unit, frame)
 				self:UpdateColor(unit, frame)
+				self:UpdateHighlight(unit, frame)
 				self:UpdateTargetState(unit, frame)
 				self:UpdateMarkers(unit, frame)
 				self:UpdateLevel(unit, frame)
@@ -547,6 +556,72 @@ local function CreateAuraContainer(frame, group, filter, maxCount, size)
 	return container
 end
 
+local function hexColor(text, fallback)
+	local r, g, b = ns.DamageMeterLogic.ParseHex(text)
+	if r then
+		return r, g, b
+	end
+	return fallback[1], fallback[2], fallback[3]
+end
+
+-- Parent-level BACKGROUND textures, so the glow sits behind the health bar child.
+local function createGlow(parent, bar, sublevel)
+	local pieces = {}
+	local path = ns.Media:Icon("glow")
+	for i, spec in ipairs(NameplateLogic.GLOW_PIECES) do
+		local tex = parent:CreateTexture(nil, "BACKGROUND", nil, sublevel)
+		tex:SetTexture(path)
+		tex:SetTexCoord(spec.coords[1], spec.coords[2], spec.coords[3], spec.coords[4])
+		for _, pair in ipairs(spec.points) do
+			tex:SetPoint(pair[1], bar, pair[2], 0, 0)
+		end
+		pieces[i] = tex
+	end
+	return pieces
+end
+
+local function styleGlow(pieces, reach, r, g, b, a, blend)
+	for i, spec in ipairs(NameplateLogic.GLOW_PIECES) do
+		local tex = pieces[i]
+		if spec.size == "corner" then
+			tex:SetSize(reach, reach)
+		elseif spec.size == "height" then
+			tex:SetHeight(reach)
+		else
+			tex:SetWidth(reach)
+		end
+		tex:SetVertexColor(r, g, b, a)
+		tex:SetBlendMode(blend)
+	end
+end
+
+local function createEdges(bar, sublevel)
+	local edges = {}
+	for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+		edges[side] = bar:CreateTexture(nil, "OVERLAY", nil, sublevel)
+	end
+	return edges
+end
+
+local function placeEdges(edges, bar, size)
+	edges.top:ClearAllPoints()
+	edges.top:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", -size, 0)
+	edges.top:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", size, 0)
+	edges.top:SetHeight(size)
+	edges.bottom:ClearAllPoints()
+	edges.bottom:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", -size, 0)
+	edges.bottom:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", size, 0)
+	edges.bottom:SetHeight(size)
+	edges.left:ClearAllPoints()
+	edges.left:SetPoint("TOPRIGHT", bar, "TOPLEFT", 0, 0)
+	edges.left:SetPoint("BOTTOMRIGHT", bar, "BOTTOMLEFT", 0, 0)
+	edges.left:SetWidth(size)
+	edges.right:ClearAllPoints()
+	edges.right:SetPoint("TOPLEFT", bar, "TOPRIGHT", 0, 0)
+	edges.right:SetPoint("BOTTOMLEFT", bar, "BOTTOMRIGHT", 0, 0)
+	edges.right:SetWidth(size)
+end
+
 function Nameplates:CreateStyledFrame(plate)
 	local frame = CreateFrame("Frame", nil, plate)
 	frame:SetPoint("CENTER", plate, "CENTER")
@@ -570,15 +645,14 @@ function Nameplates:CreateStyledFrame(plate)
 
 	local highlight = frame:CreateTexture(nil, "OVERLAY")
 	highlight:SetTexture(BAR_TEXTURE)
-	highlight:SetVertexColor(1, 1, 1, 0.5)
 	highlight:SetAlpha(0)
 
-	local border = {}
-	for _, side in ipairs({ "top", "bottom", "left", "right" }) do
-		local edge = healthBar:CreateTexture(nil, "OVERLAY")
-		edge:SetColorTexture(BORDER_COLOR[1], BORDER_COLOR[2], BORDER_COLOR[3], 1)
-		border[side] = edge
-	end
+	local border = createEdges(healthBar, 0)
+	local shadow = createGlow(frame, healthBar, -8)
+	local targetGlow = createGlow(frame, healthBar, -7)
+	local targetEdges = createEdges(healthBar, 7)
+	local targetWash = healthBar:CreateTexture(nil, "OVERLAY", nil, 6)
+	targetWash:SetAllPoints(healthBar)
 
 	local executeLine = healthBar:CreateTexture(nil, "OVERLAY")
 	executeLine:SetColorTexture(1, 1, 1, 0.9)
@@ -612,7 +686,6 @@ function Nameplates:CreateStyledFrame(plate)
 	powerText:SetPoint("RIGHT", powerBar, "RIGHT", -2, 0)
 
 	local castBar = CreateFrame("StatusBar", nil, frame)
-	castBar:SetHeight(CAST_BAR_HEIGHT)
 	castBar:SetStatusBarTexture(BAR_TEXTURE)
 	castBar:SetStatusBarColor(CAST_COLOR[1], CAST_COLOR[2], CAST_COLOR[3])
 	castBar:Hide()
@@ -634,7 +707,6 @@ function Nameplates:CreateStyledFrame(plate)
 	local castSpark = castBar:CreateTexture(nil, "OVERLAY")
 	castSpark:SetTexture(SPARK_TEXTURE)
 	castSpark:SetBlendMode("ADD")
-	castSpark:SetSize(SPARK_WIDTH, CAST_BAR_HEIGHT * 2)
 
 	local castIcon = castBar:CreateTexture(nil, "ARTWORK")
 	castIcon:SetPoint("BOTTOMRIGHT", castBar, "BOTTOMLEFT", -CAST_ICON_GAP, 0)
@@ -645,7 +717,6 @@ function Nameplates:CreateStyledFrame(plate)
 
 	local castShield = castBar:CreateTexture(nil, "OVERLAY")
 	castShield:SetTexture(SHIELD_TEXTURE)
-	castShield:SetSize(CAST_SHIELD_SIZE, CAST_SHIELD_SIZE)
 	castShield:SetPoint("LEFT", castBar, "LEFT", 0, 0)
 	castShield:SetAlpha(0)
 
@@ -655,6 +726,21 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.levelText = levelText
 	frame.highlight = highlight
 	frame.border = border
+	frame.shadow = shadow
+	frame.targetGlow = targetGlow
+	frame.targetEdges = targetEdges
+	frame.targetWash = targetWash
+	frame.targetParts = {
+		glow = targetGlow,
+		border = { targetEdges.top, targetEdges.bottom, targetEdges.left, targetEdges.right },
+		highlight = { targetWash },
+		outline = { highlight },
+	}
+	for _, parts in pairs(frame.targetParts) do
+		for _, tex in ipairs(parts) do
+			tex:SetAlpha(0)
+		end
+	end
 	frame.executeLine = executeLine
 	frame.raidMarker = raidMarker
 	frame.classification = classification
@@ -722,13 +808,16 @@ function Nameplates:ApplySize(frame)
 	frame.castBar:ClearAllPoints()
 	frame.castBar:SetPoint("TOPLEFT", castAnchor, "BOTTOMLEFT", 0, -CAST_BAR_GAP)
 	frame.castBar:SetPoint("TOPRIGHT", castAnchor, "BOTTOMRIGHT", 0, -CAST_BAR_GAP)
+	frame.castBar:SetHeight(profile.castHeight)
+	frame.castSpark:SetSize(SPARK_WIDTH, profile.castHeight * 2)
+	frame.castShield:SetSize(profile.castHeight + CAST_SHIELD_PAD, profile.castHeight + CAST_SHIELD_PAD)
 
 	local iconSize = NameplateLogic.CastIconSize(
 		profile.height,
 		profile.powerBar and profile.powerHeight or nil,
 		POWER_BAR_GAP,
 		CAST_BAR_GAP,
-		CAST_BAR_HEIGHT
+		profile.castHeight
 	)
 	frame.castIcon:SetSize(iconSize, iconSize)
 	frame.castIcon:SetShown(profile.castIcon)
@@ -773,31 +862,31 @@ end
 
 function Nameplates:ApplyBorder(frame)
 	local profile = self.db.profile
-	local border = frame.border
 	local size = profile.borderSize
 	local bar = frame.healthBar
+	local mode = NameplateLogic.BorderMode(profile.border, profile.borderStyle)
+	local br, bg, bb = hexColor(profile.borderColor, BORDER_COLOR)
 
-	border.top:ClearAllPoints()
-	border.top:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", -size, 0)
-	border.top:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", size, 0)
-	border.top:SetHeight(size)
-	border.bottom:ClearAllPoints()
-	border.bottom:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", -size, 0)
-	border.bottom:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", size, 0)
-	border.bottom:SetHeight(size)
-	border.left:ClearAllPoints()
-	border.left:SetPoint("TOPRIGHT", bar, "TOPLEFT", 0, 0)
-	border.left:SetPoint("BOTTOMRIGHT", bar, "BOTTOMLEFT", 0, 0)
-	border.left:SetWidth(size)
-	border.right:ClearAllPoints()
-	border.right:SetPoint("TOPLEFT", bar, "TOPRIGHT", 0, 0)
-	border.right:SetPoint("BOTTOMLEFT", bar, "BOTTOMRIGHT", 0, 0)
-	border.right:SetWidth(size)
-	for _, edge in pairs(border) do
-		edge:SetShown(profile.border)
+	placeEdges(frame.border, bar, size)
+	for _, edge in pairs(frame.border) do
+		edge:SetColorTexture(br, bg, bb, 1)
+		edge:SetShown(mode == "thin")
+	end
+	styleGlow(frame.shadow, 2 + 2 * size, br, bg, bb, SHADOW_ALPHA, "BLEND")
+	for _, tex in ipairs(frame.shadow) do
+		tex:SetShown(mode == "shadow")
 	end
 
-	local outset = (profile.border and size or 0) + TARGET_HIGHLIGHT_WIDTH
+	local tr, tg, tb = hexColor(profile.targetColor, TARGET_COLOR)
+	styleGlow(frame.targetGlow, TARGET_GLOW_REACH, tr, tg, tb, 1, "ADD")
+	placeEdges(frame.targetEdges, bar, size)
+	for _, edge in pairs(frame.targetEdges) do
+		edge:SetColorTexture(tr, tg, tb, 1)
+	end
+	frame.targetWash:SetColorTexture(tr, tg, tb, TARGET_WASH_ALPHA)
+	frame.highlight:SetVertexColor(tr, tg, tb, 0.5)
+
+	local outset = (mode == "thin" and size or 0) + TARGET_HIGHLIGHT_WIDTH
 	frame.highlight:ClearAllPoints()
 	frame.highlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
 	frame.highlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
@@ -1008,11 +1097,19 @@ function Nameplates:UpdateColor(unit, frame)
 end
 
 function Nameplates:UpdateHighlight(unit, frame)
+	local style = self.db.profile.targetStyle
 	local isTarget = UnitIsUnit(unit, "target")
-	if issecretvalue(isTarget) then
-		frame.highlight:SetAlphaFromBoolean(isTarget, 1, 0)
-	else
-		frame.highlight:SetAlpha(isTarget and 1 or 0)
+	local secret = issecretvalue(isTarget)
+	for key, parts in pairs(frame.targetParts) do
+		for _, tex in ipairs(parts) do
+			if key ~= style then
+				tex:SetAlpha(0)
+			elseif secret then
+				tex:SetAlphaFromBoolean(isTarget, 1, 0)
+			else
+				tex:SetAlpha(isTarget and 1 or 0)
+			end
+		end
 	end
 end
 
@@ -1699,6 +1796,19 @@ function Nameplates:GetOptions()
 		return not self.db.profile.castBar
 	end
 
+	local function colorInput(order, name, disabled)
+		return {
+			type = "input",
+			name = name,
+			desc = "RRGGBB",
+			order = order,
+			disabled = disabled,
+			validate = function(_, value)
+				return ns.DamageMeterLogic.ParseHex(value) ~= nil or "Enter a colour as RRGGBB"
+			end,
+		}
+	end
+
 	options.args.markerHeader = { type = "header", name = "Markers", order = 30 }
 	option("raidMarkerPos", {
 		type = "select",
@@ -1736,8 +1846,41 @@ function Nameplates:GetOptions()
 		step = 5,
 	})
 
+	option("targetStyle", {
+		type = "select",
+		name = "Target indicator",
+		desc = "Glow: a soft glow behind the plate. Border: the border takes the colour. "
+			.. "Highlight: a wash over the bar. Outline: a frame around the plate.",
+		order = 38,
+		values = NameplateLogic.TARGET_STYLES,
+	})
+	option(
+		"targetColor",
+		colorInput(39, "Target colour", function()
+			return self.db.profile.targetStyle == "none"
+		end)
+	)
+
 	options.args.barHeader = { type = "header", name = "Health bar", order = 40 }
-	option("border", { type = "toggle", name = "Border", order = 41 })
+	options.args.border = {
+		type = "select",
+		name = "Border",
+		desc = "None: no frame. Thin: a pixel edge. Shadow: a soft dark edge.",
+		order = 41,
+		values = NameplateLogic.BORDER_MODES,
+		get = function()
+			return NameplateLogic.BorderMode(self.db.profile.border, self.db.profile.borderStyle)
+		end,
+		set = function(_, value)
+			local profile = self.db.profile
+			local style
+			profile.border, style = NameplateLogic.BorderSetting(value)
+			if style then
+				profile.borderStyle = style
+			end
+			self:Refresh()
+		end,
+	}
 	option("borderSize", {
 		type = "range",
 		name = "Border size",
@@ -1747,12 +1890,13 @@ function Nameplates:GetOptions()
 		step = 1,
 		disabled = isOff("border"),
 	})
-	option("darkenOOC", { type = "toggle", name = "Darken enemies out of combat", order = 43 })
-	option("executeLine", { type = "toggle", name = "Execute line", order = 44 })
+	option("borderColor", colorInput(43, "Border colour", isOff("border")))
+	option("darkenOOC", { type = "toggle", name = "Darken enemies out of combat", order = 44 })
+	option("executeLine", { type = "toggle", name = "Execute line", order = 45 })
 	option("executePercent", {
 		type = "range",
 		name = "Execute line health (%)",
-		order = 45,
+		order = 46,
 		min = 5,
 		max = 90,
 		step = 5,
@@ -1769,6 +1913,15 @@ function Nameplates:GetOptions()
 		disabled = castExtraOff,
 	})
 	option("castInterruptFlash", { type = "toggle", name = "Interrupted flash", order = 54, disabled = castExtraOff })
+	option("castHeight", {
+		type = "range",
+		name = "Cast bar height",
+		order = 55,
+		min = 4,
+		max = 20,
+		step = 1,
+		disabled = castExtraOff,
+	})
 
 	options.args.threatHeader = { type = "header", name = "Threat", order = 60 }
 	option("threatColors", { type = "toggle", name = "Threat colours", order = 61 })
@@ -2177,10 +2330,40 @@ function Nameplates:GetDebugChecks()
 			end,
 		},
 		{
+			name = "border style",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local profile = self.db.profile
+				local mode = NameplateLogic.BorderMode(profile.border, profile.borderStyle)
+				local checked, bad = 0, 0
+				for _, frame in pairs(self.plateFrames) do
+					if frame:IsShown() then
+						checked = checked + 1
+						local thin = frame.border.top:IsShown() == true
+						local shadow = frame.shadow[1]:IsShown() == true
+						if thin ~= (mode == "thin") or shadow ~= (mode == "shadow") then
+							bad = bad + 1
+						end
+					end
+				end
+				if checked == 0 then
+					return "SKIP", "no styled plates", mode
+				end
+				return (bad == 0) and "PASS" or "FAIL", mode, checked, bad
+			end,
+		},
+		{
 			name = "highlight",
 			run = function(ctx)
 				if ctx.enabled == false then
 					return "SKIP", "module disabled"
+				end
+
+				local style = self.db.profile.targetStyle
+				if style == "none" then
+					return "SKIP", "no target indicator"
 				end
 
 				local mismatches = 0
@@ -2192,7 +2375,7 @@ function Nameplates:GetDebugChecks()
 					if frame then
 						total = total + 1
 						local isTarget = UnitIsUnit(unit, "target")
-						local alpha = frame.highlight:GetAlpha()
+						local alpha = frame.targetParts[style][1]:GetAlpha()
 						if issecretvalue(isTarget) or issecretvalue(alpha) then
 							secretCount = secretCount + 1
 						else
@@ -2205,9 +2388,9 @@ function Nameplates:GetDebugChecks()
 				end
 
 				if total > 0 and secretCount == total then
-					return "INFO", mismatches, secretCount, total
+					return "INFO", style, mismatches, secretCount, total
 				end
-				return (mismatches == 0) and "PASS" or "FAIL", mismatches, secretCount, total
+				return (mismatches == 0) and "PASS" or "FAIL", style, mismatches, secretCount, total
 			end,
 		},
 		{

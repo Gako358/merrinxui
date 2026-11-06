@@ -110,6 +110,61 @@ function NameplateLogic.ExecuteOffset(width, percent)
 	return width * math.max(0, math.min(100, percent)) / 100
 end
 
+-- Eight pieces around a bar cut from a square glow whose centre touches the
+-- bar: corners take a quadrant, edges a thin strip through the centre.
+-- points: { piecePoint, barPoint }; size: which dimension is the glow's reach.
+NameplateLogic.GLOW_PIECES = {
+	{ size = "corner", points = { { "BOTTOMRIGHT", "TOPLEFT" } }, coords = { 0, 0.5, 0, 0.5 } },
+	{ size = "corner", points = { { "BOTTOMLEFT", "TOPRIGHT" } }, coords = { 0.5, 1, 0, 0.5 } },
+	{ size = "corner", points = { { "TOPRIGHT", "BOTTOMLEFT" } }, coords = { 0, 0.5, 0.5, 1 } },
+	{ size = "corner", points = { { "TOPLEFT", "BOTTOMRIGHT" } }, coords = { 0.5, 1, 0.5, 1 } },
+	{
+		size = "height",
+		points = { { "BOTTOMLEFT", "TOPLEFT" }, { "BOTTOMRIGHT", "TOPRIGHT" } },
+		coords = { 0.49, 0.51, 0, 0.5 },
+	},
+	{
+		size = "height",
+		points = { { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } },
+		coords = { 0.49, 0.51, 0.5, 1 },
+	},
+	{
+		size = "width",
+		points = { { "TOPRIGHT", "TOPLEFT" }, { "BOTTOMRIGHT", "BOTTOMLEFT" } },
+		coords = { 0, 0.5, 0.49, 0.51 },
+	},
+	{
+		size = "width",
+		points = { { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" } },
+		coords = { 0.5, 1, 0.49, 0.51 },
+	},
+}
+
+NameplateLogic.TARGET_STYLES = {
+	glow = "Glow",
+	border = "Border",
+	highlight = "Highlight",
+	outline = "Outline",
+	none = "None",
+}
+
+NameplateLogic.BORDER_MODES = { none = "None", thin = "Thin", shadow = "Shadow" }
+
+-- The Border option is a view over the border toggle and the border style.
+function NameplateLogic.BorderMode(border, style)
+	if not border then
+		return "none"
+	end
+	return style == "shadow" and "shadow" or "thin"
+end
+
+function NameplateLogic.BorderSetting(mode)
+	if mode == "none" then
+		return false, nil
+	end
+	return true, mode == "shadow" and "shadow" or "thin"
+end
+
 function NameplateLogic.CastIconSize(healthHeight, powerHeight, powerGap, castGap, castHeight)
 	local size = healthHeight + castGap + castHeight
 	if powerHeight then

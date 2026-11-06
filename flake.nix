@@ -449,7 +449,20 @@
                     f.write(header + rows)
 
 
+            def write_glow(path):
+                header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, S, S, 32, 0x28)
+                rows = bytearray()
+                c = S / 2
+                for py in range(S):
+                    for px in range(S):
+                        d = math.hypot(px + 0.5 - c, py + 0.5 - c) / c
+                        rows += bytes((255, 255, 255, round(255 * max(0.0, 1.0 - d) ** 2)))
+                with open(path, "wb") as f:
+                    f.write(header + rows)
+
+
             out = sys.argv[1]
+            write_glow(f"{out}/NPGlow.tga")
             for name, shape in [
                 ("DMSettings", cog()),
                 ("DMSegment", sheet()),

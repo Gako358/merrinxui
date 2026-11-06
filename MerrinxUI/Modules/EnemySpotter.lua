@@ -26,6 +26,7 @@ local defaults = {
 		font = "*",
 		bgOpacity = 75,
 		headerOpacity = 100,
+		hideWhenEmpty = true,
 		expire = 60,
 		pauseInPvp = true,
 		enemySound = "MerrinxUI Blip",
@@ -144,6 +145,7 @@ function EnemySpotter:OnEnable()
 	self:RegisterEvent("UPDATE_MOUSEOVER_UNIT", "OnMouseover")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
 	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
+	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "Redraw")
 
 	self.ticker = C_Timer.NewTicker(TICK_INTERVAL, function()
 		self:OnTick()
@@ -153,7 +155,6 @@ function EnemySpotter:OnEnable()
 	self:Layout()
 	ns.Mover:Apply(self.frame)
 	ns.Mover:Apply(self.banner)
-	self.frame:Show()
 	self:Rescan()
 	self:Redraw()
 end
@@ -411,6 +412,7 @@ function EnemySpotter:CreateWindow()
 	divider:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT")
 	divider:SetHeight(1)
 	setColor(divider, C.border)
+	self.divider = divider
 
 	local alertDot = header:CreateTexture(nil, "ARTWORK")
 	alertDot:SetSize(6, 6)
@@ -656,6 +658,7 @@ function EnemySpotter:StyleRow(row)
 	local profile = self.db.profile
 	local h = profile.rowHeight
 	row:SetSize(profile.width - 2, h)
+	row.bg:SetAlpha(profile.bgOpacity / 100)
 	row.icon:SetSize(h - 6, h - 6)
 	row.remove:SetSize(h, h)
 	ns.Media:SetFont(row.name, profile.font, profile.fontSize, "")
@@ -677,6 +680,7 @@ function EnemySpotter:GetRow(i)
 	local bg = row:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints()
 	setColor(bg, (i % 2 == 1) and C.rowA or C.rowB)
+	row.bg = bg
 
 	local hover = row:CreateTexture(nil, "BORDER")
 	hover:SetAllPoints()
@@ -814,7 +818,9 @@ function EnemySpotter:Layout()
 
 	frame:SetSize(profile.width, self:WindowHeight())
 	self.bg:SetAlpha(profile.bgOpacity / 100)
+	frame:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], C.border[4] * profile.bgOpacity / 100)
 	self.headerBg:SetAlpha(profile.headerOpacity / 100)
+	self.divider:SetAlpha(profile.headerOpacity / 100)
 
 	for _, tab in pairs(self.tabs) do
 		ns.Media:SetFont(tab.label, profile.font, 12, "")
@@ -946,6 +952,14 @@ function EnemySpotter:Redraw()
 		end
 	end
 	self:RedrawTabs(nearbyCount, kosNearby)
+
+	local visible = L.WindowShown(profile.hideWhenEmpty, nearbyCount, ns.Mover:IsUnlocked())
+	if not visible and self.frame:IsShown() then
+		self.input.edit:ClearFocus()
+		GameTooltip:Hide()
+	end
+	self.frame:SetShown(visible)
+	self.lastNearby = nearbyCount
 
 	local isKosTab = tab == "kos"
 	self.input:SetShown(isKosTab)
@@ -1099,14 +1113,25 @@ function EnemySpotter:GetOptions()
 					return ns.Media:Values("font", self.db.profile.font)
 				end,
 			}),
-			bgOpacity = option(
-				"bgOpacity",
-				{ type = "range", name = "Background opacity", order = 8, min = 0, max = 100, step = 5 }
-			),
+			bgOpacity = option("bgOpacity", {
+				type = "range",
+				name = "Background opacity",
+				desc = "Also fades the row stripes and the border; 0 leaves only the text",
+				order = 8,
+				min = 0,
+				max = 100,
+				step = 5,
+			}),
 			headerOpacity = option(
 				"headerOpacity",
 				{ type = "range", name = "Header opacity", order = 9, min = 0, max = 100, step = 5 }
 			),
+			hideWhenEmpty = option("hideWhenEmpty", {
+				type = "toggle",
+				name = "Hide when no enemies nearby",
+				desc = "The window stays visible while frames are unlocked",
+				order = 9.5,
+			}),
 			detectionHeader = { type = "header", name = "Detection", order = 10 },
 			expire = option("expire", {
 				type = "range",
@@ -1411,10 +1436,11 @@ function EnemySpotter:GetDebugChecks()
 				end
 				local profile = self.db.profile
 				local w, h = self.frame:GetWidth(), self.frame:GetHeight()
-				local ok = self.frame:IsShown()
+				local expected = L.WindowShown(profile.hideWhenEmpty, self.lastNearby or 0, ns.Mover:IsUnlocked())
+				local ok = self.frame:IsShown() == expected
 					and math.abs(w - profile.width) <= 0.5
 					and math.abs(h - self:WindowHeight()) <= 0.5
-				return ok and "PASS" or "FAIL", profile.tab, w, h
+				return ok and "PASS" or "FAIL", profile.tab, self.frame:IsShown(), expected, w, h
 			end,
 		},
 		{

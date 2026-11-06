@@ -560,6 +560,100 @@ function L.SnapSize(value, otherValue, thresh)
 	return value
 end
 
+local DOCK_SIDES = { TOP = true, BOTTOM = true, LEFT = true, RIGHT = true }
+
+-- The side of other that rect sits flush against, sharing some of that edge.
+-- offset is rect's left (TOP/BOTTOM) or top (LEFT/RIGHT) relative to other's.
+function L.DockSide(rect, other, tol)
+	local alongX = rect.left < other.right and rect.right > other.left
+	local alongY = rect.bottom < other.top and rect.top > other.bottom
+	if alongX and math.abs(rect.top - other.bottom) <= tol then
+		return "BOTTOM", rect.left - other.left
+	end
+	if alongX and math.abs(rect.bottom - other.top) <= tol then
+		return "TOP", rect.left - other.left
+	end
+	if alongY and math.abs(rect.left - other.right) <= tol then
+		return "RIGHT", rect.top - other.top
+	end
+	if alongY and math.abs(rect.right - other.left) <= tol then
+		return "LEFT", rect.top - other.top
+	end
+	return nil
+end
+
+-- A window dropped onto another docks to the side it needs to move least to
+-- clear; nil when the two don't overlap.
+function L.DropDock(rect, other)
+	if rect.left >= other.right or rect.right <= other.left or rect.bottom >= other.top or rect.top <= other.bottom then
+		return nil
+	end
+	local best, bestMove
+	for _, c in ipairs({
+		{ "BOTTOM", rect.top - other.bottom },
+		{ "TOP", other.top - rect.bottom },
+		{ "RIGHT", other.right - rect.left },
+		{ "LEFT", rect.right - other.left },
+	}) do
+		if not bestMove or c[2] < bestMove then
+			best, bestMove = c[1], c[2]
+		end
+	end
+	if best == "BOTTOM" or best == "TOP" then
+		return best, rect.left - other.left
+	end
+	return best, rect.top - other.top
+end
+
+function L.DockedTopLeft(parent, w, h, side, offset)
+	if side == "BOTTOM" then
+		return parent.left + offset, parent.bottom
+	elseif side == "TOP" then
+		return parent.left + offset, parent.top + h
+	elseif side == "RIGHT" then
+		return parent.right, parent.top + offset
+	end
+	return parent.left - w, parent.top + offset
+end
+
+function L.ValidDock(dock, idx, count)
+	return type(dock) == "table"
+		and type(dock.to) == "number"
+		and dock.to ~= idx
+		and dock.to >= 1
+		and dock.to <= count
+		and DOCK_SIDES[dock.side] == true
+		and type(dock.offset) == "number"
+end
+
+-- docks: idx -> parent idx. The set of windows docked to idx, directly or
+-- through another; a saved cycle can't loop.
+function L.Descendants(docks, idx)
+	local out, queue = {}, { idx }
+	while #queue > 0 do
+		local cur = table.remove(queue, 1)
+		for child, parent in pairs(docks) do
+			if parent == cur and child ~= idx and not out[child] then
+				out[child] = true
+				table.insert(queue, child)
+			end
+		end
+	end
+	return out
+end
+
+-- After window removed closes, windows docked to it come loose and higher
+-- indices shift down by one.
+function L.RemapDock(dock, removed)
+	if type(dock) ~= "table" or dock.to == removed then
+		return nil
+	end
+	if type(dock.to) == "number" and dock.to > removed then
+		return { to = dock.to - 1, side = dock.side, offset = dock.offset }
+	end
+	return dock
+end
+
 -- Above every window when it fits on screen, else below the lowest one.
 function L.NewWindowTop(highestTop, lowestBottom, h, gap, screenTop)
 	local top = highestTop + h + gap

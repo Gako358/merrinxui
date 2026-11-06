@@ -285,6 +285,80 @@ describe("DamageMeterLogic", function()
 		assert.are.equal(140, L.SnapSize(140, 150, 6))
 	end)
 
+	describe("docking", function()
+		local parent = { left = 100, right = 400, top = 500, bottom = 300 }
+
+		it("DockSide finds the flush side and the offset along it", function()
+			assert.are.same(
+				{ "BOTTOM", 20 },
+				{ L.DockSide({ left = 120, right = 420, top = 300, bottom = 200 }, parent, 1) }
+			)
+			assert.are.same(
+				{ "TOP", -50 },
+				{ L.DockSide({ left = 50, right = 250, top = 600, bottom = 500.5 }, parent, 1) }
+			)
+			assert.are.same(
+				{ "RIGHT", -10 },
+				{ L.DockSide({ left = 400, right = 600, top = 490, bottom = 390 }, parent, 1) }
+			)
+			assert.are.same(
+				{ "LEFT", 0 },
+				{ L.DockSide({ left = -100, right = 100, top = 500, bottom = 300 }, parent, 1) }
+			)
+		end)
+
+		it("DockSide ignores gaps and corner contact", function()
+			assert.is_nil(L.DockSide({ left = 120, right = 420, top = 290, bottom = 190 }, parent, 1))
+			assert.is_nil(L.DockSide({ left = 400, right = 600, top = 300, bottom = 200 }, parent, 1))
+		end)
+
+		it("DropDock picks the side a dropped window clears with the least movement", function()
+			assert.are.same(
+				{ "BOTTOM", 30 },
+				{ L.DropDock({ left = 130, right = 330, top = 320, bottom = 220 }, parent) }
+			)
+			assert.are.same({ "TOP", 0 }, { L.DropDock({ left = 100, right = 300, top = 590, bottom = 490 }, parent) })
+			assert.are.same(
+				{ "RIGHT", -20 },
+				{ L.DropDock({ left = 390, right = 590, top = 480, bottom = 380 }, parent) }
+			)
+			assert.are.same({ "LEFT", 0 }, { L.DropDock({ left = -90, right = 110, top = 500, bottom = 300 }, parent) })
+			assert.is_nil(L.DropDock({ left = 400, right = 600, top = 480, bottom = 380 }, parent))
+		end)
+
+		it("DockedTopLeft places the window against the side", function()
+			assert.are.same({ 120, 300 }, { L.DockedTopLeft(parent, 300, 100, "BOTTOM", 20) })
+			assert.are.same({ 50, 600 }, { L.DockedTopLeft(parent, 200, 100, "TOP", -50) })
+			assert.are.same({ 400, 490 }, { L.DockedTopLeft(parent, 200, 100, "RIGHT", -10) })
+			assert.are.same({ -100, 500 }, { L.DockedTopLeft(parent, 200, 200, "LEFT", 0) })
+		end)
+
+		it("ValidDock rejects self, out of range and malformed docks", function()
+			assert.is_true(L.ValidDock({ to = 1, side = "BOTTOM", offset = 0 }, 2, 3))
+			assert.is_false(L.ValidDock({ to = 2, side = "BOTTOM", offset = 0 }, 2, 3))
+			assert.is_false(L.ValidDock({ to = 4, side = "BOTTOM", offset = 0 }, 2, 3))
+			assert.is_false(L.ValidDock({ to = 1, side = "MIDDLE", offset = 0 }, 2, 3))
+			assert.is_false(L.ValidDock({ to = 1, side = "TOP" }, 2, 3))
+			assert.is_false(L.ValidDock(nil, 2, 3))
+		end)
+
+		it("Descendants follows chains and survives cycles", function()
+			assert.are.same({ [2] = true, [3] = true }, L.Descendants({ [2] = 1, [3] = 2, [4] = 5 }, 1))
+			assert.are.same({}, L.Descendants({ [2] = 1 }, 2))
+			assert.are.same({ [1] = true }, L.Descendants({ [1] = 2, [2] = 1 }, 2))
+		end)
+
+		it("RemapDock frees docks to the closed window and shifts higher ones", function()
+			assert.is_nil(L.RemapDock({ to = 2, side = "TOP", offset = 0 }, 2))
+			assert.are.same({ to = 2, side = "TOP", offset = 5 }, L.RemapDock({ to = 3, side = "TOP", offset = 5 }, 2))
+			assert.are.same(
+				{ to = 1, side = "LEFT", offset = 0 },
+				L.RemapDock({ to = 1, side = "LEFT", offset = 0 }, 2)
+			)
+			assert.is_nil(L.RemapDock(nil, 2))
+		end)
+	end)
+
 	it("NewWindowTop places above, else below when off screen", function()
 		assert.are.equal(320, L.NewWindowTop(200, 50, 110, 10, 1000))
 		assert.are.equal(40, L.NewWindowTop(950, 50, 110, 10, 1000))

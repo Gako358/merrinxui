@@ -43,6 +43,10 @@ Modules\SpellHistoryLogic.lua
 Modules\SpellHistory.lua
 Modules\UnitFrameLogic.lua
 Modules\UnitFrames.lua
+Modules\CastBarLogic.lua
+Modules\CastBars.lua
+Modules\XPBarLogic.lua
+Modules\XPBar.lua
 Modules\EnemySpotterLogic.lua
 Modules\EnemySpotter.lua
 Modules\ProfessionLogic.lua
