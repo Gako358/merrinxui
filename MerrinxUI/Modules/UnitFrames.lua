@@ -180,6 +180,9 @@ function UnitFrames:Build()
 			frame.manaText = newText(text, "CENTER")
 			frame.manaText:SetPoint("CENTER", frame.mana, "CENTER", 0, 0)
 
+			frame:HookScript("OnShow", function()
+				self:UpdateUnit(unit)
+			end)
 			if L.Watched(unit) then
 				RegisterUnitWatch(frame)
 			end
@@ -284,7 +287,10 @@ function UnitFrames:HealthColor(unit)
 	if not p.classColor then
 		class = nil
 	end
-	return NL.Color(reaction, isPlayer, class, tapped, RAID_CLASS_COLORS)
+	return NL.PlateColor(
+		{ reaction = reaction, isPlayer = isPlayer, classFile = class, tapDenied = tapped },
+		RAID_CLASS_COLORS
+	)
 end
 
 function UnitFrames:UpdateUnit(unit)

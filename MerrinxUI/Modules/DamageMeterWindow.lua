@@ -430,7 +430,6 @@ function Window:BuildSource()
 	pane.divider:SetColorTexture(1, 1, 1, 0.15)
 	pane.targets = content:CreateFontString(nil, "OVERLAY")
 	pane.targets:SetTextColor(0.6, 0.6, 0.6, 1)
-	pane.targets:SetText("Targets")
 end
 
 function Window:BuildGrips()
@@ -717,6 +716,7 @@ function Window:Layout()
 	self.srcTexture = srcTexture
 	setFont(self.sourcePane.message, p, p.leftFontSize)
 	setFont(self.sourcePane.targets, p, math.max(8, p.leftFontSize - 1))
+	self.sourcePane.targets:SetText("Targets")
 	self:ResetViewport()
 	if self.homeShown then
 		self:RefreshHome()
