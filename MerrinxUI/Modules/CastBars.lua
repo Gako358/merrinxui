@@ -11,10 +11,11 @@ local CAST_COLOR = { 0.9, 0.6, 0.1 }
 local UNINTERRUPTIBLE_COLOR = { 0.45, 0.45, 0.45 }
 local INTERRUPTED_COLOR = { 0.8, 0, 0 }
 local SWING_COLORS = {
-	main = { 0.85, 0.85, 0.85 },
-	off = { 0.55, 0.6, 0.95 },
-	ranged = { 0.45, 0.8, 0.4 },
+	main = { 0.9, 0.3, 0.25 },
+	off = { 0.35, 0.55, 1 },
+	ranged = { 0.45, 0.85, 0.4 },
 }
+local SWING_BG_SHADE = 0.2
 local INTERRUPTED_HOLD = 1
 local INTERRUPTED_TEXT = "Interrupted"
 local TEXT_INTERVAL = 0.1
@@ -69,10 +70,10 @@ local defaults = {
 		swing = {
 			enabled = true,
 			width = 200,
-			height = 8,
+			height = 12,
 			offHand = true,
 			ranged = true,
-			timeText = false,
+			timeText = true,
 			position = { point = "CENTER", x = 0, y = -275 },
 		},
 	},
@@ -275,9 +276,13 @@ function CastBars:CreateSwing()
 		status:Hide()
 		local bg = status:CreateTexture(nil, "BACKGROUND")
 		bg:SetAllPoints()
+		local spark = status:CreateTexture(nil, "OVERLAY")
+		spark:SetTexture(SPARK_TEXTURE)
+		spark:SetBlendMode("ADD")
+		spark:Hide()
 		local time = status:CreateFontString(nil, "OVERLAY")
 		time:SetPoint("RIGHT", status, "RIGHT", -2, 0)
-		rows[key] = { key = key, status = status, bg = bg, time = time }
+		rows[key] = { key = key, status = status, bg = bg, spark = spark, time = time }
 	end
 	frame:SetScript("OnUpdate", function()
 		self:UpdateSwing()
@@ -537,7 +542,10 @@ function CastBars:LayoutSwing()
 		ns.Media:SetStatusBarTexture(row.status, p.barTexture)
 		local c = SWING_COLORS[key]
 		row.status:SetStatusBarColor(c[1], c[2], c[3])
-		row.bg:SetColorTexture(0, 0, 0, p.bgOpacity / 100)
+		row.bg:SetColorTexture(c[1] * SWING_BG_SHADE, c[2] * SWING_BG_SHADE, c[3] * SWING_BG_SHADE, p.bgOpacity / 100)
+		row.spark:ClearAllPoints()
+		row.spark:SetPoint("CENTER", row.status:GetStatusBarTexture(), "RIGHT", 0, 0)
+		row.spark:SetSize(10, s.height * 2)
 		ns.Media:SetFont(row.time, p.font, p.fontSize, "OUTLINE")
 		row.time:SetShown(s.timeText)
 		row.status:Show()
@@ -572,6 +580,7 @@ function CastBars:UpdateSwing()
 		else
 			row.time:SetText("")
 		end
+		row.spark:SetShown(left > 0)
 	end
 	if live ~= (self.swingLive == true) then
 		self.swingLive = live
