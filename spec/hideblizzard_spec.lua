@@ -26,9 +26,10 @@ describe("HideBlizzardLogic", function()
 			damageMeter = {},
 			unitFrames = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" },
 			castBar = { "PlayerCastingBarFrame" },
+			swingTimer = { "TimerTracker" },
 		}
 
-		it("has exactly the nine known groups with the planned frame names", function()
+		it("has exactly the ten known groups with the planned frame names", function()
 			local seen = {}
 			for _, g in ipairs(ns.HideBlizzardLogic.GROUPS) do
 				seen[g.key] = true
@@ -41,7 +42,7 @@ describe("HideBlizzardLogic", function()
 			for _ in pairs(seen) do
 				count = count + 1
 			end
-			assert.are.equal(9, count)
+			assert.are.equal(10, count)
 		end)
 
 		it("unregisters events only for xp, unit frames and the cast bar", function()

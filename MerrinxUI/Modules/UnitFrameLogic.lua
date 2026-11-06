@@ -49,3 +49,12 @@ end
 function L.Watched(unit)
 	return unit ~= "player"
 end
+
+-- UnitGetIncomingHeals returns nil with no heals in flight; a secret value is
+-- passed through untouched because only the status bar may read it.
+function L.Amount(value, isSecret)
+	if isSecret(value) or value ~= nil then
+		return value
+	end
+	return 0
+end

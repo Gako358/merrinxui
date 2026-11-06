@@ -30,6 +30,8 @@ HideBlizzardLogic.GROUPS = {
 	},
 	-- Edit Mode re-parents the cast bar on layout changes; without its events it stays empty.
 	{ key = "castBar", frames = { "PlayerCastingBarFrame" }, unregisterEvents = true },
+	-- Forever draws its swing timer in TimerTracker, which also holds start countdowns.
+	{ key = "swingTimer", frames = { "TimerTracker" } },
 }
 
 local VALID_KEYS = {}

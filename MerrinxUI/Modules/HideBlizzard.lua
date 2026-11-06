@@ -14,6 +14,7 @@ local defaults = {
 		damageMeter = false,
 		unitFrames = false,
 		castBar = false,
+		swingTimer = false,
 	},
 	global = {
 		meterCVarOwned = false,
@@ -30,6 +31,7 @@ local GROUP_NAMES = {
 	damageMeter = "Damage Meter",
 	unitFrames = "Unit Frames",
 	castBar = "Cast Bar",
+	swingTimer = "Swing Timer",
 }
 
 function HideBlizzard:OnInitialize()
@@ -183,6 +185,11 @@ function HideBlizzard:GetOptions()
 			damageMeter = groupToggle("damageMeter", 6),
 			unitFrames = groupToggle("unitFrames", 7),
 			castBar = groupToggle("castBar", 8),
+			swingTimer = groupToggle(
+				"swingTimer",
+				9,
+				"Hides Blizzard's timer tracker, which also shows battleground and arena start countdowns."
+			),
 		},
 	}
 end

@@ -119,6 +119,8 @@ read_globals = {
 	"IsXPUserDisabled",
 	"BreakUpLargeNumbers",
 	"C_QuestLog",
+	"UnitGetIncomingHeals",
+	"UnitGetTotalAbsorbs",
 }
 
 globals = {

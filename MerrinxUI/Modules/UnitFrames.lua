@@ -6,6 +6,8 @@ local NL = ns.NameplateLogic
 local TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local MANA = Enum.PowerType.Mana
 local MANA_COLOR = { 0, 0.55, 1 }
+local HEAL_COLOR = { 0.2, 0.9, 0.3, 0.5 }
+local ABSORB_COLOR = { 0.85, 0.95, 1, 0.5 }
 
 local UnitFrames = ns.addon:NewModule("UnitFrames", "AceEvent-3.0")
 
@@ -32,6 +34,8 @@ local defaults = {
 		druidMana = true,
 		druidManaHeight = 4,
 		druidManaText = false,
+		incomingHeals = true,
+		absorbs = true,
 		units = {
 			player = unitDefaults(220, 44, 8, -280, -180),
 			target = unitDefaults(220, 44, 8, 280, -180),
@@ -75,6 +79,8 @@ function UnitFrames:OnEnable()
 	}) do
 		self:RegisterEvent(event, "OnUnitEvent")
 	end
+	self:RegisterEvent("UNIT_HEAL_PREDICTION", "OnPredictionEvent")
+	self:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED", "OnPredictionEvent")
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "UpdateAll")
 	self:RegisterEvent("PLAYER_FOCUS_CHANGED", "UpdateAll")
 	self:RegisterEvent("UNIT_PET", "UpdateAll")
@@ -167,6 +173,21 @@ function UnitFrames:Build()
 			frame.mana:SetPoint("BOTTOMRIGHT", frame.slot, "BOTTOMRIGHT", 0, 0)
 			frame.mana:SetStatusBarColor(MANA_COLOR[1], MANA_COLOR[2], MANA_COLOR[3])
 
+			if unit == "player" then
+				-- The heal bar starts where the health fill ends; clipping cuts
+				-- overheal without arithmetic on possibly secret values.
+				frame.health:SetClipsChildren(true)
+				local fill = frame.health:GetStatusBarTexture()
+				frame.heal = CreateFrame("StatusBar", nil, frame.health)
+				frame.heal:SetMinMaxValues(0, 1)
+				frame.heal:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+				frame.heal:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", 0, 0)
+				frame.absorb = CreateFrame("StatusBar", nil, frame.health)
+				frame.absorb:SetMinMaxValues(0, 1)
+				frame.absorb:SetReverseFill(true)
+				frame.absorb:SetAllPoints(frame.health)
+			end
+
 			local text = CreateFrame("Frame", nil, frame)
 			text:SetAllPoints()
 			text:SetFrameLevel(frame:GetFrameLevel() + 5)
@@ -206,6 +227,15 @@ function UnitFrames:Layout()
 		for _, bar in ipairs({ frame.health, frame.power, frame.mana }) do
 			bar:SetStatusBarTexture(texture)
 			bar.bg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+		end
+		if frame.heal then
+			frame.heal:SetStatusBarTexture(texture)
+			frame.heal:SetStatusBarColor(unpack(HEAL_COLOR))
+			frame.heal:SetWidth(u.width - 2)
+			frame.heal:SetShown(p.incomingHeals)
+			frame.absorb:SetStatusBarTexture(texture)
+			frame.absorb:SetStatusBarColor(unpack(ABSORB_COLOR))
+			frame.absorb:SetShown(p.absorbs)
 		end
 		ns.Media:SetFont(frame.name, p.font, p.fontSize, "")
 		ns.Media:SetFont(frame.healthText, p.font, p.fontSize, "")
@@ -302,8 +332,12 @@ function UnitFrames:UpdateUnit(unit)
 	self.updates = self.updates + 1
 
 	local health = UnitHealth(unit)
-	frame.health:SetMinMaxValues(0, UnitHealthMax(unit))
+	local maxHealth = UnitHealthMax(unit)
+	frame.health:SetMinMaxValues(0, maxHealth)
 	frame.health:SetValue(health)
+	if frame.heal then
+		self:UpdatePrediction(frame, maxHealth)
+	end
 	frame.health:SetStatusBarColor(self:HealthColor(unit))
 	frame.healthText:SetText(
 		NL.FormatValue(
@@ -340,6 +374,25 @@ function UnitFrames:UpdateUnit(unit)
 			frame.manaText:SetText(AbbreviateNumbers(mana))
 		end
 	end
+end
+
+function UnitFrames:UpdatePrediction(frame, maxHealth)
+	if frame.heal:IsShown() then
+		frame.heal:SetMinMaxValues(0, maxHealth)
+		frame.heal:SetValue(L.Amount(UnitGetIncomingHeals("player"), isSecret))
+	end
+	if frame.absorb:IsShown() then
+		frame.absorb:SetMinMaxValues(0, maxHealth)
+		frame.absorb:SetValue(L.Amount(UnitGetTotalAbsorbs("player"), isSecret))
+	end
+end
+
+function UnitFrames:OnPredictionEvent(_, unit)
+	local frame = self.frames.player
+	if unit ~= "player" or not frame or not frame:IsVisible() then
+		return
+	end
+	self:UpdatePrediction(frame, UnitHealthMax("player"))
 end
 
 function UnitFrames:UpdateDruidMana()
@@ -477,6 +530,30 @@ function UnitFrames:GetOptions()
 				},
 			},
 		},
+		prediction = {
+			type = "group",
+			name = "Player Health",
+			order = 21,
+			inline = true,
+			args = {
+				incomingHeals = {
+					type = "toggle",
+					name = "Incoming heals",
+					desc = "Shows heals being cast on you after the health fill",
+					order = 1,
+					get = get("incomingHeals"),
+					set = set("incomingHeals"),
+				},
+				absorbs = {
+					type = "toggle",
+					name = "Shields",
+					desc = "Shows absorb shields on you from the right end of the health bar",
+					order = 2,
+					get = get("absorbs"),
+					set = set("absorbs"),
+				},
+			},
+		},
 	}
 	for i, unit in ipairs(L.UNITS) do
 		local function uget(key)
@@ -530,6 +607,8 @@ function UnitFrames:GetDebugChecks()
 					UnitHealthPercent = UnitHealthPercent,
 					UnitPowerPercent = UnitPowerPercent,
 					AbbreviateNumbers = AbbreviateNumbers,
+					UnitGetIncomingHeals = UnitGetIncomingHeals,
+					UnitGetTotalAbsorbs = UnitGetTotalAbsorbs,
 				}) do
 					if type(fn) ~= "function" then
 						table.insert(missing, name)
@@ -604,6 +683,27 @@ function UnitFrames:GetDebugChecks()
 				local expected = L.ShowDruidMana(self.db.profile.druidMana, self.class, powerType, MANA)
 				local shown = frame ~= nil and frame.slot:IsShown()
 				return (shown == expected) and "PASS" or "FAIL", powerType, shown, expected
+			end,
+		},
+		{
+			name = "heal prediction",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local frame = self.frames.player
+				if not frame or not frame.heal then
+					return "FAIL", "missing"
+				end
+				local p = self.db.profile
+				local ok = frame.heal:IsShown() == p.incomingHeals and frame.absorb:IsShown() == p.absorbs
+				local heal = UnitGetIncomingHeals("player")
+				local absorb = UnitGetTotalAbsorbs("player")
+				return ok and "PASS" or "FAIL",
+					frame.heal:IsShown(),
+					frame.absorb:IsShown(),
+					isSecret(heal) and "secret" or heal,
+					isSecret(absorb) and "secret" or absorb
 			end,
 		},
 	}

@@ -143,7 +143,7 @@ function CastBars:OnDisable()
 		self.swing.frame:Hide()
 	end
 	if self.blizzHidden then
-		ns.addon:Print("CastBars: /reload restores Blizzard's cast bar")
+		ns.addon:Print("CastBars: /reload restores Blizzard's cast bar and swing timer")
 	end
 end
 
@@ -162,12 +162,23 @@ function CastBars:Refresh()
 end
 
 function CastBars:ApplyBlizzard()
-	if not self.db.profile.units.player.enabled then
+	local p = self.db.profile
+	local groups = {}
+	if p.units.player.enabled then
+		table.insert(groups, "castBar")
+	end
+	if SWING_API and p.swing.enabled then
+		table.insert(groups, "swingTimer")
+	end
+	if #groups == 0 then
 		return
 	end
 	self.blizzHidden = true
 	ns.Combat:Run("CastBars:Blizzard", function()
-		ns.addon:GetModule("HideBlizzard"):Ensure("castBar")
+		local hideBlizzard = ns.addon:GetModule("HideBlizzard")
+		for _, group in ipairs(groups) do
+			hideBlizzard:Ensure(group)
+		end
 	end)
 end
 

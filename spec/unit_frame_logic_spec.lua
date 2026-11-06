@@ -38,4 +38,14 @@ describe("UnitFrameLogic", function()
 		assert.is_false(L.Watched("player"))
 		assert.is_true(L.Watched("pet"))
 	end)
+
+	it("Amount turns nil into 0 and passes numbers and secrets through", function()
+		local secret = {}
+		local function isSecret(v)
+			return v == secret
+		end
+		assert.are.equal(0, L.Amount(nil, isSecret))
+		assert.are.equal(1200, L.Amount(1200, isSecret))
+		assert.are.equal(secret, L.Amount(secret, isSecret))
+	end)
 end)
