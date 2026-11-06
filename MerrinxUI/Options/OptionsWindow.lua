@@ -13,7 +13,7 @@ local CELL_W = math.floor((INNER_W - Theme.geometry.colGap) / Theme.geometry.col
 local W = {}
 ns.OptionsWindow = W
 
-local frame, sidebarList, contentScroll, contentChild, footerLabel, pageLabel
+local frame, sidebarScroll, sidebarList, contentScroll, contentChild, footerLabel, pageLabel
 local dropdownOverlay, dropdownScroll, dropdownChild
 local confirmOverlay, confirmDim, confirmMessage
 
@@ -23,6 +23,7 @@ local root
 local pages = {}
 local currentPageIndex = 1
 local contentScrollOffset = 0
+local sidebarScrollOffset = 0
 local footerErrorText
 local confirmState
 local gridLines = 0
@@ -1010,7 +1011,14 @@ function renderSidebar()
 	for i = 1, #pages do
 		heights[i] = Theme.geometry.navRow
 	end
-	local offsets = L.Stack(heights, Theme.geometry.gap)
+	local offsets, total = L.Stack(heights, Theme.geometry.gap)
+	sidebarList:SetHeight(math.max(total, CONTENT_H))
+
+	local maxOffset = math.max(0, total - CONTENT_H)
+	if sidebarScrollOffset > maxOffset then
+		sidebarScrollOffset = maxOffset
+	end
+	sidebarScroll:SetVerticalScroll(sidebarScrollOffset)
 
 	for i, page in ipairs(pages) do
 		local row = pools.nav.acquire()
@@ -1242,20 +1250,31 @@ local function buildHeader(win)
 end
 
 local function buildSidebar(win)
-	sidebarList = CreateFrame("Frame", nil, win)
-	sidebarList:SetPoint("TOPLEFT", win, "TOPLEFT", 0, -Theme.geometry.header)
-	sidebarList:SetSize(Theme.geometry.sidebar, CONTENT_H)
+	sidebarScroll = CreateFrame("ScrollFrame", nil, win)
+	sidebarScroll:SetPoint("TOPLEFT", win, "TOPLEFT", 0, -Theme.geometry.header)
+	sidebarScroll:SetSize(Theme.geometry.sidebar, CONTENT_H)
+	sidebarScroll:EnableMouseWheel(true)
 
-	local sidebarBg = sidebarList:CreateTexture(nil, "BACKGROUND")
+	local sidebarBg = sidebarScroll:CreateTexture(nil, "BACKGROUND")
 	sidebarBg:SetAllPoints()
 	setColor(sidebarBg, Theme.color.sidebar)
+
+	sidebarList = CreateFrame("Frame", nil, sidebarScroll)
+	sidebarList:SetSize(Theme.geometry.sidebar, CONTENT_H)
+	sidebarScroll:SetScrollChild(sidebarList)
+
+	sidebarScroll:SetScript("OnMouseWheel", function(_, delta)
+		local offset = L.Scroll(sidebarScrollOffset, delta, Theme.geometry.navRow, sidebarList:GetHeight(), CONTENT_H)
+		sidebarScrollOffset = offset
+		sidebarScroll:SetVerticalScroll(offset)
+	end)
 
 	pools.nav = newPool(createNavRow)
 end
 
 local function buildContent(win)
 	contentScroll = CreateFrame("ScrollFrame", nil, win)
-	contentScroll:SetPoint("TOPLEFT", sidebarList, "TOPRIGHT", 0, 0)
+	contentScroll:SetPoint("TOPLEFT", sidebarScroll, "TOPRIGHT", 0, 0)
 	contentScroll:SetSize(CONTENT_W, CONTENT_H)
 	contentScroll:EnableMouseWheel(true)
 
