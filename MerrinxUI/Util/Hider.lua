@@ -31,6 +31,19 @@ local function purgeIsShownExternal(frame)
 	ns.addon:Print("HideBlizzard: could not purge isShownExternal taint on " .. (frame:GetName() or "unnamed frame"))
 end
 
+local function keepHidden(frame)
+	if frame:GetParent() == parent then
+		return
+	end
+	if frame:IsProtected() and InCombatLockdown() then
+		ns.Combat:Run(frame, function()
+			keepHidden(frame)
+		end)
+		return
+	end
+	frame:SetParent(parent)
+end
+
 local function applyHide(frame, unregisterEvents)
 	if frame.system then
 		purgeIsShownExternal(frame)
@@ -44,6 +57,10 @@ local function applyHide(frame, unregisterEvents)
 		frame:Hide()
 	end
 	frame:SetParent(parent)
+	if not hidden[frame] then
+		-- Blizzard code (e.g. Edit Mode on layout changes) re-parents hidden frames such as the cast bar.
+		hooksecurefunc(frame, "SetParent", keepHidden)
+	end
 	hidden[frame] = true
 end
 
