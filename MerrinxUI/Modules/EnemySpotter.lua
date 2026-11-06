@@ -487,8 +487,8 @@ local function createButton(parent, text, onClick)
 	fs:SetAllPoints()
 	fs:SetJustifyH("CENTER")
 	setTextColor(fs, C.text)
-	fs:SetText(text)
 	button.text = fs
+	button.label = text
 
 	button:SetScript("OnEnter", function()
 		setColor(bg, C.buttonHover)
@@ -498,6 +498,11 @@ local function createButton(parent, text, onClick)
 	end)
 	button:SetScript("OnClick", onClick)
 	return button
+end
+
+local function setButtonFont(button, font, size)
+	ns.Media:SetFont(button.text, font, size, "")
+	button.text:SetText(button.label)
 end
 
 function EnemySpotter:CreateInput()
@@ -536,7 +541,6 @@ function EnemySpotter:CreateInput()
 
 	local placeholder = edit:CreateFontString(nil, "OVERLAY")
 	placeholder:SetPoint("LEFT", edit, "LEFT", 6, 0)
-	placeholder:SetText("Add player name...")
 	setTextColor(placeholder, C.textDim)
 	input.placeholder = placeholder
 
@@ -658,7 +662,7 @@ function EnemySpotter:StyleRow(row)
 	ns.Media:SetFont(row.tag, profile.font, math.max(8, profile.fontSize - 3), "")
 	ns.Media:SetFont(row.level, profile.font, profile.fontSize - 1, "")
 	ns.Media:SetFont(row.ago, profile.font, profile.fontSize - 1, "")
-	ns.Media:SetFont(row.remove.text, profile.font, profile.fontSize, "")
+	setButtonFont(row.remove, profile.font, profile.fontSize)
 end
 
 function EnemySpotter:GetRow(i)
@@ -823,8 +827,9 @@ function EnemySpotter:Layout()
 	input:SetHeight(profile.rowHeight)
 	input.edit:SetFont(ns.Media:FontPath(profile.font), profile.fontSize, "")
 	ns.Media:SetFont(input.placeholder, profile.font, profile.fontSize, "")
+	input.placeholder:SetText("Add player name...")
 	for _, button in ipairs({ input.addButton, input.targetButton }) do
-		ns.Media:SetFont(button.text, profile.font, profile.fontSize - 1, "")
+		setButtonFont(button, profile.font, profile.fontSize - 1)
 		button:SetWidth(button.text:GetStringWidth() + 14)
 	end
 
