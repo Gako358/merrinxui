@@ -127,6 +127,12 @@ read_globals = {
 	"CHAT_FRAME_TEXTURES",
 	"DEFAULT_CHAT_FRAME",
 	"SELECTED_CHAT_FRAME",
+	"GetFramerate",
+	"GetNetStats",
+	"debugprofilestop",
+	"UpdateAddOnMemoryUsage",
+	"GetAddOnMemoryUsage",
+	"C_AddOnProfiler",
 }
 
 globals = {

@@ -79,50 +79,6 @@
             cp ${pkgs.spdx-license-list-data.text}/text/LGPL-2.1-only.txt $out/LibSharedMedia-3.0-LICENSE.txt
           '';
 
-          googleFont =
-            path: hash:
-            pkgs.fetchurl {
-              url = "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/${path}";
-              name = builtins.replaceStrings [ "/" "%5B" "%5D" ] [ "-" "" "" ] path;
-              inherit hash;
-            };
-
-          googleFonts = {
-            "PT_Sans-Narrow-Web-Regular.ttf" =
-              googleFont "ptsansnarrow/PT_Sans-Narrow-Web-Regular.ttf" "sha256-QQLt2gMFkWN3GGnSWN9UrIVjxAj6bp73Wy3cheq+pvQ=";
-            "PT_Sans-Narrow-Web-Bold.ttf" =
-              googleFont "ptsansnarrow/PT_Sans-Narrow-Web-Bold.ttf" "sha256-5p2DvPW9ZHiStOKyL1CY2r1VyYlBNRMZdyL8FW+58A4=";
-            "PTSansNarrow-OFL.txt" =
-              googleFont "ptsansnarrow/OFL.txt" "sha256-J1jPeocoJ/OWYc+MwkGIETwDBEeu+1ynFFmTZQB2yow=";
-            "RussoOne-Regular.ttf" =
-              googleFont "russoone/RussoOne-Regular.ttf" "sha256-vAq8xmC9i3rTAA7LKJiifFiimlD37IFlL6EudRSNCd8=";
-            "RussoOne-OFL.txt" =
-              googleFont "russoone/OFL.txt" "sha256-OsEwFUlSPZhh/tyhKHHyTldfvSbVIGMvwAuoSbRx0nU=";
-            "Changa-VF.ttf" =
-              googleFont "changa/Changa%5Bwght%5D.ttf" "sha256-fE96FNS3CsiBbqjfOgsSeu5MX1r3I5rKKv7MhN3H9NM=";
-            "Changa-OFL.txt" =
-              googleFont "changa/OFL.txt" "sha256-axLI1Be7dm+gF9EWHHygUDkoF6fuy/MRD8KoYWVkuVY=";
-            "CinzelDecorative-Regular.ttf" =
-              googleFont "cinzeldecorative/CinzelDecorative-Regular.ttf" "sha256-W4Yr4ykQOtKHoQ8KU+J6QOjMUZmZJT8aAiPi3DMLELg=";
-            "CinzelDecorative-Bold.ttf" =
-              googleFont "cinzeldecorative/CinzelDecorative-Bold.ttf" "sha256-6FTmijiKpQ10KkQVwa5cF6YX73lWyVpwAh0KSkTyBRg=";
-            "CinzelDecorative-OFL.txt" =
-              googleFont "cinzeldecorative/OFL.txt" "sha256-Hl1mYDZt3Pyk8vwQ4qz7qfpNl9QK7IDX2/1B1zCkIK4=";
-            "Exo-VF.ttf" =
-              googleFont "exo/Exo%5Bwght%5D.ttf" "sha256-Lwj4GPETWsV5gDDAvKJSwIRa9cVN/hcqXHT73WiENEU=";
-            "Exo-OFL.txt" = googleFont "exo/OFL.txt" "sha256-EVnqcu0ffnVBzqNaDezkjSq7AxfXxw91pIL5STI4Knc=";
-            "BarlowCondensed-Regular.ttf" =
-              googleFont "barlowcondensed/BarlowCondensed-Regular.ttf" "sha256-WDzsXaO4S8TcfJxy4qVlyU005DFRixnX4lC3gwrV+ZY=";
-            "BarlowCondensed-Medium.ttf" =
-              googleFont "barlowcondensed/BarlowCondensed-Medium.ttf" "sha256-JivRQyks5HnuDNCaQrR6sXP8qOnG617QtcioRbw3HRc=";
-            "BarlowCondensed-SemiBold.ttf" =
-              googleFont "barlowcondensed/BarlowCondensed-SemiBold.ttf" "sha256-e2GdFLwjJ1CanvMrCJD3CWJvfsyf9hGRwqQxTFSZ0tk=";
-            "BarlowCondensed-Bold.ttf" =
-              googleFont "barlowcondensed/BarlowCondensed-Bold.ttf" "sha256-5HZWLsnB4WzxZHWJW1EfCMgE9DjMmp+ApE6lCg7rW2U=";
-            "BarlowCondensed-OFL.txt" =
-              googleFont "barlowcondensed/OFL.txt" "sha256-GG11DrSWpMF6djhfgr5q6irBzy3gdKgR1jeGzzdOpz8=";
-          };
-
           statusbarTextures = pkgs.writeText "statusbars.py" ''
             import math
             import struct
@@ -556,46 +512,11 @@
               {
                 nativeBuildInputs = [
                   pkgs.python3
-                  pkgs.python3Packages.fonttools
                   pkgs.vorbis-tools
                 ];
               }
               ''
-                mkdir -p $out/Fonts $out/Textures $out/Sounds
-                truetype() { cp "$1/share/fonts/truetype/$2" $out/Fonts/; }
-                for f in Roboto-Regular Roboto-Medium Roboto-Bold RobotoCondensed-Regular RobotoCondensed-Bold; do
-                  truetype ${pkgs.roboto} $f.ttf
-                done
-                for f in FiraSans-Regular FiraSans-Medium FiraSans-Bold FiraSansCondensed-Regular FiraSansCondensed-Medium; do
-                  truetype ${pkgs.fira-sans} $f.ttf
-                done
-                for f in Ubuntu-R Ubuntu-M Ubuntu-B Ubuntu-C; do
-                  truetype ${pkgs.ubuntu-classic} ubuntu/$f.ttf
-                done
-                for f in Lato-Regular Lato-Bold Lato-Black; do
-                  cp ${pkgs.lato}/share/fonts/lato/$f.ttf $out/Fonts/
-                done
-                for f in Poppins-Regular Poppins-SemiBold; do
-                  truetype ${pkgs.poppins} $f.ttf
-                done
-                for f in PT_Sans-Web-Regular PT_Sans-Web-Bold; do
-                  truetype ${pkgs.paratype-pt-sans} $f.ttf
-                done
-                for f in LiberationSans-Regular LiberationSans-Bold; do
-                  truetype ${pkgs.liberation_ttf} $f.ttf
-                done
-                cp ${pkgs.spdx-license-list-data.text}/text/OFL-1.1.txt $out/Fonts/OFL-1.1-LICENSE.txt
-                cp ${pkgs.spdx-license-list-data.text}/text/Ubuntu-font-1.0.txt $out/Fonts/Ubuntu-font-1.0-LICENSE.txt
-                ${lib.concatStrings (
-                  lib.mapAttrsToList (name: src: ''
-                    cp ${src} "$out/Fonts/${name}"
-                  '') googleFonts
-                )}
-                for family in Changa Exo; do
-                  fonttools varLib.instancer -q -o "$out/Fonts/$family-Regular.ttf" "$out/Fonts/$family-VF.ttf" wght=400
-                  fonttools varLib.instancer -q -o "$out/Fonts/$family-Bold.ttf" "$out/Fonts/$family-VF.ttf" wght=700
-                  rm "$out/Fonts/$family-VF.ttf"
-                done
+                mkdir -p $out/Textures $out/Sounds
 
                 python3 ${statusbarTextures} $out/Textures
                 python3 ${glyphIcons} $out/Textures
@@ -656,7 +577,7 @@
                 echo "missing: Media/$rel"
                 exit 1
               fi
-            done < <(grep -oE '"(Fonts|Textures|Sounds)\\\\[^"]+"' "$out/MerrinxUI/Util/Media.lua" | tr -d '"')
+            done < <(grep -oE '"(Textures|Sounds)\\\\[^"]+"' "$out/MerrinxUI/Util/Media.lua" | tr -d '"')
           '';
 
           lua-syntax = pkgs.runCommand "merrinxui-lua-syntax" { nativeBuildInputs = [ pkgs.lua5_1 ]; } ''

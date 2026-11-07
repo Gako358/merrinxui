@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.29.1
+## Version: 0.30.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -65,3 +65,5 @@ Modules\ProfessionData\Skinning.lua
 Modules\Professions.lua
 Modules\ChatLogic.lua
 Modules\Chat.lua
+Modules\PerformanceLogic.lua
+Modules\Performance.lua

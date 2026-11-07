@@ -11,6 +11,7 @@ local BORDER_COLOR = { 0, 0, 0, 0.9 }
 local URL_HEX = "66bfff"
 local FADE_DELAY = 3
 local FADE_RATE = 2
+local IDLE_POLL = 0.1
 -- Blizzard's own hover test for chat frames reaches this far up, over the tab row.
 local HOVER_TOP = 28
 local TAB_LINE_INSET = 6
@@ -307,22 +308,33 @@ function Chat:IsActive(skin)
 	return skin.editBox ~= nil and skin.editBox:HasFocus()
 end
 
+-- Every frame only while a fade runs; at rest the hover poll drops to IDLE_POLL.
 function Chat:Tick(elapsed)
+	self.pendingElapsed = (self.pendingElapsed or 0) + elapsed
+	if not self.fading and self.pendingElapsed < IDLE_POLL then
+		return
+	end
+	local idleElapsed = self.pendingElapsed
+	self.pendingElapsed = 0
+
 	if #CHAT_FRAMES ~= self.knownFrames then
 		self:SkinAll()
 	end
 	local p = self.db.profile
 	local low = p.fadeOpacity / 100
+	local fading = false
 	for cf, skin in pairs(self.skins) do
 		if cf:IsVisible() then
-			skin.idle = self:IsActive(skin) and 0 or skin.idle + elapsed
+			skin.idle = self:IsActive(skin) and 0 or skin.idle + idleElapsed
 			local target = L.FadeTarget(p.fade, skin.idle, FADE_DELAY, low)
 			if skin.alpha ~= target then
 				skin.alpha = L.Approach(skin.alpha, target, elapsed * FADE_RATE)
 				self:SetSkinAlpha(skin, skin.alpha)
+				fading = fading or skin.alpha ~= target
 			end
 		end
 	end
+	self.fading = fading
 end
 
 function Chat:SetURLFilter(on)

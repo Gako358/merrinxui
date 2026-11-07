@@ -60,44 +60,6 @@ hooksecurefunc(LSM, "Register", onRegister)
 Media.hookedRegister = LSM.Register
 
 Media.bundled = {
-	font = {
-		["Roboto"] = "Fonts\\Roboto-Regular.ttf",
-		["Roboto Medium"] = "Fonts\\Roboto-Medium.ttf",
-		["Roboto Bold"] = "Fonts\\Roboto-Bold.ttf",
-		["Roboto Condensed"] = "Fonts\\RobotoCondensed-Regular.ttf",
-		["Roboto Condensed Bold"] = "Fonts\\RobotoCondensed-Bold.ttf",
-		["Fira Sans"] = "Fonts\\FiraSans-Regular.ttf",
-		["Fira Sans Medium"] = "Fonts\\FiraSans-Medium.ttf",
-		["Fira Sans Bold"] = "Fonts\\FiraSans-Bold.ttf",
-		["Fira Sans Condensed"] = "Fonts\\FiraSansCondensed-Regular.ttf",
-		["Fira Sans Condensed Medium"] = "Fonts\\FiraSansCondensed-Medium.ttf",
-		["Ubuntu"] = "Fonts\\Ubuntu-R.ttf",
-		["Ubuntu Medium"] = "Fonts\\Ubuntu-M.ttf",
-		["Ubuntu Bold"] = "Fonts\\Ubuntu-B.ttf",
-		["Ubuntu Condensed"] = "Fonts\\Ubuntu-C.ttf",
-		["Lato"] = "Fonts\\Lato-Regular.ttf",
-		["Lato Bold"] = "Fonts\\Lato-Bold.ttf",
-		["Lato Black"] = "Fonts\\Lato-Black.ttf",
-		["Poppins"] = "Fonts\\Poppins-Regular.ttf",
-		["Poppins SemiBold"] = "Fonts\\Poppins-SemiBold.ttf",
-		["PT Sans"] = "Fonts\\PT_Sans-Web-Regular.ttf",
-		["PT Sans Bold"] = "Fonts\\PT_Sans-Web-Bold.ttf",
-		["Liberation Sans"] = "Fonts\\LiberationSans-Regular.ttf",
-		["Liberation Sans Bold"] = "Fonts\\LiberationSans-Bold.ttf",
-		["PT Sans Narrow"] = "Fonts\\PT_Sans-Narrow-Web-Regular.ttf",
-		["PT Sans Narrow Bold"] = "Fonts\\PT_Sans-Narrow-Web-Bold.ttf",
-		["Russo One"] = "Fonts\\RussoOne-Regular.ttf",
-		["Changa"] = "Fonts\\Changa-Regular.ttf",
-		["Changa Bold"] = "Fonts\\Changa-Bold.ttf",
-		["Cinzel Decorative"] = "Fonts\\CinzelDecorative-Regular.ttf",
-		["Cinzel Decorative Bold"] = "Fonts\\CinzelDecorative-Bold.ttf",
-		["Exo"] = "Fonts\\Exo-Regular.ttf",
-		["Exo Bold"] = "Fonts\\Exo-Bold.ttf",
-		["Barlow Condensed"] = "Fonts\\BarlowCondensed-Regular.ttf",
-		["Barlow Condensed Medium"] = "Fonts\\BarlowCondensed-Medium.ttf",
-		["Barlow Condensed SemiBold"] = "Fonts\\BarlowCondensed-SemiBold.ttf",
-		["Barlow Condensed Bold"] = "Fonts\\BarlowCondensed-Bold.ttf",
-	},
 	statusbar = {
 		["MerrinxUI Smooth"] = "Textures\\Smooth.tga",
 		["MerrinxUI Gloss"] = "Textures\\Gloss.tga",
@@ -154,12 +116,18 @@ function Media:Icon(name)
 	return file and ("Interface\\AddOns\\" .. addonName .. "\\Media\\" .. file)
 end
 
-Media.preload = { ok = 0, fail = 0, error = 0, applied = 0, failed = {}, strings = {} }
-
-local function holdsFont(fs, path)
-	local got = fs:GetFont()
-	return type(got) == "string" and (got:lower():gsub("/", "\\")) == (path:lower():gsub("/", "\\"))
-end
+-- The client refuses addon font files (SetFont fails for every one), so only fonts it ships can be offered.
+-- These are client files LSM leaves out on western locales.
+Media.clientFonts = {
+	["Friz Quadrata TT Cyrillic"] = "Fonts\\FRIZQT___CYR.TTF",
+	["Morpheus Latin"] = "Fonts\\MORPHEUS.TTF",
+	["Skurri Latin"] = "Fonts\\SKURRI.TTF",
+	["Damage (koKR)"] = "Fonts\\K_Damage.TTF",
+	["Hei (zhTW)"] = "Fonts\\bHEI00M.ttf",
+	["Hei Bold (zhTW)"] = "Fonts\\bHEI01B.ttf",
+	["Kai (zhTW)"] = "Fonts\\bKAI00M.ttf",
+	["Lei (zhTW)"] = "Fonts\\bLEI00D.ttf",
+}
 
 do
 	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
@@ -169,30 +137,13 @@ do
 		end
 	end
 
-	-- Addon font files that are first requested after the loading screen fail SetFont,
-	-- so every bundled font is requested here while the addon loads.
-	local holder = CreateFrame("Frame")
-	holder:Hide()
-	local preload = Media.preload
-	for key, file in pairs(Media.bundled.font) do
-		local fs = holder:CreateFontString()
-		local path = root .. file
-		local ok, loaded = pcall(fs.SetFont, fs, path, 12, "")
-		preload.strings[path] = fs
-		if ok and holdsFont(fs, path) then
-			preload.applied = preload.applied + 1
-		end
-		if not ok then
-			preload.error = preload.error + 1
-			preload.failed[#preload.failed + 1] = key
-		elseif loaded then
-			preload.ok = preload.ok + 1
-		else
-			preload.fail = preload.fail + 1
-			preload.failed[#preload.failed + 1] = key
+	-- Checking first keeps LSM from reporting an error for every font this client lacks.
+	local hash = LSM:HashTable("font")
+	for key, path in pairs(Media.clientFonts) do
+		if hash[key] == nil and isKnown(path) then
+			LSM:Register("font", key, path)
 		end
 	end
-	table.sort(preload.failed)
 end
 
 local defaults = {
@@ -218,37 +169,6 @@ end
 
 function Media:OnEnable()
 	LSM.RegisterCallback(self, "LibSharedMedia_Registered", "OnMediaRegistered")
-	C_Timer.After(5, function()
-		self:ReprobeBundledFonts()
-	end)
-end
-
--- Tells apart a font that loads late, one that applies although SetFont returns false, and one the client refuses.
-function Media:ReprobeBundledFonts()
-	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
-	local result = { ok = 0, fail = 0, error = 0, applied = 0, preloadApplied = 0 }
-	local frame = CreateFrame("Frame")
-	frame:Hide()
-	for _, file in pairs(Media.bundled.font) do
-		local path = root .. file
-		local fs = frame:CreateFontString()
-		local ok, loaded = pcall(fs.SetFont, fs, path, 12, "")
-		if not ok then
-			result.error = result.error + 1
-		elseif loaded then
-			result.ok = result.ok + 1
-		else
-			result.fail = result.fail + 1
-		end
-		if ok and holdsFont(fs, path) then
-			result.applied = result.applied + 1
-		end
-		local preloaded = Media.preload.strings[path]
-		if preloaded and holdsFont(preloaded, path) then
-			result.preloadApplied = result.preloadApplied + 1
-		end
-	end
-	self.reprobe = result
 end
 
 function Media:OnMediaRegistered(_, mediatype, key)
@@ -348,7 +268,7 @@ function Media:Values(mediatype, keep, noGlobal)
 			}
 		end
 		isUsable = function(path)
-			local ok = self.fontProbe:SetFont(path, 12, "") and true or false
+			local ok = probeFont(self.fontProbe, path) == true
 			local seen = self.probeSeen[path]
 			if not seen then
 				seen = {}
@@ -606,20 +526,24 @@ function Media:GetDebugChecks()
 			end,
 		},
 		{
-			name = "font preload",
+			name = "client fonts",
 			run = function()
-				local preload = Media.preload
-				return "INFO", preload.ok, preload.fail, preload.error, preload.failed[1], preload.applied
-			end,
-		},
-		{
-			name = "font reprobe",
-			run = function()
-				local r = self.reprobe
-				if r == nil then
-					return "INFO", "not run"
+				local hash = LSM:HashTable("font")
+				local total, registered, usable = 0, 0, 0
+				local usableKeys = {}
+				for key, path in pairs(Media.clientFonts) do
+					total = total + 1
+					if hash and hash[key] == path then
+						registered = registered + 1
+						local seen = self.probeSeen[path]
+						if seen and seen.ok then
+							usable = usable + 1
+							usableKeys[#usableKeys + 1] = key
+						end
+					end
 				end
-				return "INFO", r.ok, r.fail, r.error, r.applied, r.preloadApplied
+				table.sort(usableKeys)
+				return "INFO", total, registered, usable, unpack(usableKeys, 1, #usableKeys)
 			end,
 		},
 		{
@@ -633,7 +557,7 @@ function Media:GetDebugChecks()
 			run = function()
 				local counts = {}
 				local complete = true
-				for _, mediatype in ipairs({ "font", "statusbar" }) do
+				for _, mediatype in ipairs({ "statusbar", "sound" }) do
 					local hash = LSM:HashTable(mediatype)
 					local total, stored = 0, 0
 					for key in pairs(Media.bundled[mediatype]) do

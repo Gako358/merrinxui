@@ -572,15 +572,18 @@ function CastBars:UpdateSwing()
 	local live = false
 	for _, key in ipairs(self.swingKeys) do
 		local row = self.swing.rows[key]
-		local fill, left = L.SwingProgress(row.start, row.duration, now)
-		row.status:SetValue(fill)
-		if left > 0 then
-			live = true
-			row.time:SetFormattedText("%.1f", left)
-		else
-			row.time:SetText("")
+		if not row.idle then
+			local fill, left = L.SwingProgress(row.start, row.duration, now)
+			row.status:SetValue(fill)
+			if left > 0 then
+				live = true
+				row.time:SetFormattedText("%.1f", left)
+			else
+				row.time:SetText("")
+				row.idle = true
+			end
+			row.spark:SetShown(left > 0)
 		end
-		row.spark:SetShown(left > 0)
 	end
 	if live ~= (self.swingLive == true) then
 		self.swingLive = live
@@ -599,6 +602,7 @@ function CastBars:OnSwing(_, duration, swingType)
 	local row = self.swing.rows[key]
 	row.start = GetTime()
 	row.duration = duration
+	row.idle = nil
 	if not self.canSwing[key] then
 		self.canSwing[key] = true
 		self:LayoutSwing()
