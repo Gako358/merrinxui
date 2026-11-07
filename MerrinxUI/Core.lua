@@ -68,6 +68,8 @@ function MerrinxUI:SlashCommand(input)
 			ns.Debug:Slash(verb, arg)
 		elseif verb == "kos" then
 			self:GetModule("EnemySpotter"):Slash(arg)
+		elseif verb == "copy" then
+			self:GetModule("Chat"):ShowCopy()
 		else
 			self:OpenOptions()
 		end

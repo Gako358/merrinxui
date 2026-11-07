@@ -18,8 +18,20 @@ local defaults = {
 	},
 	global = {
 		meterCVarOwned = false,
+		swingCVarOwned = false,
 	},
 }
+
+-- Both CVars are account-wide, so ownership lives in db.global.
+local CVARS = {
+	{ group = "damageMeter", cvar = "damageMeterEnabled", owned = "meterCVarOwned", check = "meter cvar" },
+	{ group = "swingTimer", cvar = "showSwingTimer", owned = "swingCVarOwned", check = "swing cvar" },
+}
+
+local CVAR_GROUPS = {}
+for _, entry in ipairs(CVARS) do
+	CVAR_GROUPS[entry.group] = true
+end
 
 local GROUP_NAMES = {
 	bags = "Bags",
@@ -41,17 +53,17 @@ function HideBlizzard:OnInitialize()
 	self.missingWarned = {}
 	self.activeGroups = {}
 	-- AceAddon never calls OnEnable for a module that starts disabled, so
-	-- the meter CVar still needs a login pass to restore a stale owned flag.
-	self:RegisterEvent("PLAYER_LOGIN", "ApplyMeter")
+	-- the CVars still need a login pass to restore a stale owned flag.
+	self:RegisterEvent("PLAYER_LOGIN", "ApplyCVars")
 end
 
 function HideBlizzard:OnEnable()
 	self:ApplyGroups()
-	self:ApplyMeter()
+	self:ApplyCVars()
 end
 
 function HideBlizzard:OnDisable()
-	self:ApplyMeter()
+	self:ApplyCVars()
 end
 
 function HideBlizzard:Refresh()
@@ -61,7 +73,7 @@ function HideBlizzard:Refresh()
 	if self.db.profile.enabled then
 		if self:IsEnabled() then
 			self:ApplyGroups()
-			self:ApplyMeter()
+			self:ApplyCVars()
 		else
 			self:Enable()
 		end
@@ -76,7 +88,7 @@ end
 function HideBlizzard:Ensure(group)
 	self.forced[group] = true
 	self:ApplyGroups()
-	self:ApplyMeter()
+	self:ApplyCVars()
 end
 
 function HideBlizzard:CurrentGroupSet()
@@ -90,7 +102,7 @@ end
 function HideBlizzard:ReportDropped(before, after)
 	for _, group in ipairs(HideBlizzardLogic.GROUPS) do
 		local key = group.key
-		if key ~= "damageMeter" and before[key] and not after[key] then
+		if not CVAR_GROUPS[key] and before[key] and not after[key] then
 			ns.addon:Print("HideBlizzard: /reload needed to restore " .. GROUP_NAMES[key])
 		end
 	end
@@ -123,16 +135,18 @@ function HideBlizzard:ApplyGroups()
 	self.activeGroups = active
 end
 
-function HideBlizzard:ApplyMeter()
-	local wantHidden = self:CurrentGroupSet().damageMeter == true
-
-	local current = C_CVar.GetCVar("damageMeterEnabled")
-	local newValue, newOwned = HideBlizzardLogic.MeterCVar(wantHidden, current, self.db.global.meterCVarOwned)
-	if newValue then
-		C_CVar.SetCVar("damageMeterEnabled", newValue)
-		ns.Debug:Log("HideBlizzard", "meter", newValue, newOwned)
+function HideBlizzard:ApplyCVars()
+	local set = self:CurrentGroupSet()
+	for _, entry in ipairs(CVARS) do
+		local current = C_CVar.GetCVar(entry.cvar)
+		local newValue, newOwned =
+			HideBlizzardLogic.MeterCVar(set[entry.group] == true, current, self.db.global[entry.owned])
+		if newValue then
+			C_CVar.SetCVar(entry.cvar, newValue)
+			ns.Debug:Log("HideBlizzard", "cvar", entry.cvar, newValue, newOwned)
+		end
+		self.db.global[entry.owned] = newOwned
 	end
-	self.db.global.meterCVarOwned = newOwned
 end
 
 function HideBlizzard:GetOptions()
@@ -188,7 +202,7 @@ function HideBlizzard:GetOptions()
 			swingTimer = groupToggle(
 				"swingTimer",
 				9,
-				"Hides Blizzard's timer tracker, which also shows battleground and arena start countdowns."
+				"Turns off Blizzard's swing timer bars (the showSwingTimer setting)."
 			),
 		},
 	}
@@ -236,16 +250,21 @@ function HideBlizzard:GetDebugChecks()
 		end
 	end
 
-	table.insert(checks, {
-		name = "meter cvar",
-		run = function()
-			local current = C_CVar.GetCVar("damageMeterEnabled")
-			if set.damageMeter then
-				return (current == "0") and "PASS" or "FAIL"
-			end
-			return "INFO", current, self.db.global.meterCVarOwned
-		end,
-	})
+	for _, entry in ipairs(CVARS) do
+		table.insert(checks, {
+			name = entry.check,
+			run = function()
+				local current = C_CVar.GetCVar(entry.cvar)
+				if current == nil then
+					return "INFO", "missing"
+				end
+				if set[entry.group] then
+					return (current == "0") and "PASS" or "FAIL", current
+				end
+				return "INFO", current, self.db.global[entry.owned]
+			end,
+		})
+	end
 
 	return checks
 end

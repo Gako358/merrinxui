@@ -26,7 +26,7 @@ describe("HideBlizzardLogic", function()
 			damageMeter = {},
 			unitFrames = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" },
 			castBar = { "PlayerCastingBarFrame" },
-			swingTimer = { "TimerTracker" },
+			swingTimer = {},
 		}
 
 		it("has exactly the ten known groups with the planned frame names", function()

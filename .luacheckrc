@@ -121,6 +121,12 @@ read_globals = {
 	"C_QuestLog",
 	"UnitGetIncomingHeals",
 	"UnitGetTotalAbsorbs",
+	"ChatFrameUtil",
+	"EventRegistry",
+	"CHAT_FRAMES",
+	"CHAT_FRAME_TEXTURES",
+	"DEFAULT_CHAT_FRAME",
+	"SELECTED_CHAT_FRAME",
 }
 
 globals = {
