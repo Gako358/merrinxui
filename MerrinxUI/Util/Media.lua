@@ -154,7 +154,12 @@ function Media:Icon(name)
 	return file and ("Interface\\AddOns\\" .. addonName .. "\\Media\\" .. file)
 end
 
-Media.preload = { ok = 0, fail = 0, error = 0, failed = {} }
+Media.preload = { ok = 0, fail = 0, error = 0, applied = 0, failed = {}, strings = {} }
+
+local function holdsFont(fs, path)
+	local got = fs:GetFont()
+	return type(got) == "string" and (got:lower():gsub("/", "\\")) == (path:lower():gsub("/", "\\"))
+end
 
 do
 	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
@@ -171,7 +176,12 @@ do
 	local preload = Media.preload
 	for key, file in pairs(Media.bundled.font) do
 		local fs = holder:CreateFontString()
-		local ok, loaded = pcall(fs.SetFont, fs, root .. file, 12, "")
+		local path = root .. file
+		local ok, loaded = pcall(fs.SetFont, fs, path, 12, "")
+		preload.strings[path] = fs
+		if ok and holdsFont(fs, path) then
+			preload.applied = preload.applied + 1
+		end
 		if not ok then
 			preload.error = preload.error + 1
 			preload.failed[#preload.failed + 1] = key
@@ -208,6 +218,37 @@ end
 
 function Media:OnEnable()
 	LSM.RegisterCallback(self, "LibSharedMedia_Registered", "OnMediaRegistered")
+	C_Timer.After(5, function()
+		self:ReprobeBundledFonts()
+	end)
+end
+
+-- Tells apart a font that loads late, one that applies although SetFont returns false, and one the client refuses.
+function Media:ReprobeBundledFonts()
+	local root = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
+	local result = { ok = 0, fail = 0, error = 0, applied = 0, preloadApplied = 0 }
+	local frame = CreateFrame("Frame")
+	frame:Hide()
+	for _, file in pairs(Media.bundled.font) do
+		local path = root .. file
+		local fs = frame:CreateFontString()
+		local ok, loaded = pcall(fs.SetFont, fs, path, 12, "")
+		if not ok then
+			result.error = result.error + 1
+		elseif loaded then
+			result.ok = result.ok + 1
+		else
+			result.fail = result.fail + 1
+		end
+		if ok and holdsFont(fs, path) then
+			result.applied = result.applied + 1
+		end
+		local preloaded = Media.preload.strings[path]
+		if preloaded and holdsFont(preloaded, path) then
+			result.preloadApplied = result.preloadApplied + 1
+		end
+	end
+	self.reprobe = result
 end
 
 function Media:OnMediaRegistered(_, mediatype, key)
@@ -568,7 +609,17 @@ function Media:GetDebugChecks()
 			name = "font preload",
 			run = function()
 				local preload = Media.preload
-				return "INFO", preload.ok, preload.fail, preload.error, preload.failed[1]
+				return "INFO", preload.ok, preload.fail, preload.error, preload.failed[1], preload.applied
+			end,
+		},
+		{
+			name = "font reprobe",
+			run = function()
+				local r = self.reprobe
+				if r == nil then
+					return "INFO", "not run"
+				end
+				return "INFO", r.ok, r.fail, r.error, r.applied, r.preloadApplied
 			end,
 		},
 		{
