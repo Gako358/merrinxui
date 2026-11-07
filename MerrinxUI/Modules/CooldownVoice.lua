@@ -8,6 +8,7 @@ local defaults = {
 	profile = {
 		enabled = true,
 		spells = "",
+		selected = {},
 		voice = nil,
 		rate = 0,
 		volume = 100,
@@ -33,6 +34,26 @@ local function ResolveToken(token)
 	end
 
 	return id, name
+end
+
+local function isKnown(id)
+	if type(C_SpellBook) ~= "table" then
+		return false
+	end
+	if type(C_SpellBook.IsSpellKnown) == "function" and C_SpellBook.IsSpellKnown(id) == true then
+		return true
+	end
+	return type(C_SpellBook.IsSpellInSpellBook) == "function"
+		and type(Enum.SpellBookSpellBank) == "table"
+		and C_SpellBook.IsSpellInSpellBook(id, Enum.SpellBookSpellBank.Player, false) == true
+end
+
+local function spellName(id)
+	local name = C_Spell.GetSpellName(id)
+	if type(name) ~= "string" or issecretvalue(name) then
+		return nil
+	end
+	return name
 end
 
 local function ObserveCooldown(info, fromEvent)
@@ -61,6 +82,10 @@ function CooldownVoice:OnInitialize()
 	self.unknown = {}
 	self.states = {}
 	self.spoken = 0
+	local _, class = UnitClass("player")
+	self.class = class
+	self.classSpells = L.ClassSpells(class)
+	self.learned = {}
 end
 
 function CooldownVoice:OnEnable()
@@ -87,8 +112,27 @@ function CooldownVoice:Refresh()
 end
 
 function CooldownVoice:Resolve()
-	local tokens = L.ParseList(self.db.profile.spells, ns.RangeTextLogic.NormalizeSpell)
-	local resolved = L.ResolveSpells(tokens, ResolveToken)
+	local fromClass = {}
+	for _, id in ipairs(self.classSpells) do
+		local name = spellName(id)
+		local known = false
+		if name then
+			local resolvedId = ResolveToken(name)
+			known = resolvedId ~= nil and isKnown(resolvedId)
+			fromClass[name] = true
+		end
+		self.learned[id] = known
+	end
+
+	local extra = L.ParseList(self.db.profile.spells, ns.RangeTextLogic.NormalizeSpell)
+	local tokens = L.Tokens(self.classSpells, self.db.profile.selected, spellName, extra)
+	local resolved = L.ResolveSpells(tokens, function(token)
+		local id, name = ResolveToken(token)
+		if id ~= nil and fromClass[token] and not isKnown(id) then
+			return nil
+		end
+		return id, name
+	end)
 	self.tracked = resolved.tracked
 	self.unknown = resolved.unknown
 
@@ -184,7 +228,40 @@ function CooldownVoice:GetOptions()
 		return not self:UsesSound()
 	end
 
-	return {
+	local args = {}
+	args.classSpellsHeader = { type = "header", name = "Spells to announce", order = 20 }
+	if #self.classSpells == 0 then
+		args.noClassSpells = { type = "description", order = 21, name = "No cooldown list for your class." }
+	end
+	for i, id in ipairs(self.classSpells) do
+		args["spell_" .. id] = {
+			type = "toggle",
+			order = 20 + i,
+			name = function()
+				local name = spellName(id) or tostring(id)
+				if self.learned[id] == false then
+					return name .. " (not learned)"
+				end
+				return name
+			end,
+			desc = function()
+				local cd = GetSpellBaseCooldown and GetSpellBaseCooldown(id)
+				if type(cd) == "number" and not issecretvalue(cd) and cd > 0 then
+					return string.format("%d s cooldown", math.floor(cd / 1000 + 0.5))
+				end
+				return nil
+			end,
+			get = function()
+				return self.db.profile.selected[id] == true
+			end,
+			set = function(_, value)
+				self.db.profile.selected[id] = value or nil
+				self:Resolve()
+			end,
+		}
+	end
+
+	local options = {
 		type = "group",
 		name = "CooldownVoice",
 		args = {
@@ -202,9 +279,9 @@ function CooldownVoice:GetOptions()
 			},
 			spells = {
 				type = "input",
-				name = "Spells",
+				name = "Extra spells",
 				order = 2,
-				usage = "Comma-separated spell names or IDs",
+				usage = "Comma-separated spell names or IDs, for spells not in the list below",
 				desc = function()
 					local names = {}
 					for _, spell in ipairs(self.tracked) do
@@ -331,6 +408,10 @@ function CooldownVoice:GetOptions()
 			},
 		},
 	}
+	for key, option in pairs(args) do
+		options.args[key] = option
+	end
+	return options
 end
 
 function CooldownVoice:GetDebugChecks()
@@ -375,6 +456,27 @@ function CooldownVoice:GetDebugChecks()
 					end
 				end
 				return (count > 0) and "PASS" or "FAIL", count, resolvedVoice, storedPresent
+			end,
+		},
+		{
+			name = "class spells",
+			run = function()
+				local unresolved, learned, ticked = {}, 0, 0
+				for _, id in ipairs(self.classSpells) do
+					if spellName(id) == nil then
+						unresolved[#unresolved + 1] = id
+					end
+					if self.learned[id] then
+						learned = learned + 1
+					end
+					if self.db.profile.selected[id] then
+						ticked = ticked + 1
+					end
+				end
+				if #unresolved > 0 then
+					return "FAIL", self.class, unpack(unresolved, 1, #unresolved)
+				end
+				return "PASS", self.class, #self.classSpells, learned, ticked
 			end,
 		},
 		{

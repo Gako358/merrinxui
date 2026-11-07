@@ -133,6 +133,8 @@ read_globals = {
 	"UpdateAddOnMemoryUsage",
 	"GetAddOnMemoryUsage",
 	"C_AddOnProfiler",
+	"C_SpellBook",
+	"UnitIsDeadOrGhost",
 }
 
 globals = {

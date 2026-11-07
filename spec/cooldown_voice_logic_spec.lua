@@ -38,6 +38,41 @@ describe("CooldownVoiceLogic", function()
 		}, result)
 	end)
 
+	it("lists unique cooldown spells for every class", function()
+		for _, class in ipairs({
+			"DRUID",
+			"WARRIOR",
+			"MAGE",
+			"PRIEST",
+			"ROGUE",
+			"HUNTER",
+			"WARLOCK",
+			"PALADIN",
+			"SHAMAN",
+		}) do
+			local list = L.ClassSpells(class)
+			assert.is_true(#list > 0, class)
+			local seen = {}
+			for _, id in ipairs(list) do
+				assert.is_nil(seen[id], class .. " " .. id)
+				seen[id] = true
+			end
+		end
+		assert.are.same({}, L.ClassSpells("NOPE"))
+	end)
+
+	it("builds tokens from ticked class spells first, then extras, without duplicates", function()
+		local names = { [1] = "Barkskin", [2] = "Bash", [3] = nil }
+		local function nameOf(id)
+			return names[id]
+		end
+		assert.are.same(
+			{ "Bash", "Barkskin", 5 },
+			L.Tokens({ 2, 1, 3 }, { [1] = true, [2] = true, [3] = true }, nameOf, { "Bash", "Barkskin", 5 })
+		)
+		assert.are.same({ "Bash" }, L.Tokens({ 1, 2 }, { [2] = true }, nameOf, {}))
+	end)
+
 	it("transitions ready/cooling per observation", function()
 		assert.are.same({ "cooling", false }, { L.Step("ready", "cooling") })
 		assert.are.same({ "ready", false }, { L.Step("ready", "gcd") })
