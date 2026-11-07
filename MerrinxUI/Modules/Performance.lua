@@ -1,28 +1,22 @@
 local addonName, ns = ...
 
 local L = ns.PerformanceLogic
-local FontLogic = ns.FontLogic
-local C = ns.Theme.color
+local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
 
+local PAGE = "Performance"
 local WINDOW = 5
+local TICK = 1
+local REFRESH = 1
 local MEMORY_INTERVAL = 30
-local TOOLTIP_ADDONS = 10
-local WIDTH = 260
-local PAD = 6
-local LINE_GAP = 2
+local TOP_ADDONS = 10
+local VALUE = "|cffffffff"
 
 local Performance = ns.addon:NewModule("Performance", "AceEvent-3.0")
 
 local defaults = {
 	profile = {
 		enabled = false,
-		moduleTiming = true,
-		rows = 8,
-		interval = 1,
-		font = FontLogic.GLOBAL,
-		fontSize = 11,
-		bgOpacity = 60,
-		position = { point = "CENTER", x = 400, y = 0 },
+		rows = 10,
 	},
 }
 
@@ -49,7 +43,7 @@ local function wrap(stats, fn)
 	end
 end
 
-local mixinSources = { LibStub("AceEvent-3.0"), LibStub("AceConsole-3.0") }
+local mixinSources = { (LibStub("AceEvent-3.0")), (LibStub("AceConsole-3.0")) }
 
 local function isMixin(key, value)
 	if value == ns.addon[key] then
@@ -80,6 +74,13 @@ local function cover(label, tbl)
 	end
 end
 
+local function plain(value)
+	if type(value) ~= "number" or issecretvalue(value) then
+		return nil
+	end
+	return value
+end
+
 local function profilerOn()
 	return type(C_AddOnProfiler) == "table"
 		and type(C_AddOnProfiler.IsEnabled) == "function"
@@ -89,85 +90,47 @@ local function profilerOn()
 		and C_AddOnProfiler.IsEnabled() == true
 end
 
-local function plain(value)
-	if type(value) ~= "number" or issecretvalue(value) then
-		return nil
-	end
-	return value
-end
-
 local function metric(name, key)
 	return plain(C_AddOnProfiler.GetAddOnMetric(name, Enum.AddOnProfilerMetric[key]))
 end
 
+local function value(text)
+	return VALUE .. text .. "|r"
+end
+
 function Performance:OnInitialize()
 	self.db = ns.addon.db:RegisterNamespace("Performance", defaults)
+	for _, key in ipairs({ "moduleTiming", "interval", "font", "fontSize", "bgOpacity", "position" }) do
+		self.db.profile[key] = nil
+	end
 	self:SetEnabledState(self.db.profile.enabled)
-	self.lines = {}
 	self.memScans = 0
-	self.lastMemScan = nil
-	self.lastSample = nil
-	self:Build()
+	self.addonCpu, self.addonMemory = {}, {}
 end
 
 function Performance:OnEnable()
-	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
-	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "Render")
-	if self.db.profile.moduleTiming then
-		self:Instrument()
-	end
-	self:StartTicker()
-	self:Layout()
-	ns.Mover:Apply(self.frame)
-	self:Sample()
-	self.frame:Show()
+	self:Instrument()
+	self.lastRoll = GetTime()
+	self.ticker = C_Timer.NewTicker(TICK, function()
+		-- A timed call that raised never reached finish(); this bounds the untimed stretch to one tick.
+		depth = 0
+		self:Roll()
+	end)
 end
 
 function Performance:OnDisable()
-	self:StopTicker()
+	if self.ticker then
+		self.ticker:Cancel()
+		self.ticker = nil
+	end
 	self:Restore()
-	self.frame:Hide()
 end
 
 function Performance:Refresh()
 	if self.db.profile.enabled then
-		if self:IsEnabled() then
-			if self.db.profile.moduleTiming then
-				self:Instrument()
-			else
-				self:Restore()
-			end
-			self:StartTicker()
-			self:Layout()
-			ns.Mover:Apply(self.frame)
-			self:Render()
-		else
-			self:Enable()
-		end
+		self:Enable()
 	else
 		self:Disable()
-	end
-end
-
-function Performance:OnMediaChanged(_, mediatype, key)
-	if mediatype == "font" and (key == nil or key == ns.Media:Resolve("font", self.db.profile.font)) then
-		self:Layout()
-	end
-end
-
-function Performance:StartTicker()
-	self:StopTicker()
-	self.ticker = C_Timer.NewTicker(self.db.profile.interval, function()
-		-- A timed call that raised never reached finish(); this bounds the untimed stretch to one interval.
-		depth = 0
-		self:Sample()
-	end)
-end
-
-function Performance:StopTicker()
-	if self.ticker then
-		self.ticker:Cancel()
-		self.ticker = nil
 	end
 end
 
@@ -185,7 +148,6 @@ function Performance:Instrument()
 	for _, part in ipairs({ "Data", "Window", "Menu", "Tooltip", "Timer" }) do
 		cover("DamageMeter", ns["DamageMeter" .. part])
 	end
-	self.lastSample = GetTime()
 	ns.Debug:Log("Performance", "instrumented", #wrapped)
 end
 
@@ -206,29 +168,33 @@ function Performance:Restore()
 	end
 end
 
-function Performance:ResetStats()
-	for _, stats in pairs(groups) do
-		L.Reset(stats)
-	end
-	self:Render()
-end
-
-function Performance:Sample()
+function Performance:Roll()
 	local now = GetTime()
-	local dt = self.lastSample and (now - self.lastSample) or self.db.profile.interval
-	self.lastSample = now
+	local dt = now - (self.lastRoll or now)
+	self.lastRoll = now
 	if dt > 0 then
 		for _, stats in pairs(groups) do
 			L.Roll(stats, dt, WINDOW)
 		end
 	end
+end
 
+function Performance:ResetStats()
+	for _, stats in pairs(groups) do
+		L.Reset(stats)
+	end
+end
+
+function Performance:Sample()
+	local now = GetTime()
+	self.lastSample = now
 	self.fps = plain(GetFramerate())
 	local _, _, home, world = GetNetStats()
 	self.home, self.world = plain(home), plain(world)
 	self.lua = collectgarbage("count")
 
 	self.profiler = profilerOn()
+	local cpu = {}
 	if self.profiler then
 		self.cpu = metric(addonName, "RecentAverageTime")
 		self.cpuPeak = metric(addonName, "PeakTime")
@@ -240,273 +206,200 @@ function Performance:Sample()
 	end
 
 	-- UpdateAddOnMemoryUsage walks every loaded addon, so it runs rarely and never in combat.
-	if not InCombatLockdown() and (self.lastMemScan == nil or now - self.lastMemScan >= MEMORY_INTERVAL) then
+	local scanMemory = not InCombatLockdown() and (self.lastMemScan == nil or now - self.lastMemScan >= MEMORY_INTERVAL)
+	if scanMemory then
 		self.lastMemScan = now
 		self.memScans = self.memScans + 1
 		UpdateAddOnMemoryUsage()
-		self.memory = GetAddOnMemoryUsage(addonName)
+		self.memory = plain(GetAddOnMemoryUsage(addonName))
 	end
 
-	self:Render()
-end
-
-function Performance:Build()
-	local frame = CreateFrame("Frame", addonName .. "Performance", UIParent, "BackdropTemplate")
-	frame:SetClampedToScreen(true)
-	frame:EnableMouse(true)
-	frame:Hide()
-	frame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-	frame:SetBackdropBorderColor(0, 0, 0, 1)
-	self.frame = frame
-
-	self.bg = frame:CreateTexture(nil, "BACKGROUND")
-	self.bg:SetPoint("TOPLEFT", 1, -1)
-	self.bg:SetPoint("BOTTOMRIGHT", -1, 1)
-
-	frame:SetScript("OnEnter", function(owner)
-		self:ShowTooltip(owner)
-	end)
-	frame:SetScript("OnLeave", function()
-		GameTooltip:Hide()
-	end)
-
-	ns.Mover:Register(frame, "Performance", function()
-		return self.db.profile.position
-	end)
-end
-
-function Performance:Line(i)
-	local line = self.lines[i]
-	if line then
-		return line
-	end
-	local left = self.frame:CreateFontString(nil, "OVERLAY")
-	local right = self.frame:CreateFontString(nil, "OVERLAY")
-	left:SetJustifyH("LEFT")
-	right:SetJustifyH("RIGHT")
-	left:SetWordWrap(false)
-	right:SetWordWrap(false)
-	line = { left = left, right = right }
-	self.lines[i] = line
-	self:StyleLine(line, i)
-	return line
-end
-
-function Performance:StyleLine(line, i)
-	local p = self.db.profile
-	ns.Media:SetFont(line.left, p.font, p.fontSize, "")
-	ns.Media:SetFont(line.right, p.font, p.fontSize, "")
-	local y = -PAD - (i - 1) * (p.fontSize + LINE_GAP)
-	line.left:ClearAllPoints()
-	line.right:ClearAllPoints()
-	line.left:SetPoint("TOPLEFT", PAD, y)
-	line.right:SetPoint("TOPRIGHT", -PAD, y)
-	line.left:SetWidth(WIDTH * 0.45)
-	line.right:SetWidth(WIDTH * 0.55 - PAD * 2)
-end
-
-function Performance:Layout()
-	local p = self.db.profile
-	self.bg:SetColorTexture(0, 0, 0, p.bgOpacity / 100)
-	for i, line in ipairs(self.lines) do
-		self:StyleLine(line, i)
-	end
-	self:Render()
-end
-
-local function setLine(line, label, value, dim)
-	local color = dim and C.textDim or C.text
-	line.left:SetText(label)
-	line.right:SetText(value)
-	line.left:SetTextColor(color[1], color[2], color[3], color[4])
-	line.right:SetTextColor(C.text[1], C.text[2], C.text[3], C.text[4])
-	line.left:Show()
-	line.right:Show()
-end
-
-function Performance:Entries()
-	local entries = {}
-	local function add(label, value, dim)
-		entries[#entries + 1] = { label, value, dim }
-	end
-
-	local fps = self.fps or 0
-	add("FPS", string.format("%.0f", fps))
-	if type(self.home) == "number" and type(self.world) == "number" then
-		add("Latency", string.format("%d / %d ms", self.home, self.world))
-	end
-	if self.profiler then
-		add("CPU", string.format("%s (%.1f%%)", L.FormatMs(self.cpu), L.FrameShare(self.cpu, fps)), false)
-		add("CPU peak", L.FormatMs(self.cpuPeak))
-		if self.overall then
-			add("Of all addons", string.format("%.0f%%", L.Share(self.cpu, self.overall)))
-		end
-	else
-		add("CPU", "profiler off", true)
-	end
-	add("Memory", L.FormatMemory(self.memory))
-	add("Lua total", L.FormatMemory(self.lua))
-
-	local p = self.db.profile
-	if p.moduleTiming and p.rows > 0 and #wrapped > 0 then
-		local total = L.Sum(groups)
-		add("Module", "ms/s", true)
-		for _, row in ipairs(L.Top(groups, p.rows)) do
-			add(row.name, string.format("%.2f  %3.0f%%", row.rate, L.Share(row.rate, total)))
-		end
-	end
-	return entries
-end
-
-function Performance:Render()
-	if not self:IsEnabled() then
-		return
-	end
-	local entries = self:Entries()
-	for i, e in ipairs(entries) do
-		setLine(self:Line(i), e[1], e[2], e[3])
-	end
-	for i = #entries + 1, #self.lines do
-		self.lines[i].left:Hide()
-		self.lines[i].right:Hide()
-	end
-	local step = self.db.profile.fontSize + LINE_GAP
-	self.frame:SetSize(WIDTH, PAD * 2 + #entries * step - LINE_GAP)
-	self.frame:Show()
-end
-
-function Performance:AddOnLists()
-	local cpu, memory = {}, {}
-	if type(C_AddOns) ~= "table" or type(C_AddOns.GetNumAddOns) ~= "function" then
-		return cpu, memory
-	end
-	local profiler = profilerOn()
-	local now = GetTime()
-	if not InCombatLockdown() and (self.lastMemScan == nil or now - self.lastMemScan >= MEMORY_INTERVAL) then
-		self.lastMemScan = now
-		self.memScans = self.memScans + 1
-		UpdateAddOnMemoryUsage()
-		self.memory = GetAddOnMemoryUsage(addonName)
-	end
+	local memory = {}
 	for i = 1, C_AddOns.GetNumAddOns() do
 		if C_AddOns.IsAddOnLoaded(i) then
 			local name = C_AddOns.GetAddOnInfo(i)
-			memory[#memory + 1] = { name = name, value = plain(GetAddOnMemoryUsage(i)) }
-			if profiler then
+			if self.profiler then
 				cpu[#cpu + 1] = { name = name, value = metric(name, "RecentAverageTime") }
 			end
-		end
-	end
-	return L.SortAddOns(cpu, TOOLTIP_ADDONS), L.SortAddOns(memory, TOOLTIP_ADDONS)
-end
-
-function Performance:ShowTooltip(owner)
-	local cpu, memory = self:AddOnLists()
-	GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-	GameTooltip:SetText("Performance", 1, 1, 1)
-	if #cpu > 0 then
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("CPU per frame", C.accent[1], C.accent[2], C.accent[3])
-		for _, e in ipairs(cpu) do
-			GameTooltip:AddDoubleLine(e.name, L.FormatMs(e.value), 1, 1, 1, 1, 1, 1)
-		end
-	elseif not profilerOn() then
-		GameTooltip:AddLine("The client's addon profiler is off", 1, 1, 1)
-	end
-	if #memory > 0 then
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("Memory", C.accent[1], C.accent[2], C.accent[3])
-		for _, e in ipairs(memory) do
-			GameTooltip:AddDoubleLine(e.name, L.FormatMemory(e.value), 1, 1, 1, 1, 1, 1)
-		end
-	end
-	if self.db.profile.moduleTiming and #wrapped > 0 then
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("Module ms/s: last " .. WINDOW .. " samples. Totals since reset:", 1, 1, 1)
-		for _, row in ipairs(L.Top(groups, 20)) do
-			if row.calls > 0 then
-				GameTooltip:AddDoubleLine(
-					row.name,
-					string.format("%.0f ms, %d calls, peak %s", row.total, row.calls, L.FormatMs(row.peak)),
-					1,
-					1,
-					1,
-					1,
-					1,
-					1
-				)
+			if scanMemory then
+				memory[#memory + 1] = { name = name, value = plain(GetAddOnMemoryUsage(i)) }
 			end
 		end
 	end
-	GameTooltip:Show()
+	self.addonCpu = L.SortAddOns(cpu, TOP_ADDONS)
+	if scanMemory then
+		self.addonMemory = L.SortAddOns(memory, TOP_ADDONS)
+	end
+end
+
+-- The page is plain text, so it is re-rendered once a second for as long as it stays open.
+function Performance:Live()
+	local now = GetTime()
+	if self.lastSample == nil or now - self.lastSample >= REFRESH * 0.5 then
+		self:Sample()
+	end
+	if self.refreshPending then
+		return
+	end
+	self.refreshPending = true
+	C_Timer.After(REFRESH, function()
+		self.refreshPending = false
+		if ns.OptionsWindow:CurrentPage() == PAGE then
+			AceConfigRegistry:NotifyChange("MerrinxUI")
+		end
+	end)
+end
+
+function Performance:OverviewText()
+	self:Live()
+	local fps = self.fps or 0
+	local lines = {
+		"FPS  " .. value(string.format("%.0f", fps)),
+	}
+	if self.home and self.world then
+		lines[#lines + 1] = "Latency  " .. value(string.format("%d ms home, %d ms world", self.home, self.world))
+	end
+	if self.profiler then
+		lines[#lines + 1] = "MerrinxUI CPU  "
+			.. value(
+				string.format(
+					"%s per frame (%.1f%% of a frame), peak %s",
+					L.FormatMs(self.cpu),
+					L.FrameShare(self.cpu, fps),
+					L.FormatMs(self.cpuPeak)
+				)
+			)
+		if self.overall then
+			lines[#lines + 1] = "Share of all addon CPU  "
+				.. value(string.format("%.0f%%", L.Share(self.cpu, self.overall)))
+		end
+	else
+		lines[#lines + 1] = "MerrinxUI CPU  " .. value("the client's addon profiler is off")
+	end
+	lines[#lines + 1] = "MerrinxUI memory  "
+		.. value(self.memory and L.FormatMemory(self.memory) or "after combat")
+		.. "    Lua total  "
+		.. value(L.FormatMemory(self.lua))
+	return table.concat(lines, "\n")
+end
+
+function Performance:ModulesText()
+	if not self:IsEnabled() then
+		return "Turn on Time each module to see which modules use the most CPU."
+	end
+	local total = L.Sum(groups)
+	local lines = {}
+	for _, row in ipairs(L.Top(groups, self.db.profile.rows)) do
+		if row.calls > 0 then
+			lines[#lines + 1] = row.name
+				.. "  "
+				.. value(
+					string.format(
+						"%.2f ms/s (%.0f%%), %d calls, peak %s",
+						row.rate,
+						L.Share(row.rate, total),
+						row.calls,
+						L.FormatMs(row.peak)
+					)
+				)
+		end
+	end
+	if #lines == 0 then
+		return "No module work recorded yet."
+	end
+	return "ms of CPU per second over the last " .. WINDOW .. " seconds.\n" .. table.concat(lines, "\n")
+end
+
+local function listText(entries, format)
+	if #entries == 0 then
+		return "Nothing recorded yet."
+	end
+	local lines = {}
+	for i, e in ipairs(entries) do
+		lines[i] = e.name .. "  " .. value(format(e.value))
+	end
+	return table.concat(lines, "\n")
 end
 
 function Performance:GetOptions()
 	local pf = self
-	local function get(key)
-		return function()
-			return pf.db.profile[key]
-		end
-	end
-	local function set(key)
-		return function(_, value)
-			pf.db.profile[key] = value
-			pf:Refresh()
-		end
-	end
-	local function range(key, name, order, min, max, step)
-		return {
-			type = "range",
-			name = name,
-			order = order,
-			min = min,
-			max = max,
-			step = step,
-			get = get(key),
-			set = set(key),
-		}
-	end
 	return {
 		type = "group",
-		name = "Performance",
+		name = PAGE,
 		args = {
 			enabled = {
 				type = "toggle",
-				name = "Enabled",
-				order = 1,
-				desc = "FPS, latency, MerrinxUI CPU and memory; hover the panel for the top addons",
-				get = get("enabled"),
-				set = set("enabled"),
-			},
-			moduleTiming = {
-				type = "toggle",
 				name = "Time each module",
-				order = 2,
+				order = 1,
 				desc = "Measures how long each MerrinxUI module runs. Adds a small cost of its own while on.",
-				get = get("moduleTiming"),
-				set = set("moduleTiming"),
-			},
-			rows = range("rows", "Module rows", 3, 0, 20, 1),
-			interval = range("interval", "Update every (s)", 4, 0.5, 5, 0.5),
-			font = {
-				type = "select",
-				name = "Font",
-				order = 5,
-				dialogControl = "LSM30_Font",
-				values = function()
-					return ns.Media:Values("font", pf.db.profile.font)
+				get = function()
+					return pf.db.profile.enabled
 				end,
-				get = get("font"),
-				set = set("font"),
+				set = function(_, v)
+					pf.db.profile.enabled = v
+					pf:Refresh()
+				end,
 			},
-			fontSize = range("fontSize", "Font size", 6, 8, 20, 1),
-			bgOpacity = range("bgOpacity", "Background opacity", 7, 0, 100, 5),
+			rows = {
+				type = "range",
+				name = "Modules shown",
+				order = 2,
+				min = 1,
+				max = 20,
+				step = 1,
+				get = function()
+					return pf.db.profile.rows
+				end,
+				set = function(_, v)
+					pf.db.profile.rows = v
+				end,
+			},
 			reset = {
 				type = "execute",
 				name = "Reset module times",
-				order = 8,
+				order = 3,
 				func = function()
 					pf:ResetStats()
+				end,
+			},
+			overviewHeader = { type = "header", name = "Overview", order = 10 },
+			overview = {
+				type = "description",
+				order = 11,
+				name = function()
+					return pf:OverviewText()
+				end,
+			},
+			modulesHeader = { type = "header", name = "Modules", order = 20 },
+			modules = {
+				type = "description",
+				order = 21,
+				name = function()
+					return pf:ModulesText()
+				end,
+			},
+			cpuHeader = { type = "header", name = "Top addons by CPU per frame", order = 30 },
+			cpu = {
+				type = "description",
+				order = 31,
+				name = function()
+					pf:Live()
+					if not pf.profiler then
+						return "The client's addon profiler is off."
+					end
+					return listText(pf.addonCpu, L.FormatMs)
+				end,
+			},
+			memoryHeader = { type = "header", name = "Top addons by memory", order = 40 },
+			memory = {
+				type = "description",
+				order = 41,
+				name = function()
+					pf:Live()
+					return listText(pf.addonMemory, L.FormatMemory)
+						.. "\nRefreshed at most every "
+						.. MEMORY_INTERVAL
+						.. " seconds, never in combat."
 				end,
 			},
 		},
@@ -527,6 +420,7 @@ function Performance:GetDebugChecks()
 					GetAddOnMemoryUsage = GetAddOnMemoryUsage,
 					["C_AddOns.GetNumAddOns"] = C_AddOns and C_AddOns.GetNumAddOns,
 					["C_AddOns.IsAddOnLoaded"] = C_AddOns and C_AddOns.IsAddOnLoaded,
+					["C_AddOns.GetAddOnInfo"] = C_AddOns and C_AddOns.GetAddOnInfo,
 				}) do
 					if type(fn) ~= "function" then
 						table.insert(missing, name)
@@ -550,21 +444,26 @@ function Performance:GetDebugChecks()
 		},
 		{
 			name = "sample",
-			run = function(ctx)
-				if ctx.enabled == false then
-					return "SKIP", "module disabled"
+			run = function()
+				if self.lastSample == nil then
+					return "SKIP", "page not opened"
 				end
 				local ok = type(self.fps) == "number" and type(self.lua) == "number"
-				return ok and "PASS" or "FAIL", self.fps, self.home, self.world, self.memory, self.lua, self.memScans
+				return ok and "PASS" or "FAIL",
+					self.fps,
+					self.home,
+					self.world,
+					self.memory,
+					self.lua,
+					self.memScans,
+					#self.addonCpu,
+					#self.addonMemory
 			end,
 		},
 		{
 			name = "instrumentation",
 			run = function(ctx)
 				if ctx.enabled == false then
-					return "SKIP", "module disabled"
-				end
-				if not self.db.profile.moduleTiming then
 					return #wrapped == 0 and "PASS" or "FAIL", "off", #wrapped
 				end
 				local intact = 0
@@ -583,23 +482,14 @@ function Performance:GetDebugChecks()
 		{
 			name = "top modules",
 			run = function(ctx)
-				if ctx.enabled == false or #wrapped == 0 then
-					return "SKIP", "not timing"
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
 				end
 				local out = {}
 				for _, row in ipairs(L.Top(groups, 8)) do
 					out[#out + 1] = string.format("%s=%.2f/%.0f/%d", row.name, row.rate, row.total, row.calls)
 				end
 				return "INFO", unpack(out, 1, #out)
-			end,
-		},
-		{
-			name = "panel",
-			run = function(ctx)
-				if ctx.enabled == false then
-					return "SKIP", "module disabled"
-				end
-				return self.frame:IsShown() and "PASS" or "FAIL", #self.lines, self.frame:GetHeight()
 			end,
 		},
 	}

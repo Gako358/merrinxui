@@ -1471,6 +1471,11 @@ function W:IsShown()
 	return frame ~= nil and frame:IsShown() == true
 end
 
+function W:CurrentPage()
+	local page = self:IsShown() and pages[currentPageIndex]
+	return page and page.label or nil
+end
+
 function W:OnConfigTableChange(_, changedAppName)
 	if changedAppName == appName and frame and frame:IsShown() then
 		requestRender()
