@@ -135,6 +135,7 @@ read_globals = {
 	"C_AddOnProfiler",
 	"C_SpellBook",
 	"UnitIsDeadOrGhost",
+	"GameTooltip_SetDefaultAnchor",
 }
 
 globals = {

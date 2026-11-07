@@ -56,6 +56,7 @@ function UnitFrames:OnInitialize()
 	self.frames = {}
 	self.manaShown = false
 	self.updates = 0
+	self.tooltips = 0
 	local _, class = UnitClass("player")
 	self.class = class
 end
@@ -204,6 +205,12 @@ function UnitFrames:Build()
 			frame:HookScript("OnShow", function()
 				self:UpdateUnit(unit)
 			end)
+			frame:HookScript("OnEnter", function(owner)
+				self:ShowTooltip(owner)
+			end)
+			frame:HookScript("OnLeave", function()
+				GameTooltip:Hide()
+			end)
 			if L.Watched(unit) then
 				RegisterUnitWatch(frame)
 			end
@@ -213,6 +220,20 @@ function UnitFrames:Build()
 			end)
 		end
 	end
+end
+
+function UnitFrames:ShowTooltip(owner)
+	if not UnitExists(owner.unit) then
+		return
+	end
+	if type(GameTooltip_SetDefaultAnchor) == "function" then
+		GameTooltip_SetDefaultAnchor(GameTooltip, owner)
+	else
+		GameTooltip:SetOwner(owner, "ANCHOR_BOTTOMRIGHT")
+	end
+	GameTooltip:SetUnit(owner.unit)
+	GameTooltip:Show()
+	self.tooltips = self.tooltips + 1
 end
 
 -- Size, fonts and textures; protected, so out of combat only.
@@ -632,6 +653,25 @@ function UnitFrames:GetDebugChecks()
 					built = built + 1
 				end
 				return (built == #L.UNITS) and "PASS" or "FAIL", built, self.updates
+			end,
+		},
+		{
+			name = "tooltip",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local missing = {}
+				for unit, frame in pairs(self.frames) do
+					if not frame:GetScript("OnEnter") then
+						missing[#missing + 1] = unit
+					end
+				end
+				table.sort(missing)
+				if #missing > 0 then
+					return "FAIL", unpack(missing, 1, #missing)
+				end
+				return "PASS", self.tooltips, type(GameTooltip_SetDefaultAnchor)
 			end,
 		},
 		{
