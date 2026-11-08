@@ -8,6 +8,7 @@ local MANA = Enum.PowerType.Mana
 local MANA_COLOR = { 0, 0.55, 1 }
 local HEAL_COLOR = { 0.2, 0.9, 0.3, 0.5 }
 local ABSORB_COLOR = { 0.85, 0.95, 1, 0.5 }
+local COST_COLOR = { 1, 1, 1, 0.4 }
 
 local UnitFrames = ns.addon:NewModule("UnitFrames", "AceEvent-3.0")
 
@@ -36,6 +37,7 @@ local defaults = {
 		druidManaText = false,
 		incomingHeals = true,
 		absorbs = true,
+		spellCost = true,
 		units = {
 			player = unitDefaults(220, 44, 8, -280, -180),
 			target = unitDefaults(220, 44, 8, 280, -180),
@@ -55,6 +57,7 @@ function UnitFrames:OnInitialize()
 	self:SetEnabledState(self.db.profile.enabled)
 	self.frames = {}
 	self.manaShown = false
+	self.castCost = 0
 	self.updates = 0
 	self.tooltips = 0
 	local _, class = UnitClass("player")
@@ -82,6 +85,15 @@ function UnitFrames:OnEnable()
 	end
 	self:RegisterEvent("UNIT_HEAL_PREDICTION", "OnPredictionEvent")
 	self:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED", "OnPredictionEvent")
+	self:RegisterEvent("UNIT_SPELLCAST_START", "OnCastStart")
+	for _, event in ipairs({
+		"UNIT_SPELLCAST_STOP",
+		"UNIT_SPELLCAST_FAILED",
+		"UNIT_SPELLCAST_INTERRUPTED",
+		"UNIT_SPELLCAST_SUCCEEDED",
+	}) do
+		self:RegisterEvent(event, "OnCastEnd")
+	end
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "UpdateAll")
 	self:RegisterEvent("PLAYER_FOCUS_CHANGED", "UpdateAll")
 	self:RegisterEvent("UNIT_PET", "UpdateAll")
@@ -187,6 +199,16 @@ function UnitFrames:Build()
 				frame.absorb:SetMinMaxValues(0, 1)
 				frame.absorb:SetReverseFill(true)
 				frame.absorb:SetAllPoints(frame.health)
+
+				-- Overlays the end of the power fill, the part the cast will spend.
+				frame.power:SetClipsChildren(true)
+				local powerFill = frame.power:GetStatusBarTexture()
+				frame.cost = CreateFrame("StatusBar", nil, frame.power)
+				frame.cost:SetMinMaxValues(0, 1)
+				frame.cost:SetValue(0)
+				frame.cost:SetReverseFill(true)
+				frame.cost:SetPoint("TOPRIGHT", powerFill, "TOPRIGHT", 0, 0)
+				frame.cost:SetPoint("BOTTOMRIGHT", powerFill, "BOTTOMRIGHT", 0, 0)
 			end
 
 			local text = CreateFrame("Frame", nil, frame)
@@ -257,6 +279,10 @@ function UnitFrames:Layout()
 			frame.absorb:SetStatusBarTexture(texture)
 			frame.absorb:SetStatusBarColor(unpack(ABSORB_COLOR))
 			frame.absorb:SetShown(p.absorbs)
+			frame.cost:SetStatusBarTexture(texture)
+			frame.cost:SetStatusBarColor(unpack(COST_COLOR))
+			frame.cost:SetWidth(u.width - 2)
+			frame.cost:SetShown(p.spellCost)
 		end
 		ns.Media:SetFont(frame.name, p.font, p.fontSize, "")
 		ns.Media:SetFont(frame.healthText, p.font, p.fontSize, "")
@@ -378,6 +404,9 @@ function UnitFrames:UpdateUnit(unit)
 			token = nil
 		end
 		frame.power:SetStatusBarColor(NL.PowerColor(token))
+		if frame.cost then
+			self:UpdateCost()
+		end
 		frame.powerText:SetText(
 			NL.FormatValue(
 				p.powerText,
@@ -414,6 +443,37 @@ function UnitFrames:OnPredictionEvent(_, unit)
 		return
 	end
 	self:UpdatePrediction(frame, UnitHealthMax("player"))
+end
+
+function UnitFrames:UpdateCost()
+	local frame = self.frames.player
+	if not frame or not frame.cost:IsShown() or not frame.power:IsVisible() then
+		return
+	end
+	frame.cost:SetMinMaxValues(0, UnitPowerMax("player"))
+	frame.cost:SetValue(self.castCost)
+end
+
+function UnitFrames:OnCastStart(_, unit, castGUID, spellID)
+	if unit ~= "player" then
+		return
+	end
+	local costs = nil
+	if not isSecret(spellID) and spellID ~= nil then
+		costs = C_Spell.GetSpellPowerCost(spellID)
+	end
+	self.castGUID = castGUID
+	self.castCost = L.SpellCost(costs, UnitPowerType("player"), isSecret)
+	self:UpdateCost()
+end
+
+function UnitFrames:OnCastEnd(_, unit, castGUID)
+	if unit ~= "player" or not ns.CastBarLogic.SameCast(self.castGUID, castGUID, isSecret) then
+		return
+	end
+	self.castGUID = nil
+	self.castCost = 0
+	self:UpdateCost()
 end
 
 function UnitFrames:UpdateDruidMana()
@@ -575,6 +635,22 @@ function UnitFrames:GetOptions()
 				},
 			},
 		},
+		cost = {
+			type = "group",
+			name = "Player Power",
+			order = 22,
+			inline = true,
+			args = {
+				spellCost = {
+					type = "toggle",
+					name = "Spell cost",
+					desc = "Highlights the power the spell you are casting will spend at the end of the power fill",
+					order = 1,
+					get = get("spellCost"),
+					set = set("spellCost"),
+				},
+			},
+		},
 	}
 	for i, unit in ipairs(L.UNITS) do
 		local function uget(key)
@@ -630,6 +706,7 @@ function UnitFrames:GetDebugChecks()
 					AbbreviateNumbers = AbbreviateNumbers,
 					UnitGetIncomingHeals = UnitGetIncomingHeals,
 					UnitGetTotalAbsorbs = UnitGetTotalAbsorbs,
+					["C_Spell.GetSpellPowerCost"] = C_Spell and C_Spell.GetSpellPowerCost,
 				}) do
 					if type(fn) ~= "function" then
 						table.insert(missing, name)
@@ -744,6 +821,22 @@ function UnitFrames:GetDebugChecks()
 					frame.absorb:IsShown(),
 					isSecret(heal) and "secret" or heal,
 					isSecret(absorb) and "secret" or absorb
+			end,
+		},
+		{
+			name = "spell cost",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local frame = self.frames.player
+				if not frame or not frame.cost then
+					return "FAIL", "missing"
+				end
+				local ok = frame.cost:IsShown() == self.db.profile.spellCost
+				return ok and "PASS" or "FAIL",
+					frame.cost:IsShown(),
+					isSecret(self.castCost) and "secret" or self.castCost
 			end,
 		},
 	}

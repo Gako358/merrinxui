@@ -48,4 +48,21 @@ describe("UnitFrameLogic", function()
 		assert.are.equal(1200, L.Amount(1200, isSecret))
 		assert.are.equal(secret, L.Amount(secret, isSecret))
 	end)
+
+	it("SpellCost picks the cost in the shown power type", function()
+		local secret = {}
+		local function isSecret(v)
+			return v == secret
+		end
+		local costs = { { type = 3, cost = 40 }, { type = 0, cost = 250 } }
+		assert.are.equal(250, L.SpellCost(costs, 0, isSecret))
+		assert.are.equal(40, L.SpellCost(costs, 3, isSecret))
+		assert.are.equal(0, L.SpellCost(costs, 1, isSecret))
+		assert.are.equal(0, L.SpellCost(nil, 0, isSecret))
+		assert.are.equal(0, L.SpellCost(costs, nil, isSecret))
+		assert.are.equal(0, L.SpellCost(costs, secret, isSecret))
+		assert.are.equal(0, L.SpellCost({ { type = secret, cost = 250 } }, 0, isSecret))
+		assert.are.equal(secret, L.SpellCost({ { type = 0, cost = secret } }, 0, isSecret))
+		assert.are.equal(0, L.SpellCost({ { type = 0 } }, 0, isSecret))
+	end)
 end)

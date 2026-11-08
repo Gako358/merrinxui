@@ -58,3 +58,17 @@ function L.Amount(value, isSecret)
 	end
 	return 0
 end
+
+-- costs is C_Spell.GetSpellPowerCost's list, nil for a free spell; entries of
+-- an unreadable power type cannot be matched and count as no cost.
+function L.SpellCost(costs, powerType, isSecret)
+	if costs == nil or isSecret(costs) or powerType == nil or isSecret(powerType) then
+		return 0
+	end
+	for _, info in ipairs(costs) do
+		if not isSecret(info.type) and info.type == powerType then
+			return L.Amount(info.cost, isSecret)
+		end
+	end
+	return 0
+end
