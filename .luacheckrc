@@ -136,6 +136,7 @@ read_globals = {
 	"C_SpellBook",
 	"UnitIsDeadOrGhost",
 	"GameTooltip_SetDefaultAnchor",
+	"GetComboPoints",
 }
 
 globals = {

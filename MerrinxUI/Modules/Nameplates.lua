@@ -51,6 +51,7 @@ local defaults = {
 		castInterruptFlash = true,
 		threatColors = true,
 		threatRole = "auto",
+		comboPoints = true,
 	},
 }
 
@@ -82,6 +83,10 @@ local UNINTERRUPTIBLE_COLOR = { 0.45, 0.45, 0.45 }
 local INTERRUPTED_COLOR = { 0.8, 0, 0 }
 local INTERRUPTED_HOLD = 1
 local INTERRUPTED_TEXT = "Interrupted"
+local COMBO_MAX = 5
+local COMBO_SIZE = 8
+local COMBO_GAP = 2
+local COMBO_COLOR = { 1, 0.8, 0.1 }
 
 local CAST_EVENTS = {
 	UNIT_SPELLCAST_START = "OnCastStart",
@@ -166,6 +171,27 @@ function Nameplates:OnInitialize()
 	self.alphaBoolResets = 0
 	self.debuffContainersInCombat = 0
 	self.debuffResizePending = false
+
+	self.comboClass = NameplateLogic.UsesComboPoints(select(2, UnitClass("player")))
+	self.comboEvents = CreateFrame("Frame")
+	self.comboEvents:SetScript("OnEvent", function(_, _, _, powerType)
+		local token = Plain(powerType)
+		if token == nil or token == "COMBO_POINTS" then
+			self:UpdateComboPoints()
+		end
+	end)
+end
+
+function Nameplates:ComboActive()
+	return self.db.profile.comboPoints and self.comboClass
+end
+
+function Nameplates:SetComboEventsEnabled(enable)
+	if enable then
+		self.comboEvents:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")
+	else
+		self.comboEvents:UnregisterAllEvents()
+	end
 end
 
 function Nameplates:OnEnable()
@@ -185,6 +211,7 @@ function Nameplates:OnEnable()
 	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
 	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
 	self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
+	self:SetComboEventsEnabled(self:ComboActive())
 
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.unitToken
@@ -197,6 +224,7 @@ end
 
 function Nameplates:OnDisable()
 	self:SetCastEventsEnabled(false)
+	self:SetComboEventsEnabled(false)
 
 	for _, frame in pairs(self.plateFrames) do
 		frame:Hide()
@@ -221,6 +249,7 @@ function Nameplates:Refresh()
 		self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
 		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
 		self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
+		self:SetComboEventsEnabled(self:ComboActive())
 		for _, frame in pairs(self.plateFrames) do
 			self:ApplySize(frame)
 		end
@@ -239,6 +268,7 @@ function Nameplates:Refresh()
 				self:UpdateCC(unit, frame)
 			end
 		end
+		self:UpdateComboPoints()
 	else
 		self:Disable()
 	end
@@ -313,6 +343,7 @@ function Nameplates:OnTargetChanged()
 			self:UpdateTargetState(unit, frame)
 		end
 	end
+	self:UpdateComboPoints()
 end
 
 function Nameplates:OnRaidTargetUpdate()
@@ -431,6 +462,7 @@ function Nameplates:StyleUnit(unit)
 	self:UpdatePower(unit, frame)
 	self:UpdateDebuffs(unit, frame)
 	self:UpdateCC(unit, frame)
+	self:UpdateComboPoints()
 
 	if isNewPlate and ns.Debug:IsActive() then
 		local isPlayer = UnitIsPlayer(unit)
@@ -670,6 +702,27 @@ function Nameplates:CreateStyledFrame(plate)
 	local nameText = frame:CreateFontString(nil, "OVERLAY")
 	nameText:SetPoint("BOTTOM", frame, "TOP", 0, 2)
 
+	local comboRow = CreateFrame("Frame", nil, frame)
+	comboRow:SetPoint("BOTTOM", nameText, "TOP", 0, COMBO_GAP)
+	comboRow:SetSize(COMBO_MAX * COMBO_SIZE + (COMBO_MAX - 1) * COMBO_GAP, COMBO_SIZE)
+	comboRow:Hide()
+
+	local comboPips, comboBgs = {}, {}
+	for i = 1, COMBO_MAX do
+		local pip = CreateFrame("StatusBar", nil, comboRow)
+		pip:SetSize(COMBO_SIZE, COMBO_SIZE)
+		pip:SetPoint("LEFT", comboRow, "LEFT", (i - 1) * (COMBO_SIZE + COMBO_GAP), 0)
+		pip:SetStatusBarTexture(BAR_TEXTURE)
+		-- each pip spans one point, so SetValue fills it without comparing a possibly secret count
+		pip:SetMinMaxValues(i - 1, i)
+		local pipBg = pip:CreateTexture(nil, "BACKGROUND")
+		pipBg:SetAllPoints(pip)
+		pipBg:SetTexture(BAR_TEXTURE)
+		pipBg:SetVertexColor(0.1, 0.1, 0.1, 1)
+		comboPips[i] = pip
+		comboBgs[i] = pipBg
+	end
+
 	local powerBar = CreateFrame("StatusBar", nil, frame)
 	powerBar:SetPoint("TOPLEFT", healthBar, "BOTTOMLEFT", 0, -POWER_BAR_GAP)
 	powerBar:SetPoint("TOPRIGHT", healthBar, "BOTTOMRIGHT", 0, -POWER_BAR_GAP)
@@ -745,6 +798,9 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.raidMarker = raidMarker
 	frame.classification = classification
 	frame.nameText = nameText
+	frame.comboRow = comboRow
+	frame.comboPips = comboPips
+	frame.comboBgs = comboBgs
 	frame.powerBar = powerBar
 	frame.powerBg = powerBg
 	frame.powerText = powerText
@@ -796,6 +852,9 @@ function Nameplates:ApplySize(frame)
 	frame.healthBg:SetAlpha(profile.bgOpacity / 100)
 	frame.powerBg:SetAlpha(profile.bgOpacity / 100)
 	frame.castBg:SetAlpha(profile.bgOpacity / 100)
+	for _, pipBg in ipairs(frame.comboBgs) do
+		pipBg:SetAlpha(profile.bgOpacity / 100)
+	end
 	local _, namePath = ns.Media:SetFont(frame.nameText, profile.font, profile.nameSize, "OUTLINE")
 	self.appliedFont = namePath
 	ns.Media:SetFont(frame.healthText, profile.font, profile.nameSize - 1, "OUTLINE")
@@ -841,6 +900,10 @@ function Nameplates:ApplySize(frame)
 		barPath = ns.Media:SetStatusBarTexture(frame.healthBar, profile.barTexture)
 		ns.Media:SetStatusBarTexture(frame.powerBar, profile.barTexture)
 		ns.Media:SetStatusBarTexture(frame.castBar, profile.barTexture)
+		for _, pip in ipairs(frame.comboPips) do
+			ns.Media:SetStatusBarTexture(pip, profile.barTexture)
+			pip:SetStatusBarColor(COMBO_COLOR[1], COMBO_COLOR[2], COMBO_COLOR[3])
+		end
 
 		frame.healthBar:SetStatusBarColor(hr, hg, hb)
 		frame.powerBar:SetStatusBarColor(pr, pg, pb)
@@ -949,6 +1012,8 @@ local function DebuffAnchorFrame(frame, profile)
 		relativeTo = profile.levelText and frame.levelText or frame
 	elseif anchor == "LEFT" then
 		relativeTo = (profile.cc and frame.cc) or frame
+	elseif Nameplates:ComboActive() then
+		relativeTo = frame.comboRow
 	else
 		relativeTo = frame.nameText
 	end
@@ -1031,6 +1096,30 @@ function Nameplates:UpdateCC(unit, frame)
 		ResizeAuraButtons(cc, CC_GROUP, profile.ccSize)
 		self:ApplyPendingDebuffResize()
 	end
+end
+
+function Nameplates:ComboTargetFrame()
+	local plate = C_NamePlate.GetNamePlateForUnit("target")
+	return plate and self.plateFrames[plate]
+end
+
+-- combo points live on the target, so only the target plate shows them; every plate keeps the row's space
+function Nameplates:UpdateComboPoints()
+	local target = self:ComboActive() and self:ComboTargetFrame()
+	for _, frame in pairs(self.plateFrames) do
+		if frame ~= target then
+			frame.comboRow:Hide()
+		end
+	end
+	if not target then
+		return
+	end
+
+	local points = GetComboPoints("player", "target")
+	for _, pip in ipairs(target.comboPips) do
+		pip:SetValue(points)
+	end
+	target.comboRow:SetShown(issecretvalue(points) or points > 0)
 end
 
 function Nameplates:UpdateName(unit, frame)
@@ -1809,6 +1898,13 @@ function Nameplates:GetOptions()
 		}
 	end
 
+	option("comboPoints", {
+		type = "toggle",
+		name = "Combo points",
+		desc = "Rogues and druids: shows your combo points on the target's plate, between the name and the debuffs.",
+		order = 24,
+	})
+
 	options.args.markerHeader = { type = "header", name = "Markers", order = 30 }
 	option("raidMarkerPos", {
 		type = "select",
@@ -1997,6 +2093,7 @@ function Nameplates:GetDebugChecks()
 					"UnitThreatSituation",
 					"UnitGroupRolesAssigned",
 					"UnitAffectingCombat",
+					"GetComboPoints",
 				}
 
 				local missing = {}
@@ -2762,6 +2859,42 @@ function Nameplates:GetDebugChecks()
 					end
 				end
 				return status, count, width, height, expected, owned, bound, protected, self.debuffContainersInCombat
+			end,
+		},
+		{
+			name = "combo points",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not self:ComboActive() then
+					return "SKIP", "combo points off or class without combo points"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local points = GetComboPoints("player", "target")
+				local shown = frame.comboRow:IsShown() == true
+				if issecretvalue(points) then
+					return shown and "INFO" or "FAIL", "secret", shown
+				end
+
+				local ok = shown == (points > 0)
+				for i, pip in ipairs(frame.comboPips) do
+					local value = pip:GetValue()
+					if issecretvalue(value) then
+						return ok and "INFO" or "FAIL", points, shown, "pips secret"
+					end
+					local expected = math.max(i - 1, math.min(i, points))
+					ok = ok and math.abs(value - expected) <= 0.01
+				end
+				return ok and "PASS" or "FAIL", points, shown
 			end,
 		},
 		{

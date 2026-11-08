@@ -228,6 +228,12 @@ function NameplateLogic.LevelColor(level, classification, color)
 	return 1, 1, 1
 end
 
+local COMBO_CLASSES = { ROGUE = true, DRUID = true }
+
+function NameplateLogic.UsesComboPoints(classFile)
+	return COMBO_CLASSES[classFile] == true
+end
+
 NameplateLogic.CC_FILTER = "HARMFUL|CROWD_CONTROL"
 
 function NameplateLogic.DebuffFilter(mineOnly, ccSeparate)
