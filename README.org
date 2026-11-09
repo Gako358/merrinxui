@@ -16,8 +16,8 @@ enabled on its own, and they all share one look and one options window.
 | EnemySpotter   | Lists nearby enemy players and alerts on a kill-on-sight list        |
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
 | Nameplates     | Styled nameplates with cast bars, debuffs, crowd control and markers |
-| Performance    | FPS, latency, memory and CPU, with a breakdown per MerrinxUI module  |
 | Professions    | Profession levelling guides                                          |
+| QoL            | Tabs: Performance (FPS, latency, memory, CPU) and Layer Hop          |
 | RangeText      | Range to your target, coloured by spell range                        |
 | SpellHistory   | Recently cast spells as icons or bars                                |
 | UnitFrames     | Player, target, focus, pet and target-of-target frames               |
@@ -35,6 +35,7 @@ with grid snapping, per-character or shared profiles, and built-in diagnostics.
 | =/mui test=                | Run the self-checks and show the log       |
 | =/mui log=                 | Show the debug log                         |
 | =/mui copy=                | Copy chat                                  |
+| =/mui hop=                 | Hop to another layer                       |
 | =/mui kos [name]=          | Add your target or a name to the kill list |
 
 * Installation

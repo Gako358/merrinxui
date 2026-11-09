@@ -7,4 +7,7 @@
 	<Binding name="MERRINXUI_DM_RESET" category="ADDONS">
 		LibStub("AceAddon-3.0"):GetAddon("MerrinxUI"):GetModule("DamageMeter"):BindingReset()
 	</Binding>
+	<Binding name="MERRINXUI_LAYERHOP" category="ADDONS">
+		LibStub("AceAddon-3.0"):GetAddon("MerrinxUI"):GetModule("LayerHop"):BindingHop()
+	</Binding>
 </Bindings>

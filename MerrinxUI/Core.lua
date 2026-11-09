@@ -70,6 +70,8 @@ function MerrinxUI:SlashCommand(input)
 			self:GetModule("EnemySpotter"):Slash(arg)
 		elseif verb == "copy" then
 			self:GetModule("Chat"):ShowCopy()
+		elseif verb == "hop" then
+			self:GetModule("LayerHop"):Hop()
 		else
 			self:OpenOptions()
 		end

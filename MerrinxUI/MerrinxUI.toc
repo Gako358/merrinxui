@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.32.0
+## Version: 0.33.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -69,3 +69,6 @@ Modules\BuffReminderLogic.lua
 Modules\BuffReminders.lua
 Modules\PerformanceLogic.lua
 Modules\Performance.lua
+Modules\LayerHopLogic.lua
+Modules\LayerHop.lua
+Modules\QoL.lua

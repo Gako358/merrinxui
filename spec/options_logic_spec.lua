@@ -256,6 +256,61 @@ describe("OptionsLogic", function()
 		end)
 	end)
 
+	describe("Tabs and PageRows", function()
+		local tabRoot
+
+		before_each(function()
+			tabRoot = {
+				type = "group",
+				args = {
+					Q = {
+						type = "group",
+						name = "QoL",
+						childGroups = "tab",
+						args = {
+							lead = { type = "toggle", order = 0 },
+							b = { type = "group", name = "Beta", order = 2, args = { y = { type = "toggle" } } },
+							a = { type = "group", name = "Alpha", order = 1, args = { x = { type = "range" } } },
+							h = { type = "group", name = "Hidden", order = 3, hidden = true, args = {} },
+						},
+					},
+					P = { type = "group", name = "Plain", args = { t = { type = "toggle" } } },
+				},
+			}
+		end)
+
+		it("lists visible child groups of a childGroups = tab group in order", function()
+			assert.are.same({
+				{ key = "a", label = "Alpha", path = { "Q", "a" } },
+				{ key = "b", label = "Beta", path = { "Q", "b" } },
+			}, L.Tabs(tabRoot, { "Q" }, "MerrinxUI"))
+		end)
+
+		it("has no tabs for a plain group or a tab group without visible groups", function()
+			assert.is_nil(L.Tabs(tabRoot, { "P" }, "MerrinxUI"))
+			tabRoot.args.Q.args.a.hidden = true
+			tabRoot.args.Q.args.b.hidden = true
+			assert.is_nil(L.Tabs(tabRoot, { "Q" }, "MerrinxUI"))
+		end)
+
+		it("shows the page leaves, then the selected tab", function()
+			local page = { label = "QoL", path = { "Q" } }
+			local tab = L.Tabs(tabRoot, { "Q" }, "MerrinxUI")[2]
+			assert.are.same({
+				{ kind = "toggle", path = { "Q", "lead" }, depth = 0 },
+				{ kind = "toggle", path = { "Q", "b", "y" }, depth = 0 },
+			}, L.PageRows(tabRoot, page, tab, "MerrinxUI"))
+		end)
+
+		it("flattens the page as before when there is no tab", function()
+			local page = { label = "Plain", path = { "P" } }
+			assert.are.same(
+				{ { kind = "toggle", path = { "P", "t" }, depth = 0 } },
+				L.PageRows(tabRoot, page, nil, "MerrinxUI")
+			)
+		end)
+	end)
+
 	describe("SortedValues", function()
 		it("sorts non-numeric keys by tostring", function()
 			assert.are.same(

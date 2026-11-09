@@ -137,6 +137,18 @@ read_globals = {
 	"UnitIsDeadOrGhost",
 	"GameTooltip_SetDefaultAnchor",
 	"GetComboPoints",
+	"C_ChatInfo",
+	"C_PartyInfo",
+	"C_Map",
+	"GetChannelName",
+	"JoinTemporaryChannel",
+	"LeaveChannelByName",
+	"ChatFrame_RemoveChannel",
+	"GetNumDisplayChannels",
+	"GetChannelDisplayInfo",
+	"IsInGuild",
+	"AcceptGroup",
+	"StaticPopup_Hide",
 }
 
 globals = {
@@ -144,6 +156,7 @@ globals = {
 	"BINDING_NAME_MERRINXUI_TOGGLEBARS",
 	"BINDING_NAME_MERRINXUI_DM_TOGGLE",
 	"BINDING_NAME_MERRINXUI_DM_RESET",
+	"BINDING_NAME_MERRINXUI_LAYERHOP",
 }
 
 files["spec"] = {

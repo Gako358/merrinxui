@@ -233,6 +233,36 @@ function L.Flatten(root, path, appName, leavesOnly)
 	return rows
 end
 
+function L.Tabs(root, path, appName)
+	local node = L.Node(root, path)
+	if not node or node.childGroups ~= "tab" or not node.args then
+		return nil
+	end
+	local tabs = {}
+	for _, key in ipairs(L.Sorted(root, path, appName)) do
+		local childPath = extendPath(path, key)
+		if node.args[key].type == "group" and not L.IsHidden(root, childPath, appName) then
+			tabs[#tabs + 1] = { key = key, label = L.Value(root, childPath, "name", appName), path = childPath }
+		end
+	end
+	if #tabs == 0 then
+		return nil
+	end
+	return tabs
+end
+
+-- A tabbed page shows its own leaves above the selected tab, like AceConfigDialog.
+function L.PageRows(root, page, tab, appName)
+	if not tab then
+		return L.Flatten(root, page.path, appName, page.leavesOnly)
+	end
+	local rows = L.Flatten(root, page.path, appName, true)
+	for _, row in ipairs(L.Flatten(root, tab.path, appName, false)) do
+		rows[#rows + 1] = row
+	end
+	return rows
+end
+
 function L.SortedValues(values)
 	local keys = {}
 	for k in pairs(values) do

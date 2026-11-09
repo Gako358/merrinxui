@@ -244,7 +244,7 @@ function Performance:Live()
 	self.refreshPending = true
 	C_Timer.After(REFRESH, function()
 		self.refreshPending = false
-		if ns.OptionsWindow:CurrentPage() == PAGE then
+		if ns.OptionsWindow:CurrentTab() == PAGE then
 			AceConfigRegistry:NotifyChange("MerrinxUI")
 		end
 	end)
@@ -321,7 +321,7 @@ local function listText(entries, format)
 	return table.concat(lines, "\n")
 end
 
-function Performance:GetOptions()
+function Performance:GetTabOptions()
 	local pf = self
 	return {
 		type = "group",

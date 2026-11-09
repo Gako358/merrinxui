@@ -13,7 +13,7 @@ local CELL_W = math.floor((INNER_W - Theme.geometry.colGap) / Theme.geometry.col
 local W = {}
 ns.OptionsWindow = W
 
-local frame, sidebarScroll, sidebarList, contentScroll, contentChild, footerLabel, pageLabel
+local frame, sidebarScroll, sidebarList, tabBar, contentScroll, contentChild, footerLabel, pageLabel
 local dropdownOverlay, dropdownScroll, dropdownChild
 local confirmOverlay, confirmDim, confirmMessage
 
@@ -22,6 +22,9 @@ local pools = {}
 local root
 local pages = {}
 local currentPageIndex = 1
+local selectedTab = {}
+local currentTab
+local contentViewH = CONTENT_H
 local contentScrollOffset = 0
 local sidebarScrollOffset = 0
 local footerErrorText
@@ -205,7 +208,8 @@ end
 local requestRender, blockRender, unblockRender
 local withConfirm, openConfirm, closeConfirm
 local openDropdown, closeDropdown
-local configureCell, renderSidebar, renderContentRows, clearContentRows, renderNow, switchToPage
+local configureCell, renderSidebar, renderTabBar, renderContentRows, clearContentRows, renderNow
+local switchToPage, switchToTab
 
 function requestRender()
 	if renderScheduled then
@@ -320,6 +324,47 @@ local function createNavRow()
 	end)
 
 	return row
+end
+
+local function createTabButton()
+	local tab = CreateFrame("Button", nil, tabBar)
+	tab:SetHeight(Theme.geometry.tabBar)
+
+	local hoverBg = tab:CreateTexture(nil, "BACKGROUND")
+	hoverBg:SetAllPoints()
+	setColor(hoverBg, Theme.color.hover)
+	hoverBg:Hide()
+	tab.hoverBg = hoverBg
+
+	local activeBar = tab:CreateTexture(nil, "ARTWORK")
+	activeBar:SetPoint("BOTTOMLEFT")
+	activeBar:SetPoint("BOTTOMRIGHT")
+	activeBar:SetHeight(Theme.geometry.activeBar)
+	setColor(activeBar, Theme.color.accent)
+	activeBar:Hide()
+	tab.activeBar = activeBar
+
+	local label = tab:CreateFontString(nil, "OVERLAY")
+	setFont(label, Theme.size.nav)
+	label:SetPoint("CENTER")
+	setTextColor(label, Theme.color.text)
+	tab.label = label
+
+	tab:SetScript("OnEnter", function()
+		hoverBg:Show()
+	end)
+	tab:SetScript("OnLeave", function()
+		if not tab.isActive then
+			hoverBg:Hide()
+		end
+	end)
+	tab:SetScript("OnClick", function()
+		if tab.onClick then
+			tab.onClick()
+		end
+	end)
+
+	return tab
 end
 
 local function createToggleRow()
@@ -1037,6 +1082,57 @@ function renderSidebar()
 	end
 end
 
+local function layoutContent(hasTabs)
+	local barH = hasTabs and Theme.geometry.tabBar or 0
+	tabBar:SetShown(hasTabs)
+	contentViewH = CONTENT_H - barH
+	contentScroll:ClearAllPoints()
+	contentScroll:SetPoint("TOPLEFT", sidebarScroll, "TOPRIGHT", 0, -barH)
+	contentScroll:SetSize(CONTENT_W, contentViewH)
+end
+
+function renderTabBar(tabs, activeIndex)
+	pools.tab.releaseAll()
+	if not tabs then
+		return
+	end
+	local x = Theme.geometry.pad
+	for i, tab in ipairs(tabs) do
+		local button = pools.tab.acquire()
+		button.label:SetText(displayLabel(tab.label))
+		local width = math.ceil(button.label:GetStringWidth()) + 2 * Theme.geometry.tabPad
+		button:SetWidth(width)
+		button:SetPoint("TOPLEFT", tabBar, "TOPLEFT", x, 0)
+		x = x + width + Theme.geometry.gap
+
+		local active = i == activeIndex
+		button.isActive = active
+		button.activeBar:SetShown(active)
+		button.hoverBg:SetShown(active)
+		button.onClick = function()
+			switchToTab(tab.key)
+		end
+	end
+end
+
+local function pageTabs(page)
+	local ok, tabs = pcall(L.Tabs, root, page.path, appName)
+	if not ok then
+		setFooterError(tabs)
+		return nil
+	end
+	if not tabs then
+		return nil
+	end
+	local wanted = selectedTab[page.label]
+	for i, tab in ipairs(tabs) do
+		if tab.key == wanted then
+			return tabs, i
+		end
+	end
+	return tabs, 1
+end
+
 local function releaseContentRows()
 	clearRenderBlocks()
 	pools.toggle.releaseAll()
@@ -1050,8 +1146,8 @@ local function releaseContentRows()
 	closeDropdown()
 end
 
-function renderContentRows(page)
-	local okRows, rowList = pcall(L.Flatten, root, page.path, appName, page.leavesOnly)
+function renderContentRows(page, tab)
+	local okRows, rowList = pcall(L.PageRows, root, page, tab, appName)
 	if not okRows or type(rowList) ~= "table" then
 		setFooterError(rowList)
 		rowList = {}
@@ -1099,7 +1195,7 @@ function renderContentRows(page)
 	end
 
 	local offsets, total = L.Stack(lineHeights, Theme.geometry.gap)
-	contentChild:SetHeight(math.max(total, CONTENT_H))
+	contentChild:SetHeight(math.max(total, contentViewH))
 
 	for i, rowSpec in ipairs(rowList) do
 		local placement = placements[i]
@@ -1136,7 +1232,7 @@ function renderContentRows(page)
 	gridLines = lineCount
 	gridCells = #rowList
 
-	local maxOffset = math.max(0, total - CONTENT_H)
+	local maxOffset = math.max(0, total - contentViewH)
 	if contentScrollOffset > maxOffset then
 		contentScrollOffset = maxOffset
 	end
@@ -1146,7 +1242,7 @@ end
 function clearContentRows()
 	releaseContentRows()
 
-	contentChild:SetHeight(CONTENT_H)
+	contentChild:SetHeight(contentViewH)
 	contentScrollOffset = 0
 	contentScroll:SetVerticalScroll(0)
 	gridLines = 0
@@ -1182,9 +1278,16 @@ function renderNow()
 
 	local page = pages[currentPageIndex]
 	if page then
+		local tabs, tabIndex = pageTabs(page)
+		currentTab = tabs and tabs[tabIndex] or nil
+		layoutContent(tabs ~= nil)
+		renderTabBar(tabs, tabIndex)
 		pageLabel:SetText(page.label or "")
-		renderContentRows(page)
+		renderContentRows(page, currentTab)
 	else
+		currentTab = nil
+		layoutContent(false)
+		renderTabBar(nil)
 		pageLabel:SetText("")
 		clearContentRows()
 	end
@@ -1195,6 +1298,19 @@ function switchToPage(index)
 		return
 	end
 	currentPageIndex = index
+	contentScrollOffset = 0
+	closeDropdown()
+	closeConfirm()
+	clearFooterError()
+	renderNow()
+end
+
+function switchToTab(key)
+	local page = pages[currentPageIndex]
+	if not page or selectedTab[page.label] == key then
+		return
+	end
+	selectedTab[page.label] = key
 	contentScrollOffset = 0
 	closeDropdown()
 	closeConfirm()
@@ -1273,6 +1389,17 @@ local function buildSidebar(win)
 end
 
 local function buildContent(win)
+	tabBar = CreateFrame("Frame", nil, win)
+	tabBar:SetPoint("TOPLEFT", sidebarScroll, "TOPRIGHT", 0, 0)
+	tabBar:SetSize(CONTENT_W, Theme.geometry.tabBar)
+	tabBar:Hide()
+
+	local tabBarBg = tabBar:CreateTexture(nil, "BACKGROUND")
+	tabBarBg:SetAllPoints()
+	setColor(tabBarBg, Theme.color.sidebar)
+
+	pools.tab = newPool(createTabButton)
+
 	contentScroll = CreateFrame("ScrollFrame", nil, win)
 	contentScroll:SetPoint("TOPLEFT", sidebarScroll, "TOPRIGHT", 0, 0)
 	contentScroll:SetSize(CONTENT_W, CONTENT_H)
@@ -1284,7 +1411,7 @@ local function buildContent(win)
 
 	contentScroll:SetScript("OnMouseWheel", function(_, delta)
 		local offset =
-			L.Scroll(contentScrollOffset, delta, Theme.geometry.scrollStep, contentChild:GetHeight(), CONTENT_H)
+			L.Scroll(contentScrollOffset, delta, Theme.geometry.scrollStep, contentChild:GetHeight(), contentViewH)
 		contentScrollOffset = offset
 		contentScroll:SetVerticalScroll(offset)
 	end)
@@ -1476,6 +1603,10 @@ function W:CurrentPage()
 	return page and page.label or nil
 end
 
+function W:CurrentTab()
+	return self:IsShown() and currentTab and currentTab.label or nil
+end
+
 function W:OnConfigTableChange(_, changedAppName)
 	if changedAppName == appName and frame and frame:IsShown() then
 		requestRender()
@@ -1541,7 +1672,7 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 				if pages[currentPageIndex] then
 					label = pages[currentPageIndex].label
 				end
-				return "INFO", #pages, label
+				return "INFO", #pages, label, currentTab and currentTab.label
 			end,
 		},
 		{
