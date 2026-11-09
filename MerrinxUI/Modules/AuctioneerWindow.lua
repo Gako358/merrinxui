@@ -115,12 +115,12 @@ local function setButtonFont(button, font, size)
 end
 
 local function itemName(row)
-	local name = row.name or ("Item " .. row.itemID)
+	local name = row.name ~= "" and row.name or ("Item " .. row.itemID)
 	return (name:gsub("|", "||"))
 end
 
 local function itemColor(row)
-	if Window.hasQualityColor and type(row.quality) == "number" then
+	if Window.hasQualityColor and type(row.quality) == "number" and row.quality >= 0 then
 		local r, g, b = C_Item.GetItemQualityColor(row.quality)
 		if r then
 			return r, g, b

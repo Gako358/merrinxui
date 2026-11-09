@@ -46,8 +46,8 @@ function Inventory:ReadBags()
 					if not entry then
 						entry = {
 							itemID = itemID,
-							name = type(itemName) == "string" and itemName or nil,
-							quality = quality,
+							name = type(itemName) == "string" and itemName ~= "" and itemName or nil,
+							quality = type(quality) == "number" and quality >= 0 and quality or nil,
 							count = 0,
 						}
 						byItem[itemID] = entry
