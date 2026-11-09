@@ -163,6 +163,14 @@ function ActionBars:CreateBar(b)
 		self.natives[b] = self.natives[b] or button:GetWidth()
 	end
 
+	if b == 1 then
+		h:HookScript("OnAttributeChanged", function(_, name, value)
+			if name == "state-page" then
+				ns.Debug:Log("ActionBars", "page", value, C_ActionBar.GetBonusBarOffset(), GetShapeshiftForm())
+			end
+		end)
+	end
+
 	self:LayoutBar(b)
 	ns.Mover:Register(h, barLabel(b), function()
 		return self.db.profile.bars[b].position
@@ -797,6 +805,46 @@ function ActionBars:GetDebugChecks()
 
 				local ok = page == L.ExpectedPage(barPage, offset) and action1 == L.Slot(page, 1)
 				return ok and "PASS" or "FAIL", page, offset, barPage, action1
+			end,
+		},
+		{
+			name = "visual",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not (self.db.profile.bars[1].enabled and self.headers[1]) then
+					return "SKIP", "bar 1 off"
+				end
+
+				for i, button in ipairs(self.buttons[1]) do
+					local attr = button:GetAttribute("action")
+					if issecretvalue(attr) or issecretvalue(button.action) then
+						return "INFO", "secret"
+					end
+					if button.action ~= attr then
+						return "FAIL", i, attr, button.action
+					end
+				end
+
+				return "PASS", self.buttons[1][1].action
+			end,
+		},
+		{
+			name = "form",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not (self.db.profile.bars[1].enabled and self.headers[1]) then
+					return "SKIP", "bar 1 off"
+				end
+				return "INFO",
+					GetShapeshiftForm(),
+					C_ActionBar.GetBonusBarOffset(),
+					self.headers[1]:GetAttribute("state-page"),
+					self.buttons[1][1]:GetAttribute("action"),
+					self.buttons[1][1].action
 			end,
 		},
 		{

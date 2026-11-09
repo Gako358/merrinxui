@@ -7,7 +7,7 @@ enabled on its own, and they all share one look and one options window.
 | Module         | What it does                                                         |
 |----------------+----------------------------------------------------------------------|
 | ActionBars     | Action bars with opacity, mouseover, combat hiding and a key toggle  |
-| Auctioneer     | Auction House price history, flip deals, hot sellers and avoid list  |
+| Auctioneer     | Gold-based buy plan, sell prices, profit ledger and price trends     |
 | BuffReminders  | Shows your class buffs when they are missing or running low          |
 | CastBars       | Player, target and focus cast bars, plus a swing timer               |
 | Chat           | Chat window skin, fading, clickable URLs and a copy-chat window      |

@@ -165,7 +165,29 @@ describe("AuctioneerLogic", function()
 				profit = 3700,
 				margin = 48,
 				soldPerDay = 5,
+				net = 950,
+				listings = {
+					{ buyout = 600, count = 1, n = 2 },
+					{ buyout = 6500, count = 10, n = 1 },
+				},
 			}, deal)
+		end)
+
+		it("sorts listings into SL canonical order regardless of input order", function()
+			local item = {
+				itemID = 3,
+				history = itemC.history,
+				listings = {
+					{ buyout = 6500, count = 10, n = 1 },
+					{ buyout = 600, count = 1, n = 2 },
+				},
+			}
+			local stats = L.Stats(item, TODAY)
+			local deal = L.FindDeal(item, stats, { discount = 0.30, cut = 0.05, minProfit = 3000 })
+			assert.are.same({
+				{ buyout = 600, count = 1, n = 2 },
+				{ buyout = 6500, count = 10, n = 1 },
+			}, deal.listings)
 		end)
 
 		it("drops the fixture C deal once minProfit rises past its profit", function()
@@ -188,6 +210,11 @@ describe("AuctioneerLogic", function()
 				profit = 130,
 				margin = 40,
 				soldPerDay = nil,
+				net = 50,
+				listings = {
+					{ buyout = 30, count = 1, n = 4 },
+					{ buyout = 200, count = 5, n = 1 },
+				},
 			}, deal)
 		end)
 
@@ -231,6 +258,16 @@ describe("AuctioneerLogic", function()
 			assert.are.equal(2, #result.avoid)
 			assert.are.equal(1, result.avoid[1].itemID)
 			assert.are.equal(5, result.avoid[2].itemID)
+		end)
+
+		it("lists prices for every input item", function()
+			assert.are.same({
+				[1] = { market = 105, min = 90 },
+				[2] = { market = 1000, min = 1500 },
+				[3] = { market = 1000, min = 600 },
+				[4] = { min = 30, vendor = 50 },
+				[5] = { market = 100, min = 100 },
+			}, result.prices)
 		end)
 	end)
 

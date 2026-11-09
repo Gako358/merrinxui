@@ -180,8 +180,20 @@ function L.AvoidReasons(stats)
 	return reasons
 end
 
+local function listingLess(a, b)
+	local ac, bc = a.buyout * b.count, b.buyout * a.count
+	if ac ~= bc then
+		return ac < bc
+	end
+	if a.count ~= b.count then
+		return a.count < b.count
+	end
+	return a.buyout < b.buyout
+end
+
 local function takeListings(listings, qualifies)
 	local qty, cost, unitMax = 0, 0, nil
+	local taken = {}
 	for _, listing in ipairs(listings or {}) do
 		if qualifies(listing) then
 			qty = qty + listing.count * listing.n
@@ -190,9 +202,11 @@ local function takeListings(listings, qualifies)
 			if unitMax == nil or unit > unitMax then
 				unitMax = unit
 			end
+			taken[#taken + 1] = { buyout = listing.buyout, count = listing.count, n = listing.n }
 		end
 	end
-	return qty, cost, unitMax
+	table.sort(taken, listingLess)
+	return qty, cost, unitMax, taken
 end
 
 function L.FindDeal(item, stats, settings)
@@ -206,7 +220,7 @@ function L.FindDeal(item, stats, settings)
 	then
 		local target = math.floor(stats.market * (1 - settings.discount))
 		local net = math.floor(stats.market * (1 - settings.cut))
-		local qty, cost, unitMax = takeListings(item.listings, function(listing)
+		local qty, cost, unitMax, listings = takeListings(item.listings, function(listing)
 			return listing.buyout <= target * listing.count
 		end)
 		local profit = qty * net - cost
@@ -223,13 +237,15 @@ function L.FindDeal(item, stats, settings)
 				profit = profit,
 				margin = math.floor(profit * 100 / cost),
 				soldPerDay = stats.soldPerDay,
+				net = net,
+				listings = listings,
 			}
 		end
 	end
 
 	if item.vendor ~= nil and item.vendor > 0 then
 		local vendor = item.vendor
-		local qty, cost, unitMax = takeListings(item.listings, function(listing)
+		local qty, cost, unitMax, listings = takeListings(item.listings, function(listing)
 			return listing.buyout < vendor * listing.count
 		end)
 		local profit = vendor * qty - cost
@@ -247,6 +263,8 @@ function L.FindDeal(item, stats, settings)
 					profit = profit,
 					margin = math.floor(profit * 100 / cost),
 					soldPerDay = stats.soldPerDay,
+					net = vendor,
+					listings = listings,
 				}
 			end
 		end
@@ -271,10 +289,18 @@ local function cap(list)
 end
 
 function L.Analyze(items, today, settings)
-	local deals, movers, hot, avoid = {}, {}, {}, {}
+	local deals, movers, hot, avoid, prices = {}, {}, {}, {}, {}
 
 	for _, item in ipairs(items) do
 		local stats = L.Stats(item, today)
+
+		prices[item.itemID] = {
+			name = item.name,
+			quality = item.quality,
+			market = stats.market,
+			min = stats.min,
+			vendor = item.vendor,
+		}
 
 		local deal = L.FindDeal(item, stats, settings)
 		if deal then
@@ -366,6 +392,7 @@ function L.Analyze(items, today, settings)
 		movers = cap(movers),
 		hot = cap(hot),
 		avoid = cap(avoid),
+		prices = prices,
 	}
 end
 

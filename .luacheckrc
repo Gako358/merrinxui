@@ -156,6 +156,12 @@ read_globals = {
 	"C_Item",
 	"AuctionHouseFrame",
 	"HideUIPanel",
+	"GetMoney",
+	"C_Container",
+	"GetInboxNumItems",
+	"GetInboxHeaderInfo",
+	"GetInboxInvoiceInfo",
+	"GetShapeshiftForm",
 }
 
 globals = {

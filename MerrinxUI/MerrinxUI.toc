@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 0.34.0
+## Version: 0.35.0
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -73,7 +73,10 @@ Modules\LayerHopLogic.lua
 Modules\LayerHop.lua
 Modules\AuctioneerScanLogic.lua
 Modules\AuctioneerLogic.lua
+Modules\AuctioneerTradeLogic.lua
+Modules\AuctioneerLedgerLogic.lua
 Modules\AuctioneerScanner.lua
+Modules\AuctioneerInventory.lua
 Modules\AuctioneerWindow.lua
 Modules\Auctioneer.lua
 Modules\QoL.lua

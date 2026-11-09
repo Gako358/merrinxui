@@ -1,6 +1,7 @@
 local addonName, ns = ...
 
 local SL, AL, Scanner, Window = ns.AuctioneerScanLogic, ns.AuctioneerLogic, ns.AuctioneerScanner, ns.AuctioneerWindow
+local TL, LL, Inventory = ns.AuctioneerTradeLogic, ns.AuctioneerLedgerLogic, ns.AuctioneerInventory
 
 local Auctioneer = ns.addon:NewModule("Auctioneer", "AceEvent-3.0")
 
@@ -12,6 +13,9 @@ local defaults = {
 		discount = 30,
 		minProfit = 50,
 		cut = 5,
+		reserve = 0,
+		maxShare = 25,
+		sellDays = 3,
 		font = "*",
 		fontSize = 12,
 		tab = "deals",
@@ -19,6 +23,7 @@ local defaults = {
 	},
 	global = { lastReplicate = 0 },
 	factionrealm = { lastScan = 0, lastRows = 0, items = {} },
+	char = { seen = {}, book = { lots = {}, sales = {} } },
 }
 
 local SCAN_FAIL_MESSAGES = {
@@ -58,6 +63,9 @@ end
 function Auctioneer:OnEnable()
 	self:RegisterEvent("AUCTION_HOUSE_SHOW", "OnAuctionHouseShow")
 	self:RegisterEvent("AUCTION_HOUSE_CLOSED", "OnAuctionHouseClosed")
+	self:RegisterEvent("PLAYER_MONEY", "OnMoney")
+	self:RegisterEvent("BAG_UPDATE_DELAYED", "OnBags")
+	self:RegisterEvent("MAIL_INBOX_UPDATE", "OnInbox")
 	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
 	Window:Layout()
 end
@@ -98,6 +106,9 @@ function Auctioneer:OnAuctionHouseShow()
 		self:Recompute()
 		Window:SetStatus(self:StatusText())
 		Window:Show()
+	elseif self.view then
+		self:Replan()
+		self:PushView()
 	end
 	Window:SetScanEnabled(self:CanScan(), "Scan")
 end
@@ -109,6 +120,40 @@ function Auctioneer:OnAuctionHouseClosed()
 		Window:Hide()
 	end
 	Window:SetScanEnabled(false, "Scan")
+	if self.view then
+		self:Replan()
+		self:PushView()
+	end
+end
+
+function Auctioneer:OnMoney()
+	if not self.ahOpen and self.view then
+		self:Replan()
+		self:PushView()
+	end
+end
+
+function Auctioneer:OnBags()
+	if self.view then
+		self:RefreshSell()
+		self:PushView()
+	end
+end
+
+function Auctioneer:OnInbox()
+	local buys, sells = Inventory:SyncMail(self.db.char.book, self.db.char.seen, time())
+	if not buys then
+		return
+	end
+	if buys + sells > 0 then
+		self:Say(string.format("recorded %d purchases and %d sales from the mailbox.", buys, sells))
+	end
+	if self.view then
+		self:RefreshLedger()
+		self:Replan()
+		self:RefreshSell()
+		self:PushView()
+	end
 end
 
 function Auctioneer:Toggle()
@@ -119,7 +164,7 @@ function Auctioneer:Toggle()
 	if Window:IsShown() then
 		Window:Hide()
 	else
-		if not self.results then
+		if not self.view then
 			self:Recompute()
 		end
 		Window:SetStatus(self:StatusText())
@@ -255,6 +300,8 @@ end
 function Auctioneer:Recompute()
 	if not self:IsEnabled() then
 		self.results = nil
+		self.view = nil
+		self:PushView()
 		return
 	end
 
@@ -280,7 +327,101 @@ function Auctioneer:Recompute()
 		minProfit = profile.minProfit * 100,
 	})
 
-	Window:SetData(realm.lastScan > 0 and self.results or nil)
+	self.view = {
+		scanned = realm.lastScan > 0,
+		movers = self.results.movers,
+		hot = self.results.hot,
+		avoid = self.results.avoid,
+		summary = {},
+	}
+
+	self.byName = {}
+	for itemID, p in pairs(self.results.prices) do
+		if p.name and not self.byName[p.name] then
+			self.byName[p.name] = { itemID = itemID, quality = p.quality, market = p.market }
+		end
+	end
+
+	self:RefreshLedger()
+	self:Replan()
+	self:RefreshSell()
+	self:PushView()
+end
+
+function Auctioneer:Replan()
+	local profile = self.db.profile
+	local money = plain(GetMoney()) or 0
+	local budget = math.max(0, money - profile.reserve * 10000)
+
+	local p = TL.Plan(self.results.deals, {
+		budget = budget,
+		maxShare = profile.maxShare,
+		sellDays = profile.sellDays,
+		minProfit = profile.minProfit * 100,
+		held = self.heldByName,
+	})
+
+	self.view.deals = p.rows
+	self.view.summary.deals = string.format(
+		"Gold %s, budget %s. Plan: %d items for %s, profit %s",
+		AL.FormatMoney(money),
+		AL.FormatMoney(budget),
+		#p.rows,
+		AL.FormatMoney(p.spent),
+		AL.FormatMoney(p.profit)
+	)
+
+	self.plan = p
+	self.money = money
+end
+
+function Auctioneer:RefreshLedger()
+	local profile = self.db.profile
+	local p = LL.Portfolio(self.db.char.book, self.byName or {}, profile.cut, time())
+
+	self.view.ledger = p.rows
+
+	self.costByName = {}
+	self.heldByName = {}
+	for _, row in ipairs(p.rows) do
+		if row.held > 0 then
+			self.costByName[row.name] = row.unitCost
+			self.heldByName[row.name] = row.held
+		end
+	end
+
+	self.view.summary.ledger = string.format(
+		"Profit 24h %s, 7d %s, 30d %s. Holding %s, unrealised %s",
+		AL.FormatMoney(p.realised[1]),
+		AL.FormatMoney(p.realised[7]),
+		AL.FormatMoney(p.realised[30]),
+		AL.FormatMoney(p.cost),
+		AL.FormatMoney(p.unrealised)
+	)
+end
+
+function Auctioneer:RefreshSell()
+	local profile = self.db.profile
+	local rows = TL.SellRows(Inventory:ReadBags() or {}, self.results.prices, self.costByName or {}, profile.cut)
+
+	self.view.sell = rows
+
+	local total = 0
+	for _, row in ipairs(rows) do
+		total = total + row.value
+	end
+	self.view.summary.sell = string.format("Bags: %d items worth %s after the cut", #rows, AL.FormatMoney(total))
+end
+
+function Auctioneer:RefreshPlan()
+	if self.view then
+		self:Replan()
+		self:PushView()
+	end
+end
+
+function Auctioneer:PushView()
+	Window:SetData(self.view)
 end
 
 function Auctioneer:SearchItem(itemID)
@@ -419,6 +560,52 @@ function Auctioneer:GetOptions()
 					self:Recompute()
 				end,
 			},
+			budgetHeader = { type = "header", name = "Budget", order = 15 },
+			reserve = {
+				type = "range",
+				name = "Keep back (gold)",
+				order = 16,
+				min = 0,
+				max = 10000,
+				step = 1,
+				get = function()
+					return self.db.profile.reserve
+				end,
+				set = function(_, value)
+					self.db.profile.reserve = value
+					self:RefreshPlan()
+				end,
+			},
+			maxShare = {
+				type = "range",
+				name = "Most of the budget on one item (%)",
+				order = 17,
+				min = 5,
+				max = 100,
+				step = 5,
+				get = function()
+					return self.db.profile.maxShare
+				end,
+				set = function(_, value)
+					self.db.profile.maxShare = value
+					self:RefreshPlan()
+				end,
+			},
+			sellDays = {
+				type = "range",
+				name = "Buy up to this many days of sales",
+				order = 18,
+				min = 1,
+				max = 14,
+				step = 1,
+				get = function()
+					return self.db.profile.sellDays
+				end,
+				set = function(_, value)
+					self.db.profile.sellDays = value
+					self:RefreshPlan()
+				end,
+			},
 			windowHeader = { type = "header", name = "Window", order = 20 },
 			font = {
 				type = "select",
@@ -486,6 +673,21 @@ function Auctioneer:GetOptions()
 					self:Recompute()
 				end,
 			},
+			clearLedger = {
+				type = "execute",
+				name = "Clear trade ledger",
+				order = 34,
+				confirm = true,
+				func = function()
+					self.db.char.book = { lots = {}, sales = {} }
+					if self.view then
+						self:RefreshLedger()
+						self:Replan()
+						self:RefreshSell()
+						self:PushView()
+					end
+				end,
+			},
 		},
 	}
 end
@@ -512,6 +714,7 @@ function Auctioneer:GetDebugChecks()
 				checkFn("C_Item.GetItemInfo", item.GetItemInfo)
 				checkFn("C_Item.GetItemQualityColor", item.GetItemQualityColor)
 				checkFn("GameTooltip.SetItemByID", GameTooltip and GameTooltip.SetItemByID)
+				checkFn("GetMoney", GetMoney)
 
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
@@ -570,6 +773,28 @@ function Auctioneer:GetDebugChecks()
 			name = "auction house",
 			run = function()
 				return "INFO", self.ahOpen == true, Scanner:State()
+			end,
+		},
+		{
+			name = "plan",
+			run = function()
+				if not self.view then
+					return "SKIP", "not computed"
+				end
+				local p = self.plan
+				return "INFO", self.money, p.budget, #p.rows, p.spent, p.unfunded
+			end,
+		},
+		{
+			name = "ledger",
+			run = function()
+				local book = self.db.char.book
+				local items = 0
+				for _ in pairs(book.lots) do
+					items = items + 1
+				end
+				local realised = LL.Realised(book, time())
+				return "INFO", #self.db.char.seen, items, #book.sales, realised[30]
 			end,
 		},
 	}
