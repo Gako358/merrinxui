@@ -42,6 +42,23 @@ local function hotkeyUpdater(command)
 	end
 end
 
+local function formSpellIDs()
+	local n = GetNumShapeshiftForms()
+	if issecretvalue(n) then
+		return nil
+	end
+
+	local ids = {}
+	for i = 1, n do
+		local id = select(4, GetShapeshiftFormInfo(i))
+		if issecretvalue(id) or type(id) ~= "number" then
+			return nil
+		end
+		ids[i] = id
+	end
+	return ids
+end
+
 local defaults = { profile = { enabled = false, hideStanceBar = false, bars = {} } }
 for b = 1, L.BAR_COUNT do
 	defaults.profile.bars[b] = {
@@ -80,6 +97,7 @@ end
 
 function ActionBars:OnEnable()
 	self:RegisterEvent("UPDATE_BINDINGS", "OnUpdateBindings")
+	self:RegisterEvent("UPDATE_SHAPESHIFT_FORMS", "OnShapeshiftForms")
 	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "UpdateAlphas")
 	self:QueueApply()
 end
@@ -87,6 +105,12 @@ end
 function ActionBars:OnUpdateBindings()
 	ns.Combat:Run("ActionBars:Bindings", function()
 		self:ApplyBindings()
+	end)
+end
+
+function ActionBars:OnShapeshiftForms()
+	ns.Combat:Run("ActionBars:Paging", function()
+		self:UpdatePaging()
 	end)
 end
 
@@ -198,6 +222,32 @@ function ActionBars:LayoutBar(b)
 	end
 end
 
+function ActionBars:UpdatePaging()
+	local profile = self.db.profile
+	if not (self.headers[1] and self:IsEnabled() and profile.bars[1].enabled) then
+		return
+	end
+
+	local o, v, t =
+		C_ActionBar.GetOverrideBarIndex(), C_ActionBar.GetVehicleBarIndex(), C_ActionBar.GetTempShapeshiftBarIndex()
+	if issecretvalue(o) or issecretvalue(v) or issecretvalue(t) then
+		o, v, t = nil, nil, nil
+	end
+
+	local _, class = UnitClass("player")
+	if issecretvalue(class) then
+		class = nil
+	end
+	local forms = L.FormClauses(class, class == "DRUID" and formSpellIDs() or nil)
+	self.formPaging = forms ~= nil
+
+	local driver = L.PagingDriver(o, v, t, forms)
+	if driver ~= self.pagingDriver then
+		self.pagingDriver = driver
+		RegisterStateDriver(self.headers[1], "page", driver)
+	end
+end
+
 function ActionBars:Apply()
 	local profile = self.db.profile
 	local enabledCount = 0
@@ -254,15 +304,7 @@ function ActionBars:Apply()
 				self:LayoutBar(b)
 
 				if b == 1 then
-					local o, v, t =
-						C_ActionBar.GetOverrideBarIndex(),
-						C_ActionBar.GetVehicleBarIndex(),
-						C_ActionBar.GetTempShapeshiftBarIndex()
-					if issecretvalue(o) or issecretvalue(v) or issecretvalue(t) then
-						o, v, t = nil, nil, nil
-					end
-					self.pagingDriver = L.PagingDriver(o, v, t)
-					RegisterStateDriver(h, "page", self.pagingDriver)
+					self:UpdatePaging()
 				elseif b ~= PET then
 					local buttons = self.buttons[b]
 					for i = 1, 12 do
@@ -669,6 +711,10 @@ function ActionBars:GetDebugChecks()
 				check("GetBindingText", GetBindingText)
 				check("GetPetActionCooldown", GetPetActionCooldown)
 				check("CooldownFrame_Set", CooldownFrame_Set)
+				check("GetShapeshiftForm", GetShapeshiftForm)
+				check("GetShapeshiftFormInfo", GetShapeshiftFormInfo)
+				check("GetNumShapeshiftForms", GetNumShapeshiftForms)
+				check("IsStealthed", IsStealthed)
 
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
@@ -803,8 +849,22 @@ function ActionBars:GetDebugChecks()
 					return "INFO", "secret"
 				end
 
-				local ok = page == L.ExpectedPage(barPage, offset) and action1 == L.Slot(page, 1)
-				return ok and "PASS" or "FAIL", page, offset, barPage, action1
+				local formPage
+				if self.formPaging then
+					local form = GetShapeshiftForm()
+					local stealthed = IsStealthed()
+					if issecretvalue(form) or issecretvalue(stealthed) then
+						return "INFO", "secret"
+					end
+					local spellID = form > 0 and select(4, GetShapeshiftFormInfo(form)) or nil
+					if issecretvalue(spellID) then
+						return "INFO", "secret"
+					end
+					formPage = L.FormPage(spellID, stealthed)
+				end
+
+				local ok = page == L.ExpectedPage(barPage, offset, formPage) and action1 == L.Slot(page, 1)
+				return ok and "PASS" or "FAIL", page, offset, barPage, action1, formPage
 			end,
 		},
 		{

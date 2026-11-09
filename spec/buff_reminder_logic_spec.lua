@@ -68,4 +68,57 @@ describe("BuffReminderLogic", function()
 		table.sort(alerts)
 		assert.are.same({ "mark", "new", "thorns" }, alerts)
 	end)
+
+	it("CastLine prefers the preferred line when it is known", function()
+		local buff = { lines = { { 1, 2 }, { 5 }, { 9 } } }
+		local isKnown = function(id)
+			return id == 5 or id == 9
+		end
+		assert.are.equal(3, L.CastLine(buff, isKnown, 3))
+	end)
+
+	it("CastLine falls back to the first known line when the preferred one is unknown", function()
+		local buff = { lines = { { 1, 2 }, { 5 }, { 9 } } }
+		local isKnown = function(id)
+			return id == 5 or id == 9
+		end
+		assert.are.equal(2, L.CastLine(buff, isKnown, 1))
+	end)
+
+	it("CastLine falls back to the first known line when there is no preferred line", function()
+		local buff = { lines = { { 1, 2 }, { 5 }, { 9 } } }
+		local isKnown = function(id)
+			return id == 5 or id == 9
+		end
+		assert.are.equal(2, L.CastLine(buff, isKnown, nil))
+	end)
+
+	it("CastLine falls back to the first known line when the preferred line does not exist", function()
+		local buff = { lines = { { 1, 2 }, { 5 }, { 9 } } }
+		local isKnown = function(id)
+			return id == 5 or id == 9
+		end
+		assert.are.equal(2, L.CastLine(buff, isKnown, 7))
+	end)
+
+	it("CastLine returns nil when nothing is known", function()
+		local buff = { lines = { { 1, 2 }, { 5 }, { 9 } } }
+		assert.is_nil(L.CastLine(buff, function()
+			return false
+		end, nil))
+	end)
+
+	it("CastLine resolves the druid mark data to its first line", function()
+		local buff
+		for _, b in ipairs(L.ForClass("DRUID")) do
+			if b.key == "mark" then
+				buff = b
+			end
+		end
+		assert.is_not_nil(buff)
+		local isKnown = function(id)
+			return id == 1126 or id == 21849
+		end
+		assert.are.equal(1, L.CastLine(buff, isKnown, nil))
+	end)
 end)

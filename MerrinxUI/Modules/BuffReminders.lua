@@ -21,6 +21,9 @@ local defaults = {
 		buffs = {},
 		position = { point = "CENTER", x = 0, y = 120 },
 	},
+	char = {
+		castLine = {},
+	},
 }
 
 local function isKnown(id)
@@ -57,6 +60,26 @@ local function readLine(line)
 	return aura
 end
 
+local function spellName(id)
+	local name = C_Spell.GetSpellName(id)
+	if type(name) == "string" and not issecretvalue(name) then
+		return name
+	end
+	return nil
+end
+
+local function showTooltip(owner)
+	if owner.spellID then
+		GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+		GameTooltip:SetSpellByID(owner.spellID)
+		GameTooltip:Show()
+	end
+end
+
+local function hideTooltip()
+	GameTooltip:Hide()
+end
+
 function BuffReminders:OnInitialize()
 	self.db = ns.addon.db:RegisterNamespace("BuffReminders", defaults)
 	self:SetEnabledState(self.db.profile.enabled)
@@ -68,6 +91,8 @@ function BuffReminders:OnInitialize()
 	self.announced = {}
 	self.remaining = {}
 	self.icons = {}
+	self.clicks = {}
+	self.clicksPending = false
 	self.reads = 0
 	self.unreadable = 0
 
@@ -103,6 +128,7 @@ function BuffReminders:OnDisable()
 		self.ticker = nil
 	end
 	self.frame:Hide()
+	self:QueueClicks()
 end
 
 function BuffReminders:Refresh()
@@ -156,11 +182,18 @@ function BuffReminders:Update()
 		if self:Watched(buff) then
 			local lineStates = {}
 			local readable = true
-			for _, line in ipairs(buff.lines) do
+			for lineIndex, line in ipairs(buff.lines) do
 				local aura = readLine(line)
 				if aura == false then
 					readable = false
 					break
+				end
+				if
+					type(aura) == "table"
+					and not issecretvalue(aura.isFromPlayerOrPlayerPet)
+					and aura.isFromPlayerOrPlayerPet == true
+				then
+					self.db.char.castLine[buff.key] = lineIndex
 				end
 				lineStates[#lineStates + 1] = { L.Status(aura, now, low) }
 			end
@@ -212,16 +245,8 @@ function BuffReminders:Icon(i)
 	icon.text = icon:CreateFontString(nil, "OVERLAY")
 	icon.text:SetPoint("TOP", icon, "BOTTOM", 0, -2)
 	icon:EnableMouse(true)
-	icon:SetScript("OnEnter", function(owner)
-		if owner.spellID then
-			GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-			GameTooltip:SetSpellByID(owner.spellID)
-			GameTooltip:Show()
-		end
-	end)
-	icon:SetScript("OnLeave", function()
-		GameTooltip:Hide()
-	end)
+	icon:SetScript("OnEnter", showTooltip)
+	icon:SetScript("OnLeave", hideTooltip)
 	self.icons[i] = icon
 	self:StyleIcon(icon)
 	return icon
@@ -271,13 +296,15 @@ function BuffReminders:Render()
 	local list, preview = self:Shown()
 	if #list == 0 or self:Hidden() then
 		self.frame:Hide()
+		self:QueueClicks()
 		return
 	end
 	local size = self.db.profile.iconSize
 	for i, buff in ipairs(list) do
 		local icon = self:Icon(i)
-		local id = buff.lines[1][1]
+		local id = self:CastSpell(buff)
 		icon.spellID = id
+		icon.castName = spellName(id)
 		icon.texture:SetTexture(C_Spell.GetSpellTexture(id) or FALLBACK_TEXTURE)
 		icon:ClearAllPoints()
 		icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (size + SPACING), 0)
@@ -301,6 +328,84 @@ function BuffReminders:Render()
 	end
 	self.frame:SetWidth(#list * size + (#list - 1) * SPACING)
 	self.frame:Show()
+	self:QueueClicks()
+end
+
+function BuffReminders:CastSpell(buff)
+	local i = L.CastLine(buff, isKnown, self.db.char.castLine[buff.key])
+	return buff.lines[i or 1][1]
+end
+
+function BuffReminders:QueueClicks()
+	self.clicksPending = not ns.Combat:Run("BuffReminders:Clicks", function()
+		self.clicksPending = false
+		self:ApplyClicks()
+	end)
+end
+
+function BuffReminders:ClickTarget(i)
+	local icon = self.icons[i]
+	if not icon or not icon:IsShown() then
+		return nil
+	end
+	if not self:IsEnabled() or not self.frame:IsShown() or ns.Mover:IsUnlocked() then
+		return nil
+	end
+	return icon.castName
+end
+
+function BuffReminders:ClickButton(i)
+	local button = self.clicks[i]
+	if button then
+		return button
+	end
+	if not self.clickHeader then
+		local header = CreateFrame("Frame", addonName .. "BuffRemindersClicks", UIParent)
+		header:SetFrameStrata(self.frame:GetFrameStrata())
+		RegisterStateDriver(header, "visibility", "[combat] hide; show")
+		self.clickHeader = header
+	end
+	button =
+		CreateFrame("Button", addonName .. "BuffRemindersClick" .. i, self.clickHeader, "SecureActionButtonTemplate")
+	button:SetAttribute("type", "spell")
+	button:SetAttribute("unit", "player")
+	button:RegisterForClicks("AnyUp", "AnyDown")
+	button:SetFrameLevel(self.frame:GetFrameLevel() + 5)
+	button:SetScript("OnEnter", showTooltip)
+	button:SetScript("OnLeave", hideTooltip)
+	button:Hide()
+	self.clicks[i] = button
+	return button
+end
+
+-- Never anchored to the icons: that would make the insecure icon frame protected too.
+function BuffReminders:ApplyClicks()
+	for i, icon in ipairs(self.icons) do
+		local name = self:ClickTarget(i)
+		local x, y = icon:GetCenter()
+		if x == nil or issecretvalue(x) or issecretvalue(y) then
+			name = nil
+		end
+		if name then
+			local button = self:ClickButton(i)
+			if button:GetAttribute("spell") ~= name then
+				button:SetAttribute("spell", name)
+			end
+			button.spellID = icon.spellID
+			local ratio = icon:GetEffectiveScale() / button:GetEffectiveScale()
+			button:ClearAllPoints()
+			button:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * ratio, y * ratio)
+			button:SetSize(icon:GetWidth() * ratio, icon:GetHeight() * ratio)
+			button:Show()
+		elseif self.clicks[i] then
+			self.clicks[i]:Hide()
+		end
+	end
+	for i = #self.icons + 1, #self.clicks do
+		if self.clicks[i] then
+			self.clicks[i]:Hide()
+		end
+	end
 end
 
 function BuffReminders:GetOptions()
@@ -494,6 +599,58 @@ function BuffReminders:GetDebugChecks()
 				local expected = #list > 0 and not self:Hidden()
 				local shown = self.frame:IsShown()
 				return (shown == expected) and "PASS" or "FAIL", shown, #list
+			end,
+		},
+		{
+			name = "click",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if self.frame:IsProtected() then
+					return "FAIL", "frame protected"
+				end
+				if InCombatLockdown() then
+					local spells = {}
+					for _, button in ipairs(self.clicks) do
+						if button:IsShown() then
+							spells[#spells + 1] = button:GetAttribute("spell")
+						end
+					end
+					return "INFO", "combat", #self.clicks, self.clicksPending, unpack(spells, 1, #spells)
+				end
+				if self.clicksPending then
+					return "FAIL"
+				end
+				if self.clickHeader and not self.clickHeader:IsShown() then
+					return "FAIL"
+				end
+				local shown = {}
+				for i = 1, #self.icons do
+					local target = self:ClickTarget(i)
+					local button = self.clicks[i]
+					local buttonShown = button ~= nil and button:IsShown()
+					if (target ~= nil) ~= buttonShown then
+						return "FAIL"
+					end
+					if buttonShown then
+						if button:GetAttribute("spell") ~= target then
+							return "FAIL"
+						end
+						local icon = self.icons[i]
+						local ix, iy = icon:GetCenter()
+						local bx, by = button:GetCenter()
+						if not (issecretvalue(ix) or issecretvalue(iy) or issecretvalue(bx) or issecretvalue(by)) then
+							local iScale = icon:GetEffectiveScale()
+							local bScale = button:GetEffectiveScale()
+							if math.abs(ix * iScale - bx * bScale) > 1 or math.abs(iy * iScale - by * bScale) > 1 then
+								return "FAIL"
+							end
+						end
+						shown[#shown + 1] = target
+					end
+				end
+				return "PASS", #self.clicks, C_CVar.GetCVar("ActionButtonUseKeyDown"), unpack(shown, 1, #shown)
 			end,
 		},
 	}

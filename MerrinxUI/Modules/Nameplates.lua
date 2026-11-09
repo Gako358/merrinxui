@@ -23,6 +23,7 @@ local defaults = {
 		debuffsMineOnly = true,
 		debuffAnchor = "TOP",
 		debuffSize = 18,
+		debuffTimerSize = 8,
 		debuffMax = 4,
 		debuffX = 0,
 		debuffY = 0,
@@ -502,6 +503,7 @@ end
 
 -- CustomAuraButtonTemplate has no size or regions; the container only fills in what we register here
 local initializedDebuffButtons = setmetatable({}, { __mode = "k" })
+local debuffTimerTexts = setmetatable({}, { __mode = "k" })
 
 local function InitializeDebuffButton(button, size)
 	if initializedDebuffButtons[button] then
@@ -517,6 +519,12 @@ local function InitializeDebuffButton(button, size)
 	local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
 	cooldown:SetAllPoints(button)
 	button:SetDurationCooldown(cooldown)
+
+	local timer = cooldown:GetCountdownFontString()
+	if timer then
+		debuffTimerTexts[button] = timer
+		ns.Media:SetFont(timer, Nameplates.db.profile.font, Nameplates.db.profile.debuffTimerSize, "OUTLINE")
+	end
 
 	local countOverlay = CreateFrame("Frame", nil, button)
 	countOverlay:SetAllPoints(button)
@@ -546,8 +554,13 @@ function Nameplates:ApplyCountFonts()
 		end)
 		return
 	end
-	for _, count in pairs(initializedDebuffButtons) do
-		ns.Media:SetFont(count, self.db.profile.font, DEBUFF_COUNT_SIZE, "OUTLINE")
+	local profile = self.db.profile
+	for button, count in pairs(initializedDebuffButtons) do
+		ns.Media:SetFont(count, profile.font, DEBUFF_COUNT_SIZE, "OUTLINE")
+		local timer = debuffTimerTexts[button]
+		if timer then
+			ns.Media:SetFont(timer, profile.font, profile.debuffTimerSize, "OUTLINE")
+		end
 	end
 end
 
@@ -1698,6 +1711,25 @@ function Nameplates:GetOptions()
 				end,
 				disabled = function()
 					return not self.db.profile.debuffs
+				end,
+			},
+			debuffTimerSize = {
+				type = "range",
+				name = "Debuff timer size",
+				desc = "Countdown numbers on debuff and CC icons.",
+				order = 13.5,
+				min = 6,
+				max = 20,
+				step = 1,
+				get = function()
+					return self.db.profile.debuffTimerSize
+				end,
+				set = function(_, value)
+					self.db.profile.debuffTimerSize = value
+					self:Refresh()
+				end,
+				disabled = function()
+					return not (self.db.profile.debuffs or self.db.profile.cc)
 				end,
 			},
 			debuffMax = {
@@ -3148,13 +3180,29 @@ function Nameplates:GetDebugChecks()
 				local ok = normalizePath(path) == normalizePath(self.appliedFont)
 					and normalizePath(path) == normalizePath(expected)
 
+				local timerPath, timerSize = "no timers", nil
+				if C_Secrets.ShouldAurasBeSecret() then
+					timerPath = "auras secret"
+				else
+					local _, timer = next(debuffTimerTexts)
+					if timer then
+						timerPath, timerSize = timer:GetFont()
+						ok = ok
+							and normalizePath(timerPath) == normalizePath(expected)
+							and math.abs(timerSize - profile.debuffTimerSize) <= 0.5
+					end
+				end
+
 				return ok and "PASS" or "FAIL",
 					path,
 					self.appliedFont,
 					expected,
 					frame.healthBar:GetStatusBarTexture():GetTexture(),
 					ns.Media:Resolve("statusbar", profile.barTexture),
-					frame.barPath
+					frame.barPath,
+					timerPath,
+					timerSize,
+					profile.debuffTimerSize
 			end,
 		},
 		{

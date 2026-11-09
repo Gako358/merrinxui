@@ -20,15 +20,49 @@ function L.Slot(page, i)
 	return (page - 1) * 12 + i
 end
 
-local PAGING_TAIL = "[bar:2] 2; [bar:3] 3; [bar:4] 4; [bar:5] 5; [bar:6] 6; "
-	.. "[bonusbar:1] 7; [bonusbar:2] 8; [bonusbar:3] 9; [bonusbar:4] 10; [bonusbar:5] 11; 1"
+local PAGING_MIDDLE = "[bar:2] 2; [bar:3] 3; [bar:4] 4; [bar:5] 5; [bar:6] 6; "
+local PAGING_DEFAULT_BONUS = "[bonusbar:1] 7; [bonusbar:2] 8; [bonusbar:3] 9; [bonusbar:4] 10; "
+local PAGING_TAIL = "[bonusbar:5] 11; 1"
 
-function L.PagingDriver(o, v, t)
-	if o ~= nil and v ~= nil and t ~= nil then
-		return string.format("[overridebar] %d; [vehicleui] %d; [possessbar] %d; [shapeshift] %d; ", o, v, v, t)
-			.. PAGING_TAIL
+local FORM_PAGES = { [768] = 7, [5487] = 9, [9634] = 9, [24858] = 10 }
+
+function L.FormPage(spellID, stealthed)
+	local page = FORM_PAGES[spellID]
+	if page == nil then
+		return nil
 	end
-	return PAGING_TAIL
+	if spellID == 768 and stealthed then
+		return 8
+	end
+	return page
+end
+
+function L.FormClauses(classFile, spellIDs)
+	if classFile ~= "DRUID" or type(spellIDs) ~= "table" then
+		return nil
+	end
+
+	local clauses
+	for i = 1, #spellIDs do
+		local page = L.FormPage(spellIDs[i], false)
+		if page ~= nil then
+			clauses = clauses or ""
+			local stealthPage = L.FormPage(spellIDs[i], true)
+			if stealthPage ~= page then
+				clauses = clauses .. string.format("[form:%d,stealth] %d; ", i, stealthPage)
+			end
+			clauses = clauses .. string.format("[form:%d] %d; ", i, page)
+		end
+	end
+	return clauses
+end
+
+function L.PagingDriver(o, v, t, formClauses)
+	local prefix = ""
+	if o ~= nil and v ~= nil and t ~= nil then
+		prefix = string.format("[overridebar] %d; [vehicleui] %d; [possessbar] %d; [shapeshift] %d; ", o, v, v, t)
+	end
+	return prefix .. PAGING_MIDDLE .. (formClauses or "") .. PAGING_DEFAULT_BONUS .. PAGING_TAIL
 end
 
 local function clampPerRow(perRow, n)
@@ -69,9 +103,11 @@ function L.DefaultPosition(b)
 	return { point = "CENTER", x = 0, y = -300 + (b - 1) * 40 }
 end
 
-function L.ExpectedPage(barPage, offset)
+function L.ExpectedPage(barPage, offset, formPage)
 	if barPage > 1 then
 		return barPage
+	elseif formPage ~= nil then
+		return formPage
 	elseif offset > 0 then
 		return 6 + offset
 	end

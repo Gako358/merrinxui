@@ -127,4 +127,63 @@ describe("ActionBarLogic", function()
 		assert.are.equal(0.5, L.BarAlpha(50, true, true, false))
 		assert.are.equal(0.5, L.BarAlpha(50, true, false, true))
 	end)
+
+	it("FormPage maps druid form spellIDs to pages, stealth only matters for cat", function()
+		assert.are.equal(7, L.FormPage(768, false))
+		assert.are.equal(8, L.FormPage(768, true))
+		assert.are.equal(9, L.FormPage(5487))
+		assert.are.equal(9, L.FormPage(5487, true))
+		assert.are.equal(9, L.FormPage(9634))
+		assert.are.equal(10, L.FormPage(24858))
+		assert.is_nil(L.FormPage(783))
+		assert.is_nil(L.FormPage(1066))
+		assert.is_nil(L.FormPage(nil))
+	end)
+
+	it("FormClauses builds per-form macro clauses for druids, with a stealth clause only when it differs", function()
+		assert.are.equal(
+			"[form:1] 9; [form:3,stealth] 8; [form:3] 7; ",
+			L.FormClauses("DRUID", { 5487, 1066, 768, 783 })
+		)
+		assert.are.equal(
+			"[form:1] 9; [form:3,stealth] 8; [form:3] 7; [form:5] 10; ",
+			L.FormClauses("DRUID", { 9634, 1066, 768, 783, 24858 })
+		)
+		assert.are.equal("[form:1,stealth] 8; [form:1] 7; [form:2] 9; ", L.FormClauses("DRUID", { 768, 5487 }))
+	end)
+
+	it("FormClauses returns nil for non-druids, nil input, or no mapped forms", function()
+		assert.is_nil(L.FormClauses("WARRIOR", { 2457, 71 }))
+		assert.is_nil(L.FormClauses("ROGUE", { 1784 }))
+		assert.is_nil(L.FormClauses(nil, { 768 }))
+		assert.is_nil(L.FormClauses("DRUID", nil))
+		assert.is_nil(L.FormClauses("DRUID", {}))
+		assert.is_nil(L.FormClauses("DRUID", { 1066, 783 }))
+	end)
+
+	it("PagingDriver splices in form clauses before [bonusbar:5], and nil clauses keep today's output", function()
+		local clauses = L.FormClauses("DRUID", { 5487, 1066, 768, 783 })
+		local expected = "[overridebar] 33; [vehicleui] 31; [possessbar] 31; [shapeshift] 32; "
+			.. "[bar:2] 2; [bar:3] 3; [bar:4] 4; [bar:5] 5; [bar:6] 6; "
+			.. "[form:1] 9; [form:3,stealth] 8; [form:3] 7; "
+			.. "[bonusbar:1] 7; [bonusbar:2] 8; [bonusbar:3] 9; [bonusbar:4] 10; [bonusbar:5] 11; 1"
+		assert.are.equal(expected, L.PagingDriver(33, 31, 32, clauses))
+
+		local tail = "[bar:2] 2; [bar:3] 3; [bar:4] 4; [bar:5] 5; [bar:6] 6; "
+			.. "[form:1] 9; [form:3,stealth] 8; [form:3] 7; "
+			.. "[bonusbar:1] 7; [bonusbar:2] 8; [bonusbar:3] 9; [bonusbar:4] 10; [bonusbar:5] 11; 1"
+		assert.are.equal(tail, L.PagingDriver(nil, nil, nil, clauses))
+
+		assert.are.equal(L.PagingDriver(18, 16, 17), L.PagingDriver(18, 16, 17, nil))
+	end)
+
+	it("ExpectedPage prefers the bar page, then the form page, then the bonus offset, then 1", function()
+		assert.are.equal(7, L.ExpectedPage(1, 0, 7))
+		assert.are.equal(8, L.ExpectedPage(1, 0, 8))
+		assert.are.equal(9, L.ExpectedPage(1, 3, 9))
+		assert.are.equal(1, L.ExpectedPage(1, 1, 1))
+		assert.are.equal(2, L.ExpectedPage(2, 0, 7))
+		assert.are.equal(7, L.ExpectedPage(1, 1, nil))
+		assert.are.equal(11, L.ExpectedPage(1, 5, nil))
+	end)
 end)

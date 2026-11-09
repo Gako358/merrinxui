@@ -78,15 +78,34 @@ function L.ForClass(class)
 	return L.BUFFS[class] or {}
 end
 
-function L.Known(buff, isKnown)
-	for _, line in ipairs(buff.lines) do
-		for _, id in ipairs(line) do
-			if isKnown(id) then
-				return true
-			end
+local function lineKnown(line, isKnown)
+	for _, id in ipairs(line) do
+		if isKnown(id) then
+			return true
 		end
 	end
 	return false
+end
+
+function L.Known(buff, isKnown)
+	for _, line in ipairs(buff.lines) do
+		if lineKnown(line, isKnown) then
+			return true
+		end
+	end
+	return false
+end
+
+function L.CastLine(buff, isKnown, preferred)
+	if preferred and buff.lines[preferred] and lineKnown(buff.lines[preferred], isKnown) then
+		return preferred
+	end
+	for i, line in ipairs(buff.lines) do
+		if lineKnown(line, isKnown) then
+			return i
+		end
+	end
+	return nil
 end
 
 -- aura: the aura data of one line, or nil when that line is not on the player.

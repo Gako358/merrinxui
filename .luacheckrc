@@ -162,6 +162,9 @@ read_globals = {
 	"GetInboxHeaderInfo",
 	"GetInboxInvoiceInfo",
 	"GetShapeshiftForm",
+	"GetShapeshiftFormInfo",
+	"GetNumShapeshiftForms",
+	"IsStealthed",
 }
 
 globals = {
