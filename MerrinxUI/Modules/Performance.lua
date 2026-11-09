@@ -148,9 +148,6 @@ function Performance:Instrument()
 	for _, part in ipairs({ "Data", "Window", "Menu", "Tooltip", "Timer" }) do
 		cover("DamageMeter", ns["DamageMeter" .. part])
 	end
-	for _, part in ipairs({ "Window", "Scanner" }) do
-		cover("Auctioneer", ns["Auctioneer" .. part])
-	end
 	ns.Debug:Log("Performance", "instrumented", #wrapped)
 end
 

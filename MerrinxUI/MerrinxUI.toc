@@ -69,14 +69,4 @@ Modules\BuffReminderLogic.lua
 Modules\BuffReminders.lua
 Modules\PerformanceLogic.lua
 Modules\Performance.lua
-Modules\LayerHopLogic.lua
-Modules\LayerHop.lua
-Modules\AuctioneerScanLogic.lua
-Modules\AuctioneerLogic.lua
-Modules\AuctioneerTradeLogic.lua
-Modules\AuctioneerLedgerLogic.lua
-Modules\AuctioneerScanner.lua
-Modules\AuctioneerInventory.lua
-Modules\AuctioneerWindow.lua
-Modules\Auctioneer.lua
 Modules\QoL.lua

@@ -3,6 +3,47 @@ local addonName, ns = ...
 local MerrinxUI = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
 ns.addon = MerrinxUI
 
+local slashVerbs = {}
+local RESERVED = {
+	unlock = true,
+	lock = true,
+	debug = true,
+	test = true,
+	log = true,
+	kos = true,
+	copy = true,
+}
+
+function MerrinxUI:GetPluginAPI(version)
+	if version ~= 1 then
+		return nil
+	end
+	return {
+		version = 1,
+		Theme = ns.Theme,
+		Media = ns.Media,
+		Mover = ns.Mover,
+		Debug = ns.Debug,
+		OptionsWindow = ns.OptionsWindow,
+	}
+end
+
+function MerrinxUI:RegisterSlash(verb, handler)
+	if type(verb) ~= "string" or not verb:match("^%l[%l%d]*$") then
+		error("RegisterSlash: invalid verb '" .. tostring(verb) .. "'", 2)
+	end
+	if type(handler) ~= "function" then
+		error("RegisterSlash: handler must be a function", 2)
+	end
+	if RESERVED[verb] then
+		error("RegisterSlash: verb '" .. verb .. "' is reserved", 2)
+	end
+	if slashVerbs[verb] then
+		error("RegisterSlash: verb '" .. verb .. "' is already registered", 2)
+	end
+	slashVerbs[verb] = handler
+end
+
 function MerrinxUI:OnInitialize()
 	self.db = LibStub("AceDB-3.0"):New("MerrinxUIDB", { profile = {}, global = {} }, true)
 	self.db.RegisterCallback(self, "OnProfileChanged", "RefreshModules")
@@ -70,10 +111,8 @@ function MerrinxUI:SlashCommand(input)
 			self:GetModule("EnemySpotter"):Slash(arg)
 		elseif verb == "copy" then
 			self:GetModule("Chat"):ShowCopy()
-		elseif verb == "hop" then
-			self:GetModule("LayerHop"):Hop()
-		elseif verb == "ah" then
-			self:GetModule("Auctioneer"):Toggle()
+		elseif slashVerbs[verb] then
+			slashVerbs[verb](arg)
 		else
 			self:OpenOptions()
 		end

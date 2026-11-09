@@ -7,7 +7,6 @@ enabled on its own, and they all share one look and one options window.
 | Module         | What it does                                                         |
 |----------------+----------------------------------------------------------------------|
 | ActionBars     | Action bars with opacity, mouseover, combat hiding and a key toggle  |
-| Auctioneer     | Gold-based buy plan, sell prices, profit ledger and price trends     |
 | BuffReminders  | Shows your class buffs when they are missing or running low          |
 | CastBars       | Player, target and focus cast bars, plus a swing timer               |
 | Chat           | Chat window skin, fading, clickable URLs and a copy-chat window      |
@@ -18,7 +17,7 @@ enabled on its own, and they all share one look and one options window.
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
 | Nameplates     | Styled nameplates with cast bars, debuffs, crowd control and markers |
 | Professions    | Profession levelling guides                                          |
-| QoL            | Tabs: Performance (FPS, latency, memory, CPU) and Layer Hop          |
+| QoL            | Tabs: Performance (FPS, latency, memory, CPU), and Layer Hop when MerrinxUI_LayerHop is installed |
 | RangeText      | Range to your target, coloured by spell range                        |
 | SpellHistory   | Recently cast spells as icons or bars                                |
 | UnitFrames     | Player, target, focus, pet and target-of-target frames               |
@@ -36,8 +35,7 @@ with grid snapping, per-character or shared profiles, and built-in diagnostics.
 | =/mui test=                | Run the self-checks and show the log       |
 | =/mui log=                 | Show the debug log                         |
 | =/mui copy=                | Copy chat                                  |
-| =/mui hop=                 | Hop to another layer                       |
-| =/mui ah=                  | Show or hide the Auctioneer window         |
+| =/mui hop=                 | Hop to another layer (needs MerrinxUI_LayerHop) |
 | =/mui kos [name]=          | Add your target or a name to the kill list |
 
 * Installation

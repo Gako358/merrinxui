@@ -7,9 +7,12 @@ local TABS = { "Performance", "LayerHop" }
 function QoL:GetOptions()
 	local args = {}
 	for i, name in ipairs(TABS) do
-		local tab = ns.addon:GetModule(name):GetTabOptions()
-		tab.order = i
-		args[name] = tab
+		local module = ns.addon:GetModule(name, true)
+		if module then
+			local tab = module:GetTabOptions()
+			tab.order = i
+			args[name] = tab
+		end
 	end
 	return {
 		type = "group",
@@ -30,8 +33,14 @@ function QoL:GetDebugChecks()
 				if type(node) ~= "table" or type(node.args) ~= "table" then
 					return "FAIL", "no QoL node"
 				end
-				local missing = {}
+				local present = {}
 				for _, name in ipairs(TABS) do
+					if ns.addon:GetModule(name, true) then
+						present[#present + 1] = name
+					end
+				end
+				local missing = {}
+				for _, name in ipairs(present) do
 					if type(node.args[name]) ~= "table" then
 						missing[#missing + 1] = name
 					end
@@ -39,7 +48,7 @@ function QoL:GetDebugChecks()
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
 				end
-				return "PASS", #TABS
+				return "PASS", #present
 			end,
 		},
 	}
