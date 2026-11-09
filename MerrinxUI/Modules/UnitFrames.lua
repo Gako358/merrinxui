@@ -9,6 +9,11 @@ local MANA_COLOR = { 0, 0.55, 1 }
 local HEAL_COLOR = { 0.2, 0.9, 0.3, 0.5 }
 local ABSORB_COLOR = { 0.85, 0.95, 1, 0.5 }
 local COST_COLOR = { 1, 1, 1, 0.4 }
+local PVP_BADGES = {
+	Horde = { "PvP", 0.9, 0.2, 0.2 },
+	Alliance = { "PvP", 0.25, 0.55, 1 },
+	FFA = { "FFA", 1, 0.6, 0 },
+}
 
 local UnitFrames = ns.addon:NewModule("UnitFrames", "AceEvent-3.0")
 
@@ -38,6 +43,7 @@ local defaults = {
 		incomingHeals = true,
 		absorbs = true,
 		spellCost = true,
+		pvpFlag = true,
 		units = {
 			player = unitDefaults(220, 44, 8, -280, -180),
 			target = unitDefaults(220, 44, 8, 280, -180),
@@ -80,6 +86,7 @@ function UnitFrames:OnEnable()
 		"UNIT_DISPLAYPOWER",
 		"UNIT_NAME_UPDATE",
 		"UNIT_FACTION",
+		"PLAYER_FLAGS_CHANGED",
 	}) do
 		self:RegisterEvent(event, "OnUnitEvent")
 	end
@@ -223,6 +230,11 @@ function UnitFrames:Build()
 			frame.powerText:SetPoint("CENTER", frame.power, "CENTER", 0, 0)
 			frame.manaText = newText(text, "CENTER")
 			frame.manaText:SetPoint("CENTER", frame.mana, "CENTER", 0, 0)
+			if unit == "player" then
+				frame.pvp = newText(text, "LEFT")
+				frame.pvp:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 1, 2)
+				frame.pvp:Hide()
+			end
 
 			frame:HookScript("OnShow", function()
 				self:UpdateUnit(unit)
@@ -288,6 +300,9 @@ function UnitFrames:Layout()
 		ns.Media:SetFont(frame.healthText, p.font, p.fontSize, "")
 		ns.Media:SetFont(frame.powerText, p.font, math.max(8, p.fontSize - 2), "")
 		ns.Media:SetFont(frame.manaText, p.font, math.max(8, p.fontSize - 3), "")
+		if frame.pvp then
+			ns.Media:SetFont(frame.pvp, p.font, math.max(8, p.fontSize - 2), "")
+		end
 		if L.Watched(unit) then
 			if u.enabled then
 				RegisterUnitWatch(frame)
@@ -394,6 +409,9 @@ function UnitFrames:UpdateUnit(unit)
 		)
 	)
 	frame.name:SetText(UnitName(unit))
+	if frame.pvp then
+		self:UpdatePvP(frame)
+	end
 
 	if frame.power:IsShown() then
 		local power = UnitPower(unit)
@@ -423,6 +441,29 @@ function UnitFrames:UpdateUnit(unit)
 		if p.druidManaText then
 			frame.manaText:SetText(AbbreviateNumbers(mana))
 		end
+	end
+end
+
+function UnitFrames:PvPBadge()
+	local isPvP, isFFA, faction = UnitIsPVP("player"), UnitIsPVPFreeForAll("player"), UnitFactionGroup("player")
+	if isSecret(isPvP) then
+		isPvP = nil
+	end
+	if isSecret(isFFA) then
+		isFFA = nil
+	end
+	if isSecret(faction) then
+		faction = nil
+	end
+	return L.PvPBadge(isPvP, isFFA, faction)
+end
+
+function UnitFrames:UpdatePvP(frame)
+	local badge = self.db.profile.pvpFlag and PVP_BADGES[self:PvPBadge()] or nil
+	frame.pvp:SetShown(badge ~= nil)
+	if badge then
+		frame.pvp:SetText(badge[1])
+		frame.pvp:SetTextColor(badge[2], badge[3], badge[4])
 	end
 end
 
@@ -633,6 +674,14 @@ function UnitFrames:GetOptions()
 					get = get("absorbs"),
 					set = set("absorbs"),
 				},
+				pvpFlag = {
+					type = "toggle",
+					name = "PvP flag",
+					desc = "Shows PvP or FFA above the player frame while you are flagged",
+					order = 3,
+					get = get("pvpFlag"),
+					set = set("pvpFlag"),
+				},
 			},
 		},
 		cost = {
@@ -707,6 +756,9 @@ function UnitFrames:GetDebugChecks()
 					UnitGetIncomingHeals = UnitGetIncomingHeals,
 					UnitGetTotalAbsorbs = UnitGetTotalAbsorbs,
 					["C_Spell.GetSpellPowerCost"] = C_Spell and C_Spell.GetSpellPowerCost,
+					UnitIsPVP = UnitIsPVP,
+					UnitIsPVPFreeForAll = UnitIsPVPFreeForAll,
+					UnitFactionGroup = UnitFactionGroup,
 				}) do
 					if type(fn) ~= "function" then
 						table.insert(missing, name)
@@ -821,6 +873,25 @@ function UnitFrames:GetDebugChecks()
 					frame.absorb:IsShown(),
 					isSecret(heal) and "secret" or heal,
 					isSecret(absorb) and "secret" or absorb
+			end,
+		},
+		{
+			name = "pvp flag",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local frame = self.frames.player
+				if not frame or not frame.pvp then
+					return "FAIL", "missing"
+				end
+				if not frame:IsVisible() then
+					return "SKIP", "player frame hidden"
+				end
+				local badge = self:PvPBadge()
+				local expected = self.db.profile.pvpFlag and badge ~= nil
+				local shown = frame.pvp:IsShown()
+				return (shown == expected) and "PASS" or "FAIL", shown, badge or "none"
 			end,
 		},
 		{

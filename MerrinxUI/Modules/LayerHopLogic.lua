@@ -113,6 +113,16 @@ function L.SameName(a, b)
 	return short ~= nil and short == L.ShortName(b)
 end
 
+function L.AcceptsInvite(hop, inviter)
+	if not hop or L.ShortName(inviter) == nil then
+		return false
+	end
+	if hop.state == "public" then
+		return true
+	end
+	return hop.state == "picked" and L.SameName(inviter, hop.host)
+end
+
 -- rand(m, n) returns an integer in [m, n], like math.random.
 function L.Sample(names, n, rand, skip)
 	local pool = {}

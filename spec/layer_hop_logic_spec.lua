@@ -118,6 +118,27 @@ describe("LayerHopLogic", function()
 		end)
 	end)
 
+	describe("AcceptsInvite", function()
+		it("accepts only the picked host while waiting on a MerrinxUI user", function()
+			local hop = { state = "picked", host = "Helper-Realm" }
+			assert.is_true(L.AcceptsInvite(hop, "helper"))
+			assert.is_false(L.AcceptsInvite(hop, "Stranger"))
+		end)
+
+		it("accepts anyone after asking in General", function()
+			assert.is_true(L.AcceptsInvite({ state = "public" }, "Stranger"))
+			assert.is_false(L.AcceptsInvite({ state = "public" }, ""))
+			assert.is_false(L.AcceptsInvite({ state = "public" }, nil))
+		end)
+
+		it("accepts nothing while idle, asking or already joining", function()
+			assert.is_false(L.AcceptsInvite(nil, "Helper"))
+			for _, state in ipairs({ "asking", "accepted", "joined" }) do
+				assert.is_false(L.AcceptsInvite({ state = state, host = "Helper" }, "Helper"), state)
+			end
+		end)
+	end)
+
 	describe("Sample", function()
 		it("picks up to n names, never a skipped one", function()
 			local first = function(m)

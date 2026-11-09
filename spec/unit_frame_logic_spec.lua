@@ -39,6 +39,17 @@ describe("UnitFrameLogic", function()
 		assert.is_true(L.Watched("pet"))
 	end)
 
+	it("PvPBadge shows FFA first, then a flagged faction, else nothing", function()
+		assert.are.equal("FFA", L.PvPBadge(true, true, "Horde"))
+		assert.are.equal("FFA", L.PvPBadge(false, true, nil))
+		assert.are.equal("Horde", L.PvPBadge(true, false, "Horde"))
+		assert.are.equal("Alliance", L.PvPBadge(true, false, "Alliance"))
+		assert.is_nil(L.PvPBadge(false, false, "Horde"))
+		assert.is_nil(L.PvPBadge(true, false, "Neutral"))
+		assert.is_nil(L.PvPBadge(true, false, nil))
+		assert.is_nil(L.PvPBadge(nil, nil, nil))
+	end)
+
 	it("Amount turns nil into 0 and passes numbers and secrets through", function()
 		local secret = {}
 		local function isSecret(v)

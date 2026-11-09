@@ -16,6 +16,9 @@ local LAND_TIMEOUT = 60
 local OFFER_TTL = 30
 local MAX_OFFERS = 5
 local MAX_WHISPERS = 8
+local GENERAL_WINDOW = 30
+local GENERAL_TIMEOUT = 60
+local GENERAL_TEXT = "Could someone on another layer /inv me for a layer hop? I leave right after, thanks!"
 
 local LayerHop = ns.addon:NewModule("LayerHop", "AceEvent-3.0")
 
@@ -231,18 +234,47 @@ function LayerHop:Hop()
 		return self:Say("layer unknown. Target or mouse over an NPC first.")
 	end
 
-	local id = math.random(1, L.MAX_ID)
 	self.lastAsk = now
+	if self.generalUntil and now < self.generalUntil then
+		return self:AskGeneral(map, zone)
+	end
+	local id = math.random(1, L.MAX_ID)
 	if self:Broadcast(L.Encode("Q", id, map, zone)) == 0 then
-		return self:Say("nobody to ask. Join a guild or wait for the hop channel to connect.")
+		return self:AskGeneral(map, zone)
 	end
 	self.stats.asked = self.stats.asked + 1
-	self.hop = { id = id, state = "asking", map = map, zone = zone, deadline = now + ASK_TIMEOUT }
+	self:Start({ id = id, state = "asking", map = map, zone = zone, deadline = now + ASK_TIMEOUT })
+	self:Say("looking for a player on another layer.")
+end
+
+-- Chat channels only accept messages sent during a key press or click, so this has to run
+-- straight from Hop and never from a timer.
+function LayerHop:AskGeneral(map, zone)
+	self.generalUntil = nil
+	local channel = plain(C_ChatInfo.GetGeneralChannelLocalID())
+	if type(channel) ~= "number" then
+		return self:Say("join the General channel first.")
+	end
+	local ok, err = pcall(C_ChatInfo.SendChatMessage, GENERAL_TEXT, "CHANNEL", nil, channel)
+	if not ok then
+		ns.Debug:Log("LayerHop", "general failed", err)
+		return self:Say("could not post in General.")
+	end
+	self:Start({ state = "public", map = map, zone = zone, deadline = GetTime() + GENERAL_TIMEOUT })
+	self:Say("asked in General for an invite.")
+end
+
+function LayerHop:Start(hop)
+	self.hop = hop
 	self.ticker = C_Timer.NewTicker(TICK, function()
 		self:OnTick()
 	end)
-	self:Say("looking for a player on another layer.")
 	self:Notify()
+end
+
+function LayerHop:OfferGeneral(text)
+	self.generalUntil = GetTime() + GENERAL_WINDOW
+	self:Finish(string.format("%s Press hop again within %d seconds to ask in General.", text, GENERAL_WINDOW))
 end
 
 function LayerHop:BindingHop()
@@ -280,9 +312,11 @@ function LayerHop:OnTick()
 		return
 	end
 	if hop.state == "asking" then
-		self:Finish("no player on another layer answered.")
+		self:OfferGeneral("no MerrinxUI user on another layer answered.")
 	elseif hop.state == "picked" then
-		self:Finish("no invite arrived.")
+		self:OfferGeneral("no invite arrived.")
+	elseif hop.state == "public" then
+		self:Finish("nobody in General invited you.")
 	else
 		self:Leave()
 		self:Finish("the layer did not change, so you left the group.")
@@ -318,10 +352,11 @@ end
 
 function LayerHop:OnPartyInvite(_, inviter)
 	local hop = self.hop
-	if not hop or hop.state ~= "picked" or not L.SameName(plain(inviter), hop.host) then
+	inviter = plain(inviter)
+	if not L.AcceptsInvite(hop, inviter) then
 		return
 	end
-	hop.state = "accepted"
+	hop.state, hop.host = "accepted", inviter
 	local ok = pcall(AcceptGroup)
 	if ok then
 		StaticPopup_Hide("PARTY_INVITE")
@@ -395,6 +430,7 @@ end
 local STATUS = {
 	asking = "Looking for a player on another layer...",
 	picked = "Waiting for an invite...",
+	public = "Asked in General, waiting for an invite...",
 	accepted = "Joining the group...",
 	joined = "In the group, waiting for the layer to change...",
 }
@@ -457,7 +493,8 @@ function LayerHop:GetTabOptions()
 				type = "execute",
 				name = "Hop layer",
 				order = 3,
-				desc = "Joins a MerrinxUI user on another layer, then leaves the group once the layer has changed.",
+				desc = "Joins a MerrinxUI user on another layer, then leaves the group once the layer has changed. "
+					.. "If none answers, pressing again asks in General and accepts the first invite.",
 				disabled = function()
 					return not self:IsEnabled() or self.hop ~= nil
 				end,
@@ -499,6 +536,8 @@ function LayerHop:GetDebugChecks()
 					["C_ChatInfo.SendAddonMessage"] = C_ChatInfo and C_ChatInfo.SendAddonMessage,
 					["C_ChatInfo.RegisterAddonMessagePrefix"] = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix,
 					["C_ChatInfo.GetChannelRosterInfo"] = C_ChatInfo and C_ChatInfo.GetChannelRosterInfo,
+					["C_ChatInfo.SendChatMessage"] = C_ChatInfo and C_ChatInfo.SendChatMessage,
+					["C_ChatInfo.GetGeneralChannelLocalID"] = C_ChatInfo and C_ChatInfo.GetGeneralChannelLocalID,
 					["C_PartyInfo.InviteUnit"] = C_PartyInfo and C_PartyInfo.InviteUnit,
 					["C_PartyInfo.LeaveParty"] = C_PartyInfo and C_PartyInfo.LeaveParty,
 					["C_Map.GetBestMapForUnit"] = C_Map and C_Map.GetBestMapForUnit,

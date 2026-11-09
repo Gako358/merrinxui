@@ -50,6 +50,17 @@ function L.Watched(unit)
 	return unit ~= "player"
 end
 
+-- Free-for-all PvP is checked first because it flags a player regardless of faction.
+function L.PvPBadge(isPvP, isFFA, faction)
+	if isFFA then
+		return "FFA"
+	end
+	if isPvP and (faction == "Horde" or faction == "Alliance") then
+		return faction
+	end
+	return nil
+end
+
 -- UnitGetIncomingHeals returns nil with no heals in flight; a secret value is
 -- passed through untouched because only the status bar may read it.
 function L.Amount(value, isSecret)
