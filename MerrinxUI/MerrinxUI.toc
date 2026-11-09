@@ -71,4 +71,9 @@ Modules\PerformanceLogic.lua
 Modules\Performance.lua
 Modules\LayerHopLogic.lua
 Modules\LayerHop.lua
+Modules\AuctioneerScanLogic.lua
+Modules\AuctioneerLogic.lua
+Modules\AuctioneerScanner.lua
+Modules\AuctioneerWindow.lua
+Modules\Auctioneer.lua
 Modules\QoL.lua

@@ -72,6 +72,8 @@ function MerrinxUI:SlashCommand(input)
 			self:GetModule("Chat"):ShowCopy()
 		elseif verb == "hop" then
 			self:GetModule("LayerHop"):Hop()
+		elseif verb == "ah" then
+			self:GetModule("Auctioneer"):Toggle()
 		else
 			self:OpenOptions()
 		end

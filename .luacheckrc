@@ -152,6 +152,10 @@ read_globals = {
 	"IsInGuild",
 	"AcceptGroup",
 	"StaticPopup_Hide",
+	"C_AuctionHouse",
+	"C_Item",
+	"AuctionHouseFrame",
+	"HideUIPanel",
 }
 
 globals = {
