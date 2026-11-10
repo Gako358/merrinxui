@@ -137,3 +137,33 @@ function ChatLogic.Approach(current, target, step)
 	end
 	return math.max(current - step, target)
 end
+
+ChatLogic.TIMESTAMP_GAME = "blizzard"
+ChatLogic.TIMESTAMP_FORMATS = {
+	{ value = "blizzard", label = "Game setting" },
+	{ value = "none", label = "Off" },
+	{ value = "%H:%M ", label = "24-hour (15:04)" },
+	{ value = "%H:%M:%S ", label = "24-hour with seconds (15:04:05)" },
+	{ value = "%I:%M %p ", label = "12-hour (03:04 PM)" },
+	{ value = "%I:%M:%S %p ", label = "12-hour with seconds (03:04:05 PM)" },
+}
+
+function ChatLogic.TimestampValues()
+	local values = {}
+	for _, entry in ipairs(ChatLogic.TIMESTAMP_FORMATS) do
+		values[entry.value] = entry.label
+	end
+	return values
+end
+
+function ChatLogic.TimestampCVar(choice, current)
+	if choice == ChatLogic.TIMESTAMP_GAME or choice == current then
+		return nil
+	end
+	for _, entry in ipairs(ChatLogic.TIMESTAMP_FORMATS) do
+		if entry.value == choice then
+			return choice
+		end
+	end
+	return nil
+end

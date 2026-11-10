@@ -31,6 +31,10 @@ local defaults = {
 		cc = true,
 		ccSize = 26,
 		ccMax = 2,
+		enemyCooldowns = true,
+		enemyCooldownSize = 20,
+		enemyCooldownMax = 4,
+		enemyCooldownSpells = {},
 		raidMarkerPos = "TOPRIGHT",
 		raidMarkerSize = 20,
 		classificationIcon = true,
@@ -181,6 +185,8 @@ function Nameplates:OnInitialize()
 			self:UpdateComboPoints()
 		end
 	end)
+
+	ns.EnemyCooldowns:Init(self)
 end
 
 function Nameplates:ComboActive()
@@ -213,6 +219,7 @@ function Nameplates:OnEnable()
 	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
 	self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
 	self:SetComboEventsEnabled(self:ComboActive())
+	ns.EnemyCooldowns:SetActive(self.db.profile.enemyCooldowns)
 
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.unitToken
@@ -224,6 +231,7 @@ function Nameplates:OnEnable()
 end
 
 function Nameplates:OnDisable()
+	ns.EnemyCooldowns:SetActive(false)
 	self:SetCastEventsEnabled(false)
 	self:SetComboEventsEnabled(false)
 
@@ -251,6 +259,7 @@ function Nameplates:Refresh()
 		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
 		self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
 		self:SetComboEventsEnabled(self:ComboActive())
+		ns.EnemyCooldowns:SetActive(self.db.profile.enemyCooldowns)
 		for _, frame in pairs(self.plateFrames) do
 			self:ApplySize(frame)
 		end
@@ -262,6 +271,7 @@ function Nameplates:Refresh()
 				self:UpdateColor(unit, frame)
 				self:UpdateHighlight(unit, frame)
 				self:UpdateTargetState(unit, frame)
+				ns.EnemyCooldowns:Attach(unit, frame)
 				self:UpdateMarkers(unit, frame)
 				self:UpdateLevel(unit, frame)
 				self:UpdatePower(unit, frame)
@@ -455,6 +465,7 @@ function Nameplates:StyleUnit(unit)
 	self:UpdateHealth(unit, frame)
 	self:UpdateName(unit, frame)
 	self:UpdateLevel(unit, frame)
+	ns.EnemyCooldowns:Attach(unit, frame)
 	self:UpdateColor(unit, frame)
 	self:UpdateHighlight(unit, frame)
 	self:UpdateTargetState(unit, frame)
@@ -474,6 +485,7 @@ function Nameplates:StyleUnit(unit)
 end
 
 function Nameplates:UnstyleUnit(unit)
+	ns.EnemyCooldowns:Detach(unit)
 	local plate = self.unitPlates[unit]
 	self.unitPlates[unit] = nil
 	self.castMode[unit] = nil
@@ -1022,7 +1034,7 @@ local function DebuffAnchorFrame(frame, profile)
 			relativeTo = frame.healthBar
 		end
 	elseif anchor == "RIGHT" then
-		relativeTo = profile.levelText and frame.levelText or frame
+		relativeTo = ns.EnemyCooldowns:Anchor(frame) or (profile.levelText and frame.levelText or frame)
 	elseif anchor == "LEFT" then
 		relativeTo = (profile.cc and frame.cc) or frame
 	elseif Nameplates:ComboActive() then
@@ -1267,7 +1279,7 @@ function Nameplates:MarkerAnchor(frame, profile)
 	if position == "LEFT" then
 		return (profile.cc and frame.cc) or frame
 	elseif position == "RIGHT" then
-		return profile.levelText and frame.levelText or frame
+		return ns.EnemyCooldowns:Anchor(frame) or (profile.levelText and frame.levelText or frame)
 	end
 	return frame
 end
@@ -2065,6 +2077,8 @@ function Nameplates:GetOptions()
 		},
 		disabled = isOff("threatColors"),
 	})
+
+	ns.EnemyCooldowns:AddOptions(options.args)
 
 	return options
 end

@@ -2,27 +2,13 @@ local addonName, ns = ...
 
 local L = ns.EnemyCooldownLogic
 
-local EnemyCooldowns = ns.addon:NewModule("EnemyCooldowns", "AceEvent-3.0")
+local EnemyCooldowns = {}
+ns.EnemyCooldowns = EnemyCooldowns
 
-local FALLBACK_TEXTURE = "Interface\\Icons\\INV_Misc_QuestionMark"
-local LAYOUT_SPACING = 2
+local ICON_GAP = 2
+local ICON_SPACING = 2
 local TICK_INTERVAL = 0.5
-
-local defaults = {
-	profile = {
-		enabled = true,
-		iconSize = 20,
-		maxIcons = 4,
-		anchor = "TOP",
-		x = 0,
-		y = 2,
-		sound = "None",
-	},
-}
-
-local function IsNameplateUnit(unit)
-	return type(unit) == "string" and unit:match("^nameplate") ~= nil
-end
+local FALLBACK_TEXTURE = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local function ResolveSpellName(spellID)
 	local name = C_Spell.GetSpellName(spellID)
@@ -32,213 +18,97 @@ local function ResolveSpellName(spellID)
 	return name
 end
 
-function EnemyCooldowns:OnInitialize()
-	self.db = ns.addon.db:RegisterNamespace("EnemyCooldowns", defaults)
-	self:SetEnabledState(self.db.profile.enabled)
+local function DropState(self, entry)
+	if entry.kind == "unit" then
+		self.state[entry.key] = nil
+	end
+end
 
+local function ClampCooldownSize(size)
+	if type(size) ~= "number" then
+		return 20
+	end
+	if size < 12 then
+		return 12
+	elseif size > 40 then
+		return 40
+	end
+	return size
+end
+
+function EnemyCooldowns:Init(module)
+	self.module = module
 	self.state = {}
 	self.units = {}
-	self.unitPlate = {}
 	self.containers = setmetatable({}, { __mode = "k" })
-end
+	self.index = nil
+	self.ticker = nil
+	self.active = false
+	self.seen = 0
+	self.secret = 0
+	self.unselected = 0
+	self.hits = 0
 
-function EnemyCooldowns:OnEnable()
-	if not self.index then
-		self.index = L.BuildIndex(L.SPELLS, ResolveSpellName)
-	end
-
-	self:RegisterEvent("NAME_PLATE_UNIT_ADDED", "OnUnitAdded")
-	self:RegisterEvent("UNIT_FACTION", "OnUnitFaction")
-	self:RegisterEvent("NAME_PLATE_UNIT_REMOVED", "OnUnitRemoved")
-	self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "OnSpellcastSucceeded")
-	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
-
-	self.ticker = C_Timer.NewTicker(TICK_INTERVAL, function()
-		self:OnTick()
-	end)
-
-	self:RescanPlates()
-end
-
-function EnemyCooldowns:RescanPlates()
-	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-		self:HandleUnit(plate.unitToken)
-	end
-end
-
-function EnemyCooldowns:OnDisable()
-	if self.ticker then
-		self.ticker:Cancel()
-		self.ticker = nil
-	end
-
-	for key in pairs(self.state) do
-		self.state[key] = nil
-	end
-	for unit in pairs(self.units) do
-		self.units[unit] = nil
-	end
-	for unit in pairs(self.unitPlate) do
-		self.unitPlate[unit] = nil
-	end
-	for _, container in pairs(self.containers) do
-		container:Hide()
-	end
-end
-
-function EnemyCooldowns:Refresh()
-	if self.db.profile.enabled then
-		self:Enable()
-		for unit in pairs(self.units) do
-			self:Render(unit)
+	self.events = CreateFrame("Frame")
+	self.events:SetScript("OnEvent", function(_, event, ...)
+		if event == "UNIT_SPELLCAST_SUCCEEDED" then
+			self:OnSpellcastSucceeded(...)
+		elseif event == "PLAYER_ENTERING_WORLD" then
+			self:OnEnteringWorld()
 		end
-	else
-		self:Disable()
-	end
+	end)
 end
 
-function EnemyCooldowns:ClearUnit(unit)
-	local plate = self.unitPlate[unit]
-	if plate then
-		local container = self.containers[plate]
-		if container then
+function EnemyCooldowns:SetActive(active)
+	active = not not active
+	if self.active == active then
+		return
+	end
+	self.active = active
+
+	if active then
+		if not self.index then
+			self.index = L.BuildIndex(L.SPELLS, ResolveSpellName)
+		end
+		self.events:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+		self.events:RegisterEvent("PLAYER_ENTERING_WORLD")
+	else
+		self.events:UnregisterAllEvents()
+		self:StopTicker()
+		for key in pairs(self.state) do
+			self.state[key] = nil
+		end
+		for unit in pairs(self.units) do
+			self.units[unit] = nil
+		end
+		self.seen = 0
+		self.secret = 0
+		self.unselected = 0
+		self.hits = 0
+		for _, container in pairs(self.containers) do
+			for _, icon in ipairs(container.icons) do
+				icon:Hide()
+			end
 			container:Hide()
 		end
 	end
-	self.units[unit] = nil
-	self.unitPlate[unit] = nil
+
+	ns.Debug:Log("EnemyCooldowns", "active", active)
 end
 
-function EnemyCooldowns:HandleUnit(unit)
-	if not IsNameplateUnit(unit) then
-		return
-	end
-
-	local plate = C_NamePlate.GetNamePlateForUnit(unit)
-	if not plate then
-		return
-	end
-
-	if plate:IsForbidden() then
-		if ns.Debug:IsActive() then
-			local forbiddenIsPlayer = UnitIsPlayer(unit)
-			local forbiddenCanAttack = UnitCanAttack("player", unit)
-			if
-				not issecretvalue(forbiddenIsPlayer)
-				and not issecretvalue(forbiddenCanAttack)
-				and forbiddenIsPlayer == true
-				and forbiddenCanAttack == true
-			then
-				ns.Debug:Log("EnemyCooldowns", "skip", unit, "forbidden")
-			end
-		end
-		return
-	end
-
-	local isPlayer = UnitIsPlayer(unit)
-	local canAttack = UnitCanAttack("player", unit)
-	if issecretvalue(isPlayer) or issecretvalue(canAttack) then
-		local wasTracked = self.units[unit] ~= nil
-		self:ClearUnit(unit)
-		if wasTracked then
-			ns.Debug:Log("EnemyCooldowns", "skip", unit, "secret flags")
-		end
-		return
-	end
-	if not (isPlayer == true and canAttack == true) then
-		self:ClearUnit(unit)
-		return
-	end
-
-	local guid = UnitGUID(unit)
-	if issecretvalue(guid) then
-		local wasTracked = self.units[unit] ~= nil
-		self:ClearUnit(unit)
-		if wasTracked then
-			ns.Debug:Log("EnemyCooldowns", "skip", unit, "secret guid")
-		end
-		return
-	end
-	if guid == nil then
-		self:ClearUnit(unit)
-		return
-	end
-
-	local isNewTrack = self.units[unit] == nil
-	self.units[unit] = guid
-	self.unitPlate[unit] = plate
-	if isNewTrack then
-		ns.Debug:Log("EnemyCooldowns", "track", unit)
-	end
-	self:Render(unit)
-end
-
-function EnemyCooldowns:OnUnitAdded(_, unit)
-	self:HandleUnit(unit)
-end
-
-function EnemyCooldowns:OnUnitFaction(_, unit)
-	self:HandleUnit(unit)
-end
-
-function EnemyCooldowns:OnUnitRemoved(_, unit)
-	self:ClearUnit(unit)
-end
-
-function EnemyCooldowns:OnSpellcastSucceeded(_, unit, _, spellID)
-	local key = self.units[unit]
-	if not key or issecretvalue(spellID) then
-		return
-	end
-
-	local name = ResolveSpellName(spellID)
-	local entry = L.Lookup(self.index, spellID, name)
-	if not entry then
-		return
-	end
-
-	L.Record(self.state, key, entry, GetTime())
-	ns.Debug:Log("EnemyCooldowns", "hit", unit, spellID, name, entry.cd)
-	ns.Media:PlaySound(self.db.profile.sound)
-	self:Render(unit)
-end
-
-function EnemyCooldowns:OnEnteringWorld()
-	ns.Debug:Log("EnemyCooldowns", "reset")
-	for key in pairs(self.state) do
-		self.state[key] = nil
-	end
-	for unit in pairs(self.units) do
-		self.units[unit] = nil
-	end
-	for unit in pairs(self.unitPlate) do
-		self.unitPlate[unit] = nil
-	end
-	for _, container in pairs(self.containers) do
-		container:Hide()
-	end
-
-	self:RescanPlates()
-end
-
-function EnemyCooldowns:OnTick()
-	local changed = L.Prune(self.state, GetTime())
-	for unit, guid in pairs(self.units) do
-		if changed[guid] then
-			self:Render(unit)
-		end
-	end
-end
-
-function EnemyCooldowns:GetContainer(plate)
-	local container = self.containers[plate]
+function EnemyCooldowns:GetContainer(frame)
+	local container = frame.enemyCooldowns
 	if not container then
-		container = CreateFrame("Frame", nil, plate)
-		container:SetAllPoints(plate)
-		container:SetFrameLevel(plate:GetFrameLevel() + 10)
+		container = CreateFrame("Frame", nil, frame)
 		container.icons = {}
-		self.containers[plate] = container
+		frame.enemyCooldowns = container
+		self.containers[frame] = container
 	end
+
+	local profile = self.module.db.profile
+	container:ClearAllPoints()
+	container:SetPoint("LEFT", profile.levelText and frame.levelText or frame, "RIGHT", 0, 0)
+	container:SetHeight(ClampCooldownSize(profile.enemyCooldownSize))
 	return container
 end
 
@@ -249,6 +119,7 @@ function EnemyCooldowns:GetIcon(container, i)
 
 		local texture = icon:CreateTexture(nil, "ARTWORK")
 		texture:SetAllPoints(icon)
+		texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 		icon.texture = texture
 
 		local cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
@@ -260,31 +131,29 @@ function EnemyCooldowns:GetIcon(container, i)
 	return icon
 end
 
-function EnemyCooldowns:Render(unit)
-	local key = self.units[unit]
-	local plate = self.unitPlate[unit]
-	if not key or not plate then
-		return
-	end
-
-	local profile = self.db.profile
-	local records = L.Active(self.state, key, GetTime(), profile.maxIcons)
-	local container = self:GetContainer(plate)
-	container:Show()
+function EnemyCooldowns:RenderFrame(frame, key)
+	local profile = self.module.db.profile
+	local container = self:GetContainer(frame)
+	local records = key and L.Active(self.state, key, GetTime(), profile.enemyCooldownMax, profile.enemyCooldownSpells)
+		or {}
 	local n = #records
+	local size = ClampCooldownSize(profile.enemyCooldownSize)
+
+	container:SetWidth(L.RowWidth(n, size, ICON_SPACING, ICON_GAP))
+	container:Show()
 
 	for i = 1, n do
 		local rec = records[i]
 		local icon = self:GetIcon(container, i)
-		icon:SetSize(profile.iconSize, profile.iconSize)
+		icon:SetSize(size, size)
+		icon:ClearAllPoints()
+		icon:SetPoint("LEFT", container, "LEFT", L.IconOffset(i, size, ICON_SPACING, ICON_GAP), 0)
 
 		local texture = C_Spell.GetSpellTexture(rec.entry.id)
-		icon.texture:SetTexture(texture or FALLBACK_TEXTURE)
-
-		local point, relPoint, x, y =
-			L.Layout(profile.anchor, i, n, profile.iconSize, LAYOUT_SPACING, profile.x, profile.y)
-		icon:ClearAllPoints()
-		icon:SetPoint(point, container, relPoint, x, y)
+		if issecretvalue(texture) or not texture then
+			texture = FALLBACK_TEXTURE
+		end
+		icon.texture:SetTexture(texture)
 		icon.cooldown:SetCooldown(rec.start, rec.entry.cd)
 		icon:Show()
 	end
@@ -294,129 +163,258 @@ function EnemyCooldowns:Render(unit)
 	end
 end
 
-function EnemyCooldowns:GetOptions()
-	return {
-		type = "group",
-		name = "EnemyCooldowns",
-		args = {
-			enabled = {
-				type = "toggle",
-				name = "Enabled",
-				order = 1,
-				get = function()
-					return self.db.profile.enabled
-				end,
-				set = function(_, value)
-					self.db.profile.enabled = value
-					self:Refresh()
-				end,
-			},
-			iconSize = {
-				type = "range",
-				name = "Icon size",
-				order = 2,
-				min = 12,
-				max = 48,
-				step = 1,
-				get = function()
-					return self.db.profile.iconSize
-				end,
-				set = function(_, value)
-					self.db.profile.iconSize = value
-					self:Refresh()
-				end,
-			},
-			maxIcons = {
-				type = "range",
-				name = "Max icons",
-				order = 3,
-				min = 1,
-				max = 8,
-				step = 1,
-				get = function()
-					return self.db.profile.maxIcons
-				end,
-				set = function(_, value)
-					self.db.profile.maxIcons = value
-					self:Refresh()
-				end,
-			},
-			anchor = {
-				type = "select",
-				name = "Anchor",
-				order = 4,
-				values = {
-					TOP = "Top",
-					BOTTOM = "Bottom",
-					LEFT = "Left",
-					RIGHT = "Right",
-				},
-				get = function()
-					return self.db.profile.anchor
-				end,
-				set = function(_, value)
-					self.db.profile.anchor = value
-					self:Refresh()
-				end,
-			},
-			x = {
-				type = "range",
-				name = "X offset",
-				order = 5,
-				min = -100,
-				max = 100,
-				step = 1,
-				get = function()
-					return self.db.profile.x
-				end,
-				set = function(_, value)
-					self.db.profile.x = value
-					self:Refresh()
-				end,
-			},
-			y = {
-				type = "range",
-				name = "Y offset",
-				order = 6,
-				min = -100,
-				max = 100,
-				step = 1,
-				get = function()
-					return self.db.profile.y
-				end,
-				set = function(_, value)
-					self.db.profile.y = value
-					self:Refresh()
-				end,
-			},
-			sound = {
-				type = "select",
-				name = "Alert sound",
-				order = 7,
-				values = function()
-					return ns.Media:SoundValues()
-				end,
-				get = function()
-					return self.db.profile.sound
-				end,
-				set = function(_, value)
-					self.db.profile.sound = value
-					ns.Media:PlaySound(value)
-				end,
-			},
-			testSound = {
-				type = "execute",
-				name = "Test sound",
-				order = 8,
-				func = function()
-					ns.Media:PlaySound(self.db.profile.sound)
-				end,
-			},
-		},
-	}
+function EnemyCooldowns:Render(unit)
+	local entry = self.units[unit]
+	if entry then
+		self:RenderFrame(entry.frame, entry.key)
+	end
 end
 
-function EnemyCooldowns:GetDebugChecks()
+function EnemyCooldowns:RenderAll()
+	for unit in pairs(self.units) do
+		self:Render(unit)
+	end
+end
+
+function EnemyCooldowns:Attach(unit, frame)
+	if not self.active then
+		if frame.enemyCooldowns then
+			frame.enemyCooldowns:Hide()
+		end
+		return
+	end
+
+	self:GetContainer(frame)
+
+	local isPlayer = UnitIsPlayer(unit)
+	if not issecretvalue(isPlayer) and isPlayer == false then
+		local entry = self.units[unit]
+		if entry then
+			DropState(self, entry)
+			self.units[unit] = nil
+		end
+		self:RenderFrame(frame, nil)
+		return
+	end
+
+	local guid = UnitGUID(unit)
+	local name, realm = UnitName(unit)
+	local key, kind = L.IdentityKey(guid, name, realm, unit, issecretvalue)
+
+	local previous = self.units[unit]
+	if previous and previous.kind == "unit" and previous.key ~= key then
+		self.state[previous.key] = nil
+	end
+
+	self.units[unit] = { key = key, kind = kind, frame = frame, secretSpellLogged = false }
+
+	local playerState = issecretvalue(isPlayer) and "secret" or "player"
+	local identitySecret = nil
+	local castingSecret = nil
+	if type(C_Secrets) == "table" then
+		if type(C_Secrets.ShouldUnitIdentityBeSecret) == "function" then
+			identitySecret = C_Secrets.ShouldUnitIdentityBeSecret(unit)
+		end
+		if type(C_Secrets.ShouldUnitSpellCastingBeSecret) == "function" then
+			castingSecret = C_Secrets.ShouldUnitSpellCastingBeSecret(unit)
+		end
+	end
+	ns.Debug:Log("EnemyCooldowns", "track", unit, kind, playerState, identitySecret, castingSecret)
+
+	self:Render(unit)
+end
+
+function EnemyCooldowns:Detach(unit)
+	local entry = self.units[unit]
+	if not entry then
+		return
+	end
+
+	DropState(self, entry)
+	self.units[unit] = nil
+	self:RenderFrame(entry.frame, nil)
+end
+
+function EnemyCooldowns:Anchor(frame)
+	local profile = self.module.db.profile
+	if profile.enemyCooldowns ~= true then
+		return nil
+	end
+	return frame.enemyCooldowns
+end
+
+function EnemyCooldowns:StartTicker()
+	if self.ticker then
+		return
+	end
+	self.ticker = C_Timer.NewTicker(TICK_INTERVAL, function()
+		self:OnTick()
+	end)
+	ns.Debug:Log("EnemyCooldowns", "ticker", "on")
+end
+
+function EnemyCooldowns:StopTicker()
+	if not self.ticker then
+		return
+	end
+	self.ticker:Cancel()
+	self.ticker = nil
+	ns.Debug:Log("EnemyCooldowns", "ticker", "off")
+end
+
+function EnemyCooldowns:OnTick()
+	local changed = L.Prune(self.state, GetTime())
+	for unit, entry in pairs(self.units) do
+		if changed[entry.key] then
+			self:Render(unit)
+		end
+	end
+	if next(self.state) == nil then
+		self:StopTicker()
+	end
+end
+
+function EnemyCooldowns:OnSpellcastSucceeded(unit, _, spellID)
+	local entry = self.units[unit]
+	if not entry then
+		return
+	end
+	self.seen = self.seen + 1
+
+	if issecretvalue(spellID) then
+		self.secret = self.secret + 1
+		if not entry.secretSpellLogged then
+			entry.secretSpellLogged = true
+			ns.Debug:Log("EnemyCooldowns", "secret spell", unit)
+		end
+		return
+	end
+
+	local name = ResolveSpellName(spellID)
+	local spellEntry = L.Lookup(self.index, spellID, name)
+	if not spellEntry then
+		return
+	end
+
+	local profile = self.module.db.profile
+	if profile.enemyCooldownSpells[spellEntry.id] ~= true then
+		self.unselected = self.unselected + 1
+		return
+	end
+
+	L.Record(self.state, entry.key, spellEntry, GetTime())
+	self.hits = self.hits + 1
+	ns.Debug:Log("EnemyCooldowns", "hit", unit, spellID, name, spellEntry.id, spellEntry.cd)
+	self:StartTicker()
+	self:Render(unit)
+end
+
+function EnemyCooldowns:OnEnteringWorld()
+	for key in pairs(self.state) do
+		self.state[key] = nil
+	end
+	self:StopTicker()
+	ns.Debug:Log("EnemyCooldowns", "reset")
+
+	local reattach = {}
+	for unit, entry in pairs(self.units) do
+		reattach[unit] = entry.frame
+	end
+	for unit, frame in pairs(reattach) do
+		self:Attach(unit, frame)
+	end
+end
+
+function EnemyCooldowns:AddOptions(args)
+	local module = self.module
+
+	local function disabledUnlessActive()
+		return module.db.profile.enemyCooldowns ~= true
+	end
+
+	args.enemyCooldownsHeader = { type = "header", name = "Enemy cooldowns", order = 70 }
+	args.enemyCooldowns = {
+		type = "toggle",
+		name = "Enemy cooldowns",
+		desc = "After an enemy player casts a ticked spell, shows its cooldown to the right of their plate.",
+		order = 71,
+		get = function()
+			return module.db.profile.enemyCooldowns
+		end,
+		set = function(_, value)
+			module.db.profile.enemyCooldowns = value
+			module:Refresh()
+		end,
+	}
+	args.enemyCooldownSize = {
+		type = "range",
+		name = "Cooldown icon size",
+		order = 72,
+		min = 12,
+		max = 40,
+		step = 1,
+		disabled = disabledUnlessActive,
+		get = function()
+			return module.db.profile.enemyCooldownSize
+		end,
+		set = function(_, value)
+			module.db.profile.enemyCooldownSize = value
+			module:Refresh()
+		end,
+	}
+	args.enemyCooldownMax = {
+		type = "range",
+		name = "Max cooldown icons",
+		order = 73,
+		min = 1,
+		max = 8,
+		step = 1,
+		disabled = disabledUnlessActive,
+		get = function()
+			return module.db.profile.enemyCooldownMax
+		end,
+		set = function(_, value)
+			module.db.profile.enemyCooldownMax = value
+			module:Refresh()
+		end,
+	}
+	args.enemyCooldownSpellsHeader = {
+		type = "header",
+		name = "Tracked spells",
+		order = 74,
+		disabled = disabledUnlessActive,
+	}
+
+	for i, spell in ipairs(L.SPELLS) do
+		args["enemyCooldownSpell_" .. spell.id] = {
+			type = "toggle",
+			order = 74 + i,
+			disabled = disabledUnlessActive,
+			name = function()
+				local name = ResolveSpellName(spell.id) or tostring(spell.id)
+				return name .. " (" .. L.ClassLabel(spell.class) .. ")"
+			end,
+			desc = function()
+				return string.format("%d s cooldown", spell.cd)
+			end,
+			get = function()
+				return module.db.profile.enemyCooldownSpells[spell.id] == true
+			end,
+			set = function(_, value)
+				module.db.profile.enemyCooldownSpells[spell.id] = value or nil
+				self:RenderAll()
+			end,
+		}
+	end
+end
+
+ns.Debug:RegisterChecks("Nameplates", function()
+	local module = EnemyCooldowns.module
+
+	local function unavailable()
+		return module == nil or not module:IsEnabled()
+	end
+
 	local function AuditBaseCooldownMs(id)
 		if type(GetSpellBaseCooldown) ~= "function" then
 			return nil
@@ -446,8 +444,11 @@ function EnemyCooldowns:GetDebugChecks()
 
 	local checks = {
 		{
-			name = "spell table",
+			name = "enemy cooldown spells",
 			run = function()
+				if unavailable() then
+					return "SKIP", "module disabled"
+				end
 				if #audit.unresolved > 0 or #audit.duplicates > 0 or #audit.mismatched > 0 then
 					local parts = {}
 					if #audit.unresolved > 0 then
@@ -476,8 +477,11 @@ function EnemyCooldowns:GetDebugChecks()
 			end,
 		},
 		{
-			name = "spell cooldowns",
+			name = "enemy cooldown base cds",
 			run = function()
+				if unavailable() then
+					return "SKIP", "module disabled"
+				end
 				if type(GetSpellBaseCooldown) ~= "function" then
 					return "SKIP", "GetSpellBaseCooldown missing"
 				end
@@ -488,65 +492,83 @@ function EnemyCooldowns:GetDebugChecks()
 			end,
 		},
 		{
-			name = "index",
-			run = function(ctx)
-				if ctx.enabled == false then
+			name = "enemy cooldown state",
+			run = function()
+				if unavailable() then
 					return "SKIP", "module disabled"
 				end
-				return (self.index ~= nil) and "PASS" or "FAIL"
+				local tracked, guidKeys, nameKeys, unitKeys = 0, 0, 0, 0
+				for _, entry in pairs(EnemyCooldowns.units) do
+					tracked = tracked + 1
+					if entry.kind == "guid" then
+						guidKeys = guidKeys + 1
+					elseif entry.kind == "name" then
+						nameKeys = nameKeys + 1
+					else
+						unitKeys = unitKeys + 1
+					end
+				end
+				local stateKeys = 0
+				for _ in pairs(EnemyCooldowns.state) do
+					stateKeys = stateKeys + 1
+				end
+				local ticked = 0
+				for _ in pairs(module.db.profile.enemyCooldownSpells) do
+					ticked = ticked + 1
+				end
+				return "INFO", EnemyCooldowns.active, ticked, tracked, guidKeys, nameKeys, unitKeys, stateKeys
 			end,
 		},
 		{
-			name = "ticker",
-			run = function(ctx)
-				if ctx.enabled == false then
+			name = "enemy cooldown events",
+			run = function()
+				if unavailable() then
 					return "SKIP", "module disabled"
 				end
-				return (self.ticker and not self.ticker:IsCancelled()) and "PASS" or "FAIL"
+				return "INFO",
+					EnemyCooldowns.seen,
+					EnemyCooldowns.secret,
+					EnemyCooldowns.unselected,
+					EnemyCooldowns.hits
 			end,
 		},
 		{
-			name = "tracked",
+			name = "enemy cooldown ticker",
 			run = function()
-				local unitCount = 0
-				for _ in pairs(self.units) do
-					unitCount = unitCount + 1
+				if unavailable() or not EnemyCooldowns.active then
+					return "SKIP", "inactive"
 				end
-				local stateCount = 0
-				for _ in pairs(self.state) do
-					stateCount = stateCount + 1
-				end
-				return "INFO", unitCount, stateCount
-			end,
-		},
-		{
-			name = "sound",
-			run = function()
-				local key = self.db.profile.sound
-				return "INFO", key, ns.Media:SoundPath(key)
+				local running = EnemyCooldowns.ticker ~= nil
+				local hasState = next(EnemyCooldowns.state) ~= nil
+				return (running == hasState) and "PASS" or "FAIL", running, hasState
 			end,
 		},
 	}
 
 	local units = {}
-	for unit in pairs(self.units) do
+	for unit in pairs(EnemyCooldowns.units) do
 		table.insert(units, unit)
 	end
 	table.sort(units)
 
 	for _, unit in ipairs(units) do
 		table.insert(checks, {
-			name = "icons " .. unit,
+			name = "enemy cooldown icons " .. unit,
 			run = function()
-				local guid = self.units[unit]
-				local plate = self.unitPlate[unit]
-				local container = plate and self.containers[plate]
+				if unavailable() then
+					return "SKIP", "module disabled"
+				end
+				local entry = EnemyCooldowns.units[unit]
+				if not entry then
+					return "SKIP", "not tracked"
+				end
+				local container = entry.frame.enemyCooldowns
 				if not container then
 					return "SKIP", "no container"
 				end
 
 				local now = GetTime()
-				local bucket = self.state[guid]
+				local bucket = EnemyCooldowns.state[entry.key]
 				if bucket then
 					for _, rec in pairs(bucket) do
 						if rec.expires >= now - 2 * TICK_INTERVAL and rec.expires <= now then
@@ -555,8 +577,16 @@ function EnemyCooldowns:GetDebugChecks()
 					end
 				end
 
-				local profile = self.db.profile
-				local n = #L.Active(self.state, guid, now, profile.maxIcons)
+				local profile = module.db.profile
+				local size = ClampCooldownSize(profile.enemyCooldownSize)
+				local records = L.Active(
+					EnemyCooldowns.state,
+					entry.key,
+					now,
+					profile.enemyCooldownMax,
+					profile.enemyCooldownSpells
+				)
+				local n = #records
 
 				local shown = 0
 				for _, icon in ipairs(container.icons) do
@@ -574,7 +604,7 @@ function EnemyCooldowns:GetDebugChecks()
 						break
 					end
 
-					if math.abs(icon:GetWidth() - profile.iconSize) > 0.5 then
+					if math.abs(icon:GetWidth() - size) > 0.5 then
 						ok = false
 						break
 					end
@@ -583,16 +613,15 @@ function EnemyCooldowns:GetDebugChecks()
 					if not ptOk then
 						pointsRestricted = true
 					else
-						local expPoint, expRelPoint, expX, expY =
-							L.Layout(profile.anchor, i, n, profile.iconSize, LAYOUT_SPACING, profile.x, profile.y)
+						local expectedX = L.IconOffset(i, size, ICON_SPACING, ICON_GAP)
 						if
-							point ~= expPoint
+							point ~= "LEFT"
 							or relativeTo ~= container
-							or relativePoint ~= expRelPoint
+							or relativePoint ~= "LEFT"
 							or issecretvalue(x)
 							or issecretvalue(y)
-							or math.abs(x - expX) > 0.5
-							or math.abs(y - expY) > 0.5
+							or math.abs(x - expectedX) > 0.5
+							or math.abs(y) > 0.5
 						then
 							ok = false
 							break
@@ -606,41 +635,40 @@ function EnemyCooldowns:GetDebugChecks()
 				return ok and "PASS" or "FAIL", shown, n
 			end,
 		})
-
-		table.insert(checks, {
-			name = "container parent " .. unit,
-			run = function()
-				local plate = self.unitPlate[unit]
-				local container = plate and self.containers[plate]
-				if not container then
-					return "SKIP", "no container"
-				end
-				return (container:GetParent() == plate) and "PASS" or "FAIL"
-			end,
-		})
 	end
 
 	table.insert(checks, {
-		name = "no foreign icons",
+		name = "enemy cooldown containers",
 		run = function()
-			local plates = {}
-			for _, plate in pairs(self.unitPlate) do
-				plates[plate] = true
+			if unavailable() then
+				return "SKIP", "module disabled"
 			end
 
-			local foreign = 0
-			for plate, container in pairs(self.containers) do
-				if container:IsShown() and not plates[plate] then
-					foreign = foreign + 1
+			local trackedFrames = {}
+			for _, entry in pairs(EnemyCooldowns.units) do
+				trackedFrames[entry.frame] = true
+			end
+
+			for frame, container in pairs(EnemyCooldowns.containers) do
+				if container:GetParent() ~= frame then
+					return "FAIL", "parent mismatch"
+				end
+				if not trackedFrames[frame] then
+					local shown = 0
+					for _, icon in ipairs(container.icons) do
+						if icon:IsShown() then
+							shown = shown + 1
+						end
+					end
+					if shown > 0 then
+						return "FAIL", "foreign icons"
+					end
 				end
 			end
 
-			if foreign > 0 then
-				return "FAIL", foreign
-			end
 			return "PASS"
 		end,
 	})
 
 	return checks
-end
+end)

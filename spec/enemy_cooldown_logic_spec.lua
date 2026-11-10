@@ -20,7 +20,7 @@ describe("EnemyCooldownLogic", function()
 	}
 
 	describe("SPELLS", function()
-		it("has unique positive integer ids, a valid class, category and cd", function()
+		it("has unique positive integer ids, a valid class and cd", function()
 			local seen = {}
 			for _, entry in ipairs(L.SPELLS) do
 				assert.is_number(entry.id)
@@ -30,19 +30,30 @@ describe("EnemyCooldownLogic", function()
 				seen[entry.id] = true
 
 				assert.is_true(entry.class == "ANY" or CLASSES[entry.class] == true)
-				assert.is_true(L.CATEGORIES[entry.category] == true)
+				assert.is_nil(entry.category)
 
 				assert.is_number(entry.cd)
 				assert.is_true(entry.cd > 0)
 				assert.are.equal(entry.cd, math.floor(entry.cd))
 			end
 		end)
+
+		it("includes Psychic Scream at a 30 s cooldown", function()
+			local found
+			for _, entry in ipairs(L.SPELLS) do
+				if entry.id == 8122 then
+					found = entry
+				end
+			end
+			assert.is_not_nil(found)
+			assert.are.equal(30, found.cd)
+		end)
 	end)
 
 	describe("BuildIndex/Lookup", function()
-		local kick = { id = 1766, class = "ROGUE", category = "interrupt", cd = 10 }
-		local cs = { id = 2139, class = "MAGE", category = "interrupt", cd = 30 }
-		local van = { id = 1856, class = "ROGUE", category = "defensive", cd = 300 }
+		local kick = { id = 1766, class = "ROGUE", cd = 10 }
+		local cs = { id = 2139, class = "MAGE", cd = 30 }
+		local van = { id = 1856, class = "ROGUE", cd = 300 }
 		local names = { [1766] = "Kick", [1856] = "Vanish" }
 		local idx
 
@@ -61,8 +72,8 @@ describe("EnemyCooldownLogic", function()
 		end)
 
 		it("keeps the first entry on a duplicate name", function()
-			local a = { id = 1, class = "ANY", category = "racial", cd = 60 }
-			local b = { id = 2, class = "ANY", category = "racial", cd = 60 }
+			local a = { id = 1, class = "ANY", cd = 60 }
+			local b = { id = 2, class = "ANY", cd = 60 }
 			local dupIdx = L.BuildIndex({ a, b }, function()
 				return "X"
 			end)
@@ -71,8 +82,8 @@ describe("EnemyCooldownLogic", function()
 	end)
 
 	describe("Record/Active/Prune", function()
-		local kick = { id = 1766, class = "ROGUE", category = "interrupt", cd = 10 }
-		local van = { id = 1856, class = "ROGUE", category = "defensive", cd = 300 }
+		local kick = { id = 1766, class = "ROGUE", cd = 10 }
+		local van = { id = 1856, class = "ROGUE", cd = 300 }
 		local st
 
 		before_each(function()
@@ -134,25 +145,127 @@ describe("EnemyCooldownLogic", function()
 		end)
 
 		it("orders equal expires by entry id ascending", function()
-			local a = { id = 5, class = "ANY", category = "racial", cd = 10 }
-			local b = { id = 3, class = "ANY", category = "racial", cd = 10 }
+			local a = { id = 5, class = "ANY", cd = 10 }
+			local b = { id = 3, class = "ANY", cd = 10 }
 			L.Record(st, "G", a, 100)
 			L.Record(st, "G", b, 100)
 			local active = L.Active(st, "G", 105, 4)
 			assert.are.equal(b, active[1].entry)
 			assert.are.equal(a, active[2].entry)
 		end)
+
+		it("filters by the selected table before sort and cap", function()
+			L.Record(st, "G", kick, 100)
+			L.Record(st, "G", van, 100)
+
+			local active = L.Active(st, "G", 105, 4, { [1766] = true })
+			assert.are.equal(1, #active)
+			assert.are.equal(kick, active[1].entry)
+
+			assert.are.same({}, L.Active(st, "G", 105, 4, {}))
+
+			-- kick (1766) expires first and would win a cap of 1 if the cap ran before the
+			-- selected-table filter; only van (1856) is selected here, so a cap-first
+			-- implementation would cap to kick and then filter it away, returning nothing.
+			active = L.Active(st, "G", 105, 1, { [1856] = true })
+			assert.are.equal(1, #active)
+			assert.are.equal(van, active[1].entry)
+
+			active = L.Active(st, "G", 105, 4, nil)
+			assert.are.equal(2, #active)
+		end)
 	end)
 
-	describe("Layout", function()
+	describe("IdentityKey", function()
+		local SECRET = {}
+		local function isSecret(v)
+			return v == SECRET
+		end
+
+		it("prefers guid, then name(-realm), then unit", function()
+			assert.are.same(
+				{ "guid:Player-1-0A", "guid" },
+				{ L.IdentityKey("Player-1-0A", "Bob", nil, "nameplate1", isSecret) }
+			)
+			assert.are.same({ "name:Bob", "name" }, { L.IdentityKey(SECRET, "Bob", nil, "nameplate1", isSecret) })
+			assert.are.same(
+				{ "name:Bob-Stormrage", "name" },
+				{ L.IdentityKey(SECRET, "Bob", "Stormrage", "nameplate1", isSecret) }
+			)
+			assert.are.same({ "name:Bob", "name" }, { L.IdentityKey(SECRET, "Bob", "", "nameplate1", isSecret) })
+			assert.are.same({ "name:Bob", "name" }, { L.IdentityKey(SECRET, "Bob", SECRET, "nameplate1", isSecret) })
+			assert.are.same(
+				{ "unit:nameplate3", "unit" },
+				{ L.IdentityKey(SECRET, SECRET, nil, "nameplate3", isSecret) }
+			)
+			assert.are.same({ "unit:nameplate3", "unit" }, { L.IdentityKey(nil, nil, nil, "nameplate3", isSecret) })
+			assert.are.same({ "unit:nameplate3", "unit" }, { L.IdentityKey(nil, "", nil, "nameplate3", isSecret) })
+		end)
+
+		it("checks isSecret before any type() or comparison", function()
+			-- type() cannot be intercepted, but an implementation that swaps the order to
+			-- `type(v) == "string" and not isSecret(v)` short-circuits on a non-string table
+			-- without ever calling isSecret(v); the erroring metamethods also catch any
+			-- comparison/concat/length/index of the value that happens before isSecret runs.
+			local function secretSentinel()
+				return setmetatable({}, {
+					__eq = function()
+						error("compared secret value before isSecret check")
+					end,
+					__concat = function()
+						error("concatenated secret value before isSecret check")
+					end,
+					__len = function()
+						error("took length of secret value before isSecret check")
+					end,
+					__index = function()
+						error("indexed into secret value before isSecret check")
+					end,
+				})
+			end
+
+			local function trackingIsSecret(checked)
+				return function(v)
+					if v ~= nil then
+						checked[v] = true
+					end
+					return type(v) == "table"
+				end
+			end
+
+			local guidChecked = {}
+			local secretGuid = secretSentinel()
+			L.IdentityKey(secretGuid, "Bob", nil, "nameplate1", trackingIsSecret(guidChecked))
+			assert.is_true(guidChecked[secretGuid])
+
+			local nameChecked = {}
+			local secretName = secretSentinel()
+			L.IdentityKey(nil, secretName, nil, "nameplate1", trackingIsSecret(nameChecked))
+			assert.is_true(nameChecked[secretName])
+
+			local realmChecked = {}
+			local secretRealm = secretSentinel()
+			L.IdentityKey(nil, "Bob", secretRealm, "nameplate1", trackingIsSecret(realmChecked))
+			assert.is_true(realmChecked[secretRealm])
+		end)
+	end)
+
+	describe("ClassLabel", function()
+		it("labels classes and the racial fallback", function()
+			assert.are.equal("Priest", L.ClassLabel("PRIEST"))
+			assert.are.equal("Warlock", L.ClassLabel("WARLOCK"))
+			assert.are.equal("Racial", L.ClassLabel("ANY"))
+		end)
+	end)
+
+	describe("IconOffset/RowWidth", function()
 		it("matches the documented formulas", function()
-			assert.are.same({ "BOTTOM", "TOP", -22, 4 }, { L.Layout("TOP", 1, 3, 20, 2, 0, 4) })
-			assert.are.same({ "BOTTOM", "TOP", 0, 4 }, { L.Layout("TOP", 2, 3, 20, 2, 0, 4) })
-			assert.are.same({ "BOTTOM", "TOP", 22, 4 }, { L.Layout("TOP", 3, 3, 20, 2, 0, 4) })
-			assert.are.same({ "BOTTOM", "TOP", 0, 0 }, { L.Layout("TOP", 1, 1, 20, 2, 0, 0) })
-			assert.are.same({ "LEFT", "RIGHT", 27, 0 }, { L.Layout("RIGHT", 2, 3, 20, 2, 5, 0) })
-			assert.are.same({ "RIGHT", "LEFT", -49, 0 }, { L.Layout("LEFT", 3, 3, 20, 2, -5, 0) })
-			assert.are.same({ L.Layout("TOP", 1, 3, 20, 2, 0, 4) }, { L.Layout("bogus", 1, 3, 20, 2, 0, 4) })
+			assert.are.equal(2, L.IconOffset(1, 20, 2, 2))
+			assert.are.equal(46, L.IconOffset(3, 20, 2, 2))
+
+			assert.are.equal(0, L.RowWidth(0, 20, 2, 2))
+			assert.are.equal(22, L.RowWidth(1, 20, 2, 2))
+			assert.are.equal(66, L.RowWidth(3, 20, 2, 2))
 		end)
 	end)
 

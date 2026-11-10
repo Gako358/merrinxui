@@ -9,13 +9,12 @@ enabled on its own, and they all share one look and one options window.
 | ActionBars     | Action bars with opacity, mouseover, combat hiding and a key toggle  |
 | BuffReminders  | Shows your class buffs when they are missing or running low          |
 | CastBars       | Player, target and focus cast bars, plus a swing timer               |
-| Chat           | Chat window skin, fading, clickable URLs and a copy-chat window      |
+| Chat           | Chat window skin, fading, clickable URLs, timestamps and a copy-chat window |
 | CooldownVoice  | Announces tracked spells coming off cooldown by voice or sound       |
 | DamageMeter    | Multi-window damage, healing, interrupt, dispel and death meter      |
-| EnemyCooldowns | Tracks enemy players' cooldowns on their nameplates                  |
 | EnemySpotter   | Lists nearby enemy players and alerts on a kill-on-sight list        |
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
-| Nameplates     | Styled nameplates with cast bars, debuffs, crowd control and markers |
+| Nameplates     | Styled nameplates with cast bars, debuffs, crowd control, enemy cooldowns and markers |
 | Professions    | Profession levelling guides                                          |
 | QoL            | Tabs: Performance (FPS, latency, memory, CPU), and Layer Hop when MerrinxUI_LayerHop is installed |
 | RangeText      | Range to your target, coloured by spell range                        |

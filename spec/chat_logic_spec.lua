@@ -106,4 +106,66 @@ describe("ChatLogic", function()
 			assert.are.equal(0.5, L.Approach(1, 0, 0.5))
 		end)
 	end)
+
+	describe("timestamps", function()
+		it("orders the formats as the Social settings values, blizzard first", function()
+			local values = {}
+			for _, entry in ipairs(L.TIMESTAMP_FORMATS) do
+				values[#values + 1] = entry.value
+			end
+			assert.are.same({
+				"blizzard",
+				"none",
+				"%H:%M ",
+				"%H:%M:%S ",
+				"%I:%M %p ",
+				"%I:%M:%S %p ",
+			}, values)
+		end)
+
+		it("ends every value with a space except blizzard and none", function()
+			for _, entry in ipairs(L.TIMESTAMP_FORMATS) do
+				if entry.value == "blizzard" or entry.value == "none" then
+					assert.is_falsy(entry.value:match(" $"))
+				else
+					assert.is_truthy(entry.value:match(" $"))
+				end
+				assert.is_string(entry.label)
+				assert.is_true(#entry.label > 0)
+			end
+		end)
+
+		it("maps all six values to their labels in a fresh table", function()
+			local values = L.TimestampValues()
+			assert.are.equal("Game setting", values["blizzard"])
+			assert.are.equal("Off", values["none"])
+			assert.are.equal("24-hour (15:04)", values["%H:%M "])
+			assert.are.equal("24-hour with seconds (15:04:05)", values["%H:%M:%S "])
+			assert.are.equal("12-hour (03:04 PM)", values["%I:%M %p "])
+			assert.are.equal("12-hour with seconds (03:04:05 PM)", values["%I:%M:%S %p "])
+
+			local count = 0
+			for _ in pairs(values) do
+				count = count + 1
+			end
+			assert.are.equal(6, count)
+
+			values["blizzard"] = "mutated"
+			assert.are.equal("Game setting", L.TimestampValues()["blizzard"])
+		end)
+
+		describe("TimestampCVar", function()
+			it("never writes for blizzard, unlisted or unchanged choices", function()
+				assert.is_nil(L.TimestampCVar("blizzard", "none"))
+				assert.is_nil(L.TimestampCVar("%H:%M ", "%H:%M "))
+				assert.is_nil(L.TimestampCVar("%Y", "none"))
+				assert.is_nil(L.TimestampCVar(nil, "none"))
+			end)
+
+			it("returns the choice when it is listed and differs from current", function()
+				assert.are.equal("%H:%M ", L.TimestampCVar("%H:%M ", "none"))
+				assert.are.equal("none", L.TimestampCVar("none", "%H:%M:%S "))
+			end)
+		end)
+	end)
 end)

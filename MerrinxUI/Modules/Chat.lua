@@ -64,6 +64,7 @@ local defaults = {
 		fadeOpacity = 0,
 		urls = true,
 		copyButton = true,
+		timestamps = "blizzard",
 	},
 }
 
@@ -293,6 +294,19 @@ function Chat:Apply()
 		self:ApplySkin(skin)
 	end
 	self:SetURLFilter(self.db.profile.urls)
+	self:ApplyTimestamps()
+end
+
+function Chat:ApplyTimestamps()
+	local current = C_CVar.GetCVar("showTimestamps")
+	if issecretvalue(current) then
+		current = nil
+	end
+	local value = L.TimestampCVar(self.db.profile.timestamps, current)
+	if value then
+		C_CVar.SetCVar("showTimestamps", value)
+		ns.Debug:Log("Chat", "timestamps", value)
+	end
 end
 
 function Chat:SetSkinAlpha(skin, alpha)
@@ -491,6 +505,16 @@ function Chat:GetOptions()
 			fadeOpacity = fadeOpacity,
 			urls = toggle("urls", "Clickable links", 6, "Turns web addresses in chat into links you can copy"),
 			copyButton = toggle("copyButton", "Copy button", 7, "Also available as /mui copy"),
+			timestamps = {
+				type = "select",
+				name = "Timestamps",
+				desc = "Time shown before each new chat line. Game setting leaves Blizzard's own choice alone; "
+					.. "turning Chat off keeps the last format.",
+				order = 8,
+				values = L.TimestampValues(),
+				get = get("timestamps"),
+				set = set("timestamps"),
+			},
 		},
 	}
 end
@@ -628,6 +652,25 @@ function Chat:GetDebugChecks()
 				end
 				local lines, skipped = self:CopyLines(DEFAULT_CHAT_FRAME)
 				return "INFO", #lines, skipped, DEFAULT_CHAT_FRAME:GetNumMessages()
+			end,
+		},
+		{
+			name = "timestamps",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				local choice = self.db.profile.timestamps
+				local cvar = C_CVar.GetCVar("showTimestamps")
+				if issecretvalue(cvar) then
+					cvar = nil
+				end
+				local ok = choice == L.TIMESTAMP_GAME or choice == cvar
+				local status = ok and "PASS" or "FAIL"
+				if type(cvar) == "string" and cvar ~= "none" then
+					return status, choice, cvar, date(cvar)
+				end
+				return status, choice, cvar
 			end,
 		},
 	}
