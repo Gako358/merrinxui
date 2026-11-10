@@ -56,6 +56,7 @@ local defaults = {
 		castInterruptFlash = true,
 		threatColors = true,
 		threatRole = "auto",
+		threatText = true,
 		comboPoints = true,
 	},
 }
@@ -71,6 +72,7 @@ local DEBUFF_COUNT_SIZE = 10
 local LEVEL_GAP = 2
 local RAID_TARGET_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local MARKER_GAP = 2
+local THREAT_GAP = 2
 local CLASSIFICATION_SIZE = 14
 local CLASSIFICATION_GAP = 2
 local TARGET_HIGHLIGHT_WIDTH = 2
@@ -217,7 +219,7 @@ function Nameplates:OnEnable()
 	self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
 	self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
 	self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
-	self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
+	self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors or self.db.profile.threatText)
 	self:SetComboEventsEnabled(self:ComboActive())
 	ns.EnemyCooldowns:SetActive(self.db.profile.enemyCooldowns)
 
@@ -257,7 +259,7 @@ function Nameplates:Refresh()
 		self:SetEventsEnabled(POWER_EVENTS, self.db.profile.powerBar)
 		self:SetEventsEnabled(AURA_EVENTS, self.db.profile.debuffs or self.db.profile.cc)
 		self:SetEventsEnabled(LEVEL_EVENTS, self.db.profile.levelText or self.db.profile.classificationIcon)
-		self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors)
+		self:SetEventsEnabled(THREAT_EVENTS, self.db.profile.threatColors or self.db.profile.threatText)
 		self:SetComboEventsEnabled(self:ComboActive())
 		ns.EnemyCooldowns:SetActive(self.db.profile.enemyCooldowns)
 		for _, frame in pairs(self.plateFrames) do
@@ -273,6 +275,7 @@ function Nameplates:Refresh()
 				self:UpdateTargetState(unit, frame)
 				ns.EnemyCooldowns:Attach(unit, frame)
 				self:UpdateMarkers(unit, frame)
+				self:UpdateThreat(unit, frame)
 				self:UpdateLevel(unit, frame)
 				self:UpdatePower(unit, frame)
 				self:UpdateDebuffs(unit, frame)
@@ -377,6 +380,7 @@ function Nameplates:OnUnitThreat(_, unit)
 	local frame = self:GetCastFrame(unit)
 	if frame then
 		self:UpdateColor(unit, frame)
+		self:UpdateThreat(unit, frame)
 	else
 		self:OnColorContextChanged()
 	end
@@ -387,6 +391,7 @@ function Nameplates:OnColorContextChanged()
 		local frame = self.plateFrames[plate]
 		if frame then
 			self:UpdateColor(unit, frame)
+			self:UpdateThreat(unit, frame)
 		end
 	end
 end
@@ -470,6 +475,7 @@ function Nameplates:StyleUnit(unit)
 	self:UpdateHighlight(unit, frame)
 	self:UpdateTargetState(unit, frame)
 	self:UpdateMarkers(unit, frame)
+	self:UpdateThreat(unit, frame)
 	self:SyncCastBar(unit, frame)
 	self:UpdatePower(unit, frame)
 	self:UpdateDebuffs(unit, frame)
@@ -727,6 +733,9 @@ function Nameplates:CreateStyledFrame(plate)
 	local nameText = frame:CreateFontString(nil, "OVERLAY")
 	nameText:SetPoint("BOTTOM", frame, "TOP", 0, 2)
 
+	local threatText = frame:CreateFontString(nil, "OVERLAY")
+	threatText:Hide()
+
 	local comboRow = CreateFrame("Frame", nil, frame)
 	comboRow:SetPoint("BOTTOM", nameText, "TOP", 0, COMBO_GAP)
 	comboRow:SetSize(COMBO_MAX * COMBO_SIZE + (COMBO_MAX - 1) * COMBO_GAP, COMBO_SIZE)
@@ -823,6 +832,7 @@ function Nameplates:CreateStyledFrame(plate)
 	frame.raidMarker = raidMarker
 	frame.classification = classification
 	frame.nameText = nameText
+	frame.threatText = threatText
 	frame.comboRow = comboRow
 	frame.comboPips = comboPips
 	frame.comboBgs = comboBgs
@@ -884,6 +894,7 @@ function Nameplates:ApplySize(frame)
 	self.appliedFont = namePath
 	ns.Media:SetFont(frame.healthText, profile.font, profile.nameSize - 1, "OUTLINE")
 	ns.Media:SetFont(frame.levelText, profile.font, profile.nameSize - 1, "OUTLINE")
+	ns.Media:SetFont(frame.threatText, profile.font, profile.nameSize - 1, "OUTLINE")
 	ns.Media:SetFont(frame.powerText, profile.font, profile.nameSize - 1, "OUTLINE")
 	ns.Media:SetFont(frame.castText, profile.font, profile.nameSize - 1, "OUTLINE")
 	frame.powerBar:SetHeight(profile.powerHeight)
@@ -1272,6 +1283,33 @@ function Nameplates:UpdateMarkers(unit, frame)
 	else
 		frame.classification:Hide()
 	end
+
+	local threatTo, threatPoint, threatX, threatY = self:ThreatAnchor(frame)
+	frame.threatText:ClearAllPoints()
+	frame.threatText:SetPoint("BOTTOMRIGHT", threatTo, threatPoint, threatX, threatY)
+end
+
+function Nameplates:ThreatAnchor(frame)
+	if frame.raidMarker:IsShown() and self.db.profile.raidMarkerPos == "TOPRIGHT" then
+		return frame.raidMarker, "BOTTOMLEFT", -THREAT_GAP, 0
+	end
+	return frame, "TOPRIGHT", 0, THREAT_GAP
+end
+
+-- scaledPercentage is nil while the player is not on the unit's threat list
+function Nameplates:UpdateThreat(unit, frame)
+	local text = frame.threatText
+	if not self.db.profile.threatText then
+		text:Hide()
+		return
+	end
+	local _, _, percent = UnitDetailedThreatSituation("player", unit)
+	if type(percent) ~= "number" then
+		text:Hide()
+		return
+	end
+	text:SetText(NameplateLogic.FormatValue("percent", nil, percent))
+	text:Show()
 end
 
 function Nameplates:MarkerAnchor(frame, profile)
@@ -2077,6 +2115,12 @@ function Nameplates:GetOptions()
 		},
 		disabled = isOff("threatColors"),
 	})
+	option("threatText", {
+		type = "toggle",
+		name = "Threat percentage",
+		desc = "Your threat on the unit, top right of the plate, while you are on its threat list.",
+		order = 63,
+	})
 
 	ns.EnemyCooldowns:AddOptions(options.args)
 
@@ -2137,6 +2181,7 @@ function Nameplates:GetDebugChecks()
 					"GetRaidTargetIndex",
 					"SetRaidTargetIconTexture",
 					"UnitThreatSituation",
+					"UnitDetailedThreatSituation",
 					"UnitGroupRolesAssigned",
 					"UnitAffectingCombat",
 					"GetComboPoints",
@@ -2374,6 +2419,48 @@ function Nameplates:GetDebugChecks()
 					and math.abs(x - expX) <= 0.5
 					and math.abs(y - expY) <= 0.5
 				return ok and "PASS" or "FAIL", shown, hasMarker, profile.raidMarkerPos, issecretvalue(index)
+			end,
+		},
+		{
+			name = "threat text",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local _, frame = getTargetFrame()
+				if not frame then
+					return "SKIP", "target not styled"
+				end
+
+				local _, status, percent = UnitDetailedThreatSituation("player", "target")
+				local expected = self.db.profile.threatText and type(percent) == "number"
+				local shown = frame.threatText:IsShown() == true
+				local ok = shown == expected
+				local text = frame.threatText:GetText()
+				if issecretvalue(percent) or issecretvalue(text) then
+					return ok and "INFO" or "FAIL", shown, "secret"
+				end
+				if shown then
+					ok = ok and text == NameplateLogic.FormatValue("percent", nil, percent)
+				end
+
+				local relativeTo, relPoint, expX, expY = self:ThreatAnchor(frame)
+				local ptOk, p, relTo, rp, x, y = readPoint(frame.threatText)
+				if ptOk then
+					ok = ok
+						and p == "BOTTOMRIGHT"
+						and relTo == relativeTo
+						and rp == relPoint
+						and not issecretvalue(x)
+						and not issecretvalue(y)
+						and math.abs(x - expX) <= 0.5
+						and math.abs(y - expY) <= 0.5
+				end
+				return ok and "PASS" or "FAIL", shown, text, percent, Plain(status)
 			end,
 		},
 		{

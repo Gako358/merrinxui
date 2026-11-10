@@ -48,6 +48,15 @@ describe("EnemyCooldownLogic", function()
 			assert.is_not_nil(found)
 			assert.are.equal(30, found.cd)
 		end)
+
+		it("matches the client's base cooldowns for Freezing Trap and War Stomp", function()
+			local cds = {}
+			for _, entry in ipairs(L.SPELLS) do
+				cds[entry.id] = entry.cd
+			end
+			assert.are.equal(30, cds[1499])
+			assert.are.equal(90, cds[20549])
+		end)
 	end)
 
 	describe("BuildIndex/Lookup", function()

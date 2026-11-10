@@ -20,12 +20,11 @@ L.SPELLS = {
 	{ id = 6789, class = "WARLOCK", cd = 120 },
 	{ id = 5484, class = "WARLOCK", cd = 40 },
 	{ id = 19503, class = "HUNTER", cd = 30 },
-	{ id = 1499, class = "HUNTER", cd = 15 },
-	{ id = 19386, class = "HUNTER", cd = 120 },
+	{ id = 1499, class = "HUNTER", cd = 30 },
 	{ id = 19577, class = "HUNTER", cd = 60 },
 	{ id = 5211, class = "DRUID", cd = 60 },
 	{ id = 16979, class = "DRUID", cd = 15 },
-	{ id = 20549, class = "ANY", cd = 120 },
+	{ id = 20549, class = "ANY", cd = 90 },
 }
 
 function L.BuildIndex(spells, getName)

@@ -64,7 +64,7 @@ local defaults = {
 		fadeOpacity = 0,
 		urls = true,
 		copyButton = true,
-		timestamps = "blizzard",
+		timestamps = "%H:%M ",
 	},
 }
 
@@ -666,11 +666,20 @@ function Chat:GetDebugChecks()
 					cvar = nil
 				end
 				local ok = choice == L.TIMESTAMP_GAME or choice == cvar
+				local chatFormat = "missing"
+				if type(GetChatTimestampFormat) == "function" then
+					chatFormat = GetChatTimestampFormat()
+					if issecretvalue(chatFormat) then
+						chatFormat = "secret"
+					elseif cvar ~= nil then
+						ok = ok and chatFormat == (cvar ~= "none" and cvar or nil)
+					end
+				end
 				local status = ok and "PASS" or "FAIL"
 				if type(cvar) == "string" and cvar ~= "none" then
-					return status, choice, cvar, date(cvar)
+					return status, choice, cvar, chatFormat, date(cvar)
 				end
-				return status, choice, cvar
+				return status, choice, cvar, chatFormat
 			end,
 		},
 	}
