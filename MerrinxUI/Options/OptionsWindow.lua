@@ -1082,9 +1082,10 @@ function renderSidebar()
 	end
 end
 
-local function layoutContent(hasTabs)
-	local barH = hasTabs and Theme.geometry.tabBar or 0
-	tabBar:SetShown(hasTabs)
+local function layoutContent(rows)
+	local barH = rows * Theme.geometry.tabBar
+	tabBar:SetShown(rows > 0)
+	tabBar:SetHeight(math.max(barH, Theme.geometry.tabBar))
 	contentViewH = CONTENT_H - barH
 	contentScroll:ClearAllPoints()
 	contentScroll:SetPoint("TOPLEFT", sidebarScroll, "TOPRIGHT", 0, -barH)
@@ -1094,16 +1095,24 @@ end
 function renderTabBar(tabs, activeIndex)
 	pools.tab.releaseAll()
 	if not tabs then
-		return
+		return 0
 	end
-	local x = Theme.geometry.pad
+	local widths = {}
+	local buttons = {}
 	for i, tab in ipairs(tabs) do
 		local button = pools.tab.acquire()
 		button.label:SetText(displayLabel(tab.label))
-		local width = math.ceil(button.label:GetStringWidth()) + 2 * Theme.geometry.tabPad
-		button:SetWidth(width)
-		button:SetPoint("TOPLEFT", tabBar, "TOPLEFT", x, 0)
-		x = x + width + Theme.geometry.gap
+		widths[i] = math.ceil(button.label:GetStringWidth()) + 2 * Theme.geometry.tabPad
+		buttons[i] = button
+	end
+
+	local placements, rowCount = L.TabRows(widths, CONTENT_W - 2 * Theme.geometry.pad, Theme.geometry.gap)
+
+	for i, tab in ipairs(tabs) do
+		local button = buttons[i]
+		local p = placements[i]
+		button:SetWidth(widths[i])
+		button:SetPoint("TOPLEFT", tabBar, "TOPLEFT", Theme.geometry.pad + p.x, -(p.row - 1) * Theme.geometry.tabBar)
 
 		local active = i == activeIndex
 		button.isActive = active
@@ -1113,6 +1122,8 @@ function renderTabBar(tabs, activeIndex)
 			switchToTab(tab.key)
 		end
 	end
+
+	return rowCount
 end
 
 local function pageTabs(page)
@@ -1280,14 +1291,15 @@ function renderNow()
 	if page then
 		local tabs, tabIndex = pageTabs(page)
 		currentTab = tabs and tabs[tabIndex] or nil
-		layoutContent(tabs ~= nil)
-		renderTabBar(tabs, tabIndex)
+		tabBar:SetShown(tabs ~= nil)
+		local rows = renderTabBar(tabs, tabIndex)
+		layoutContent(rows)
 		pageLabel:SetText(page.label or "")
 		renderContentRows(page, currentTab)
 	else
 		currentTab = nil
-		layoutContent(false)
 		renderTabBar(nil)
+		layoutContent(0)
 		pageLabel:SetText("")
 		clearContentRows()
 	end
@@ -1578,11 +1590,32 @@ function W:Open()
 	renderNow()
 end
 
-function W:OpenPage(label)
+function W:OpenPage(label, tabKey)
 	self:Open()
 	for i, page in ipairs(pages) do
 		if page.label == label then
-			switchToPage(i)
+			local tabValid = false
+			if tabKey ~= nil then
+				local tabs = pageTabs(page)
+				if tabs then
+					for _, tab in ipairs(tabs) do
+						if tab.key == tabKey then
+							tabValid = true
+							break
+						end
+					end
+				end
+			end
+			if i == currentPageIndex then
+				if tabValid then
+					switchToTab(tabKey)
+				end
+			else
+				if tabValid then
+					selectedTab[label] = tabKey
+				end
+				switchToPage(i)
+			end
 			return
 		end
 	end

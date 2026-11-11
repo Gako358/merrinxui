@@ -638,7 +638,7 @@ function CastBars:OnCombat(event)
 	self:UpdateSwingVisibility()
 end
 
-function CastBars:GetOptions()
+function CastBars:GetTabOptions()
 	local cb = self
 	local function get(key)
 		return function()

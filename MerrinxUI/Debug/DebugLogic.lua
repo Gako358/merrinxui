@@ -3,7 +3,7 @@ local addonName, ns = ...
 local DebugLogic = {}
 ns.DebugLogic = DebugLogic
 
-DebugLogic.CAP = 500
+DebugLogic.CAP = 2000
 DebugLogic.MAX_LINE = 400
 DebugLogic.MAX_PART = 200
 DebugLogic.STATUSES = { PASS = true, FAIL = true, SKIP = true, INFO = true }

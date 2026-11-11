@@ -16,7 +16,7 @@ enabled on its own, and they all share one look and one options window.
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
 | Nameplates     | Styled nameplates with cast bars, debuffs, crowd control, enemy cooldowns, threat and markers |
 | Professions    | Profession levelling guides                                          |
-| QoL            | Tabs: Performance (FPS, latency, memory, CPU), and Layer Hop when MerrinxUI_LayerHop is installed |
+| Enhance        | Tabs: Performance, BuffReminders, CastBars, CooldownVoice, Professions, RangeText, SpellHistory, XPBar, and Layer Hop when MerrinxUI_LayerHop is installed |
 | RangeText      | Range to your target, coloured by spell range                        |
 | SpellHistory   | Recently cast spells as icons or bars                                |
 | UnitFrames     | Player, target, focus, pet and target-of-target frames               |

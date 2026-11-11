@@ -3,6 +3,7 @@ local addonName, ns = ...
 local RangeTextLogic = ns.RangeTextLogic
 local FontLogic = ns.FontLogic
 local LSM = LibStub("LibSharedMedia-3.0")
+local LRC = LibStub("LibRangeCheck-3.0")
 
 local RangeText = ns.addon:NewModule("RangeText", "AceEvent-3.0")
 
@@ -128,7 +129,7 @@ function RangeText:Update()
 	end
 	self.frame:Show()
 
-	local min, max = LibStub("LibRangeCheck-3.0"):GetRange("target")
+	local min, max = LRC:GetRange("target")
 	local text = RangeTextLogic.FormatRange(min, max)
 
 	local _, classFile = UnitClass("player")
@@ -168,7 +169,7 @@ function RangeText:Update()
 	end
 end
 
-function RangeText:GetOptions()
+function RangeText:GetTabOptions()
 	return {
 		type = "group",
 		name = "RangeText",
@@ -322,7 +323,7 @@ function RangeText:GetDebugChecks()
 					return "INFO", "secret"
 				end
 
-				local min, max = LibStub("LibRangeCheck-3.0"):GetRange("target")
+				local min, max = LRC:GetRange("target")
 				if issecretvalue(min) or issecretvalue(max) then
 					return "INFO", "secret"
 				end

@@ -263,7 +263,7 @@ function XPBar:ShowTooltip(owner)
 	GameTooltip:Show()
 end
 
-function XPBar:GetOptions()
+function XPBar:GetTabOptions()
 	local xb = self
 	local function get(key)
 		return function()

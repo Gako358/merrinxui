@@ -391,3 +391,17 @@ function L.Grid(spans, columns)
 	end
 	return placements, row
 end
+
+function L.TabRows(widths, available, gap)
+	local placements = {}
+	local row, x = 1, 0
+	for i, w in ipairs(widths) do
+		if x > 0 and x + w > available then
+			row = row + 1
+			x = 0
+		end
+		placements[i] = { row = row, x = x }
+		x = x + w + gap
+	end
+	return placements, #widths > 0 and row or 0
+end

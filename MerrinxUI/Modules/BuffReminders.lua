@@ -408,7 +408,7 @@ function BuffReminders:ApplyClicks()
 	end
 end
 
-function BuffReminders:GetOptions()
+function BuffReminders:GetTabOptions()
 	local br = self
 	local function get(key)
 		return function()

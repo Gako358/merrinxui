@@ -71,6 +71,16 @@ describe("DebugLogic", function()
 			assert.are.same({ "d", "e" }, log)
 			assert.are.equal(3, removed)
 		end)
+
+		it("keeps more than 500 lines at CAP", function()
+			local log = {}
+			for i = 1, L.CAP + 1 do
+				L.Push(log, tostring(i), L.CAP)
+			end
+			assert.is_true(L.CAP > 500)
+			assert.are.equal(L.CAP, #log)
+			assert.are.equal("2", log[1])
+		end)
 	end)
 
 	describe("Flatten", function()

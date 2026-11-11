@@ -220,7 +220,7 @@ function CooldownVoice:Speak(text)
 	C_VoiceChat.SpeakText(voice, text, self.db.profile.rate, self.db.profile.volume, false)
 end
 
-function CooldownVoice:GetOptions()
+function CooldownVoice:GetTabOptions()
 	local function usesSound()
 		return self:UsesSound()
 	end

@@ -364,7 +364,7 @@ function Professions:Redraw()
 	self.footer:SetText((data and data.source) and "Route: wow-professions.com" or "Route: MerrinxUI")
 end
 
-function Professions:GetOptions()
+function Professions:GetTabOptions()
 	return {
 		type = "group",
 		name = "Professions",

@@ -2,6 +2,7 @@
 ## Title: MerrinxUI
 ## Author: merrinx
 ## Version: 1.0.0
+## X-Curse-Project-ID: 1798762
 ## SavedVariables: MerrinxUIDB
 
 embeds.xml
@@ -69,4 +70,4 @@ Modules\BuffReminderLogic.lua
 Modules\BuffReminders.lua
 Modules\PerformanceLogic.lua
 Modules\Performance.lua
-Modules\QoL.lua
+Modules\Enhance.lua

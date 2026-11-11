@@ -178,6 +178,7 @@ function Nameplates:OnInitialize()
 	self.alphaBoolResets = 0
 	self.debuffContainersInCombat = 0
 	self.debuffResizePending = false
+	self.threatEvents = { UNIT_THREAT_LIST_UPDATE = 0, UNIT_THREAT_SITUATION_UPDATE = 0, styled = 0 }
 
 	self.comboClass = NameplateLogic.UsesComboPoints(select(2, UnitClass("player")))
 	self.comboEvents = CreateFrame("Frame")
@@ -376,9 +377,12 @@ function Nameplates:OnUnitFlags(_, unit)
 	end
 end
 
-function Nameplates:OnUnitThreat(_, unit)
+function Nameplates:OnUnitThreat(event, unit)
+	self.threatEvents[event] = self.threatEvents[event] + 1
+	self.threatLastUnit = unit
 	local frame = self:GetCastFrame(unit)
 	if frame then
+		self.threatEvents.styled = self.threatEvents.styled + 1
 		self:UpdateColor(unit, frame)
 		self:UpdateThreat(unit, frame)
 	else
@@ -2158,6 +2162,25 @@ function Nameplates:GetDebugChecks()
 		return path:lower():gsub("/", "\\")
 	end
 
+	local function threatDetail(unit)
+		local isTanking, status, scaled, raw, value = UnitDetailedThreatSituation("player", unit)
+		return "tank",
+			type(isTanking),
+			isTanking,
+			"status",
+			type(status),
+			status,
+			"scaled",
+			type(scaled),
+			scaled,
+			"raw",
+			type(raw),
+			raw,
+			"value",
+			type(value),
+			value
+	end
+
 	return {
 		{
 			name = "apis",
@@ -2461,6 +2484,100 @@ function Nameplates:GetDebugChecks()
 						and math.abs(y - expY) <= 0.5
 				end
 				return ok and "PASS" or "FAIL", shown, text, percent, Plain(status)
+			end,
+		},
+		{
+			name = "threat setup",
+			run = function(ctx)
+				local profile = self.db.profile
+				local counts = self.threatEvents
+				local leadApi = "UnitThreatPercentageOfLead"
+				return "INFO",
+					"text",
+					profile.threatText,
+					"colors",
+					profile.threatColors,
+					"role",
+					profile.threatRole,
+					"events",
+					ctx.enabled ~= false and (profile.threatColors or profile.threatText) == true,
+					"list",
+					counts.UNIT_THREAT_LIST_UPDATE,
+					"situation",
+					counts.UNIT_THREAT_SITUATION_UPDATE,
+					"styled",
+					counts.styled,
+					"last",
+					self.threatLastUnit,
+					"scriptErrors",
+					C_CVar.GetCVar("scriptErrors"),
+					"leadApi",
+					type(_G[leadApi])
+			end,
+		},
+		{
+			name = "threat target",
+			run = function(ctx)
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local leadApi = "UnitThreatPercentageOfLead"
+				local lead = _G[leadApi]
+				local leadOk, leadValue = "missing", nil
+				if type(lead) == "function" then
+					leadOk, leadValue = pcall(lead, "player", "target")
+				end
+				return "INFO", "lead", leadOk, leadValue, threatDetail("target")
+			end,
+		},
+		{
+			name = "threat plate",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				if not ctx.hasTarget then
+					return "SKIP", "no target"
+				end
+
+				local plate = C_NamePlate.GetNamePlateForUnit("target")
+				if not plate then
+					return "SKIP", "no target plate"
+				end
+
+				local unit = plate.unitToken
+				if not unit then
+					return "SKIP", "no unit token"
+				end
+
+				local frame = self.plateFrames[plate]
+				if not frame then
+					return "INFO", "unit", unit, "styled", false, threatDetail(unit)
+				end
+
+				local routeOk, routeFrame = pcall(self.GetCastFrame, self, unit)
+				local colorOk, colorErr = pcall(self.UpdateColor, self, unit, frame)
+				local threatOk, threatErr = pcall(self.UpdateThreat, self, unit, frame)
+				local detail = { threatDetail(unit) }
+				return "INFO",
+					"unit",
+					unit,
+					"styled",
+					true,
+					"event",
+					routeOk and routeFrame == frame,
+					"frame",
+					frame:IsShown(),
+					"update",
+					colorOk,
+					threatOk,
+					"shown",
+					frame.threatText:IsShown(),
+					unpack(detail, 1, 15),
+					"errors",
+					colorErr,
+					threatErr
 			end,
 		},
 		{

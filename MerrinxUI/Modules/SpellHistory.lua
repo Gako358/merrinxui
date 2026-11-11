@@ -446,7 +446,7 @@ function SpellHistory:BuildWindow()
 	end
 	win.settings = button("settings", -3)
 	win.settings:SetScript("OnClick", function()
-		ns.OptionsWindow:OpenPage("SpellHistory")
+		ns.OptionsWindow:OpenPage("Enhance", "SpellHistory")
 	end)
 	win.lock = button("unlocked", -22)
 	win.lock:SetScript("OnClick", function()
@@ -647,7 +647,7 @@ local function hideRules(prefix, order)
 	return args
 end
 
-function SpellHistory:GetOptions()
+function SpellHistory:GetTabOptions()
 	local sh = self
 	local function get(key)
 		return function()
