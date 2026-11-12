@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 1.0.1
+## Version: 1.0.2
 ## X-Curse-Project-ID: 1798762
 ## SavedVariables: MerrinxUIDB
 

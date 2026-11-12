@@ -300,6 +300,17 @@ function L.FormatNumber(v)
 	return s
 end
 
+function L.ParseNumber(text)
+	if type(text) ~= "string" and type(text) ~= "number" then
+		return nil
+	end
+	local v = tonumber(text)
+	if v == nil or v ~= v or v == math.huge or v == -math.huge then
+		return nil
+	end
+	return v
+end
+
 function L.CheckValidate(result, name, usage)
 	name = type(name) == "string" and name or ""
 	if result == nil or result == false then

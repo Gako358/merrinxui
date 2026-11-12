@@ -402,19 +402,50 @@ end
 local function createRangeRow()
 	local row = newRowBase()
 
-	local valueText = row:CreateFontString(nil, "OVERLAY")
-	setFont(valueText, Theme.size.value)
-	valueText:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
-	valueText:SetWidth(50)
-	valueText:SetJustifyH("RIGHT")
-	setTextColor(valueText, Theme.color.text)
-	row.valueText = valueText
+	local valueEdit = CreateFrame("EditBox", nil, row)
+	valueEdit:SetAutoFocus(false)
+	valueEdit:SetSize(50, Theme.geometry.field)
+	valueEdit:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
+	setFont(valueEdit, Theme.size.value)
+	valueEdit:SetJustifyH("RIGHT")
+	valueEdit:SetTextInsets(4, 4, 0, 0)
+
+	local valueEditBg = valueEdit:CreateTexture(nil, "BACKGROUND")
+	valueEditBg:SetAllPoints()
+	setColor(valueEditBg, Theme.color.field)
+
+	valueEdit:SetScript("OnEnterPressed", function(self)
+		if row.onSubmit then
+			row.onSubmit(self:GetText())
+		end
+		self:ClearFocus()
+	end)
+	valueEdit:SetScript("OnEscapePressed", function(self)
+		self:ClearFocus()
+	end)
+	valueEdit:SetScript("OnEditFocusGained", function(self)
+		focusedEdit = self
+		blockRender(self)
+	end)
+	valueEdit:SetScript("OnEditFocusLost", function(self)
+		self:SetText(L.FormatNumber(row.lastValue))
+		if focusedEdit == self then
+			focusedEdit = nil
+		end
+		unblockRender(self)
+	end)
+	valueEdit:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	valueEdit:SetScript("OnLeave", hideTooltip)
+
+	row.valueEdit = valueEdit
 
 	local slider = CreateFrame("Slider", nil, row)
 	slider:SetOrientation("HORIZONTAL")
 	slider:SetHeight(Theme.geometry.thumb)
 	slider:SetWidth(Theme.geometry.cellControl - 58)
-	slider:SetPoint("RIGHT", valueText, "LEFT", -8, 0)
+	slider:SetPoint("RIGHT", valueEdit, "LEFT", -8, 0)
 	slider:SetObeyStepOnDrag(true)
 	slider:EnableMouseWheel(false)
 
@@ -733,8 +764,10 @@ local function configureRange(row, path, controlWidth)
 
 	if disabled then
 		row.slider:Disable()
+		row.valueEdit:Disable()
 	else
 		row.slider:Enable()
+		row.valueEdit:Enable()
 	end
 
 	local ok, value = pcall(L.Value, root, path, "get", appName)
@@ -744,7 +777,7 @@ local function configureRange(row, path, controlWidth)
 	value = L.SnapRange(value, min, max, step)
 
 	row.slider:SetValue(value)
-	row.valueText:SetText(L.FormatNumber(value))
+	row.valueEdit:SetText(L.FormatNumber(value))
 	row.path = path
 	row.min = min
 	row.max = max
@@ -756,7 +789,7 @@ local function configureRange(row, path, controlWidth)
 			return
 		end
 		local snapped = L.SnapRange(v, row.min, row.max, row.step)
-		row.valueText:SetText(L.FormatNumber(snapped))
+		row.valueEdit:SetText(L.FormatNumber(snapped))
 		if snapped ~= row.lastValue then
 			row.lastValue = snapped
 			local okSet, err = pcall(L.Value, root, row.path, "set", appName, snapped)
@@ -765,6 +798,29 @@ local function configureRange(row, path, controlWidth)
 			else
 				setFooterError(err)
 			end
+		end
+	end
+
+	row.onSubmit = function(text)
+		local v = L.ParseNumber(text)
+		if v == nil then
+			local _, msg = L.CheckValidate(nil, name)
+			setFooterError(msg)
+			return
+		end
+		local snapped = L.SnapRange(v, row.min, row.max, row.step)
+		if snapped == row.lastValue then
+			clearFooterError()
+			return
+		end
+		local okSet, err = pcall(L.Value, root, row.path, "set", appName, snapped)
+		if okSet then
+			row.lastValue = snapped
+			row.slider:SetValue(snapped)
+			clearFooterError()
+			requestRender()
+		else
+			setFooterError(err)
 		end
 	end
 end
