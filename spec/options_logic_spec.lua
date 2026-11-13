@@ -231,6 +231,7 @@ describe("OptionsLogic", function()
 					d = { type = "description", order = 4 },
 					e = { type = "group", order = 5, args = { q = { type = "toggle", hidden = true } } },
 					c = { type = "color", order = 6 },
+					m = { type = "multiselect", order = 7 },
 				},
 			}
 		end)
@@ -242,7 +243,8 @@ describe("OptionsLogic", function()
 				{ kind = "section", path = { "P", "g" }, depth = 0 },
 				{ kind = "range", path = { "P", "g", "x" }, depth = 1 },
 				{ kind = "description", path = { "P", "d" }, depth = 0 },
-				{ kind = "unsupported", path = { "P", "c" }, depth = 0 },
+				{ kind = "color", path = { "P", "c" }, depth = 0 },
+				{ kind = "unsupported", path = { "P", "m" }, depth = 0 },
 			}, L.Flatten(pageRoot, { "P" }, "MerrinxUI", false))
 		end)
 
@@ -251,7 +253,8 @@ describe("OptionsLogic", function()
 			assert.are.same({
 				{ kind = "toggle", path = { "P", "a" }, depth = 0 },
 				{ kind = "description", path = { "P", "d" }, depth = 0 },
-				{ kind = "unsupported", path = { "P", "c" }, depth = 0 },
+				{ kind = "color", path = { "P", "c" }, depth = 0 },
+				{ kind = "unsupported", path = { "P", "m" }, depth = 0 },
 			}, L.Flatten(pageRoot, { "P" }, "MerrinxUI", true))
 		end)
 	end)
@@ -335,6 +338,16 @@ describe("OptionsLogic", function()
 			assert.are.equal(100, L.SnapRange(150))
 			assert.are.equal(0, L.SnapRange(-3))
 			assert.are.equal(7, L.SnapRange(7, 0, 10, 0))
+		end)
+	end)
+
+	describe("NormalizeColor", function()
+		it("normalizes against the known cases", function()
+			assert.are.same({ 1, 0.5, 0, 1 }, { L.NormalizeColor(1, 0.5, 0, nil) })
+			assert.are.same({ 0, 1, 0, 1 }, { L.NormalizeColor("x", 2, -1, nil) })
+			assert.are.same({ 0, 0.2, 0.3, 0.4 }, { L.NormalizeColor(0 / 0, 0.2, 0.3, 0.4) })
+			assert.are.same({ 0.1, 0.2, 0.3, 1 }, { L.NormalizeColor(0.1, 0.2, 0.3, "a") })
+			assert.are.same({ 0.1, 0.2, 0.3, 1 }, { L.NormalizeColor(0.1, 0.2, 0.3, 5) })
 		end)
 	end)
 

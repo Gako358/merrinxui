@@ -417,6 +417,25 @@
                     f.write(header + rows)
 
 
+            def write_ring(path, r1):
+                N = 128
+                header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, N, N, 32, 0x28)
+                shape = ring(0.5, 0.5, r1, 0.47)
+                rows = bytearray()
+                for py in range(N):
+                    for px in range(N):
+                        hits = 0
+                        for sy in range(SS):
+                            for sx in range(SS):
+                                x = (px + (sx + 0.5) / SS) / N
+                                y = (py + (sy + 0.5) / SS) / N
+                                if shape(x, y):
+                                    hits += 1
+                        rows += bytes((255, 255, 255, round(255 * hits / (SS * SS))))
+                with open(path, "wb") as f:
+                    f.write(header + rows)
+
+
             out = sys.argv[1]
             write_glow(f"{out}/NPGlow.tga")
             for name, shape in [
@@ -440,6 +459,12 @@
                 ("DMDeaths", skull()),
             ]:
                 write(f"{out}/{name}.tga", shape)
+            for name, r1 in [
+                ("MCRingThin", 0.42),
+                ("MCRingNormal", 0.38),
+                ("MCRingThick", 0.31),
+            ]:
+                write_ring(f"{out}/{name}.tga", r1)
           '';
 
           soundEffects = pkgs.writeText "sounds.py" ''

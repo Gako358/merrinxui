@@ -167,6 +167,8 @@ read_globals = {
 	"GetShapeshiftFormInfo",
 	"GetNumShapeshiftForms",
 	"IsStealthed",
+	"ColorPickerFrame",
+	"IsMouselooking",
 }
 
 globals = {

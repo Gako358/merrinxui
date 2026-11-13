@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 1.0.5
+## Version: 1.0.6
 ## X-Curse-Project-ID: 1796160
 ## SavedVariables: MerrinxUIDB
 
@@ -48,6 +48,8 @@ Modules\CastBarLogic.lua
 Modules\CastBars.lua
 Modules\XPBarLogic.lua
 Modules\XPBar.lua
+Modules\MouseCircleLogic.lua
+Modules\MouseCircle.lua
 Modules\EnemySpotterLogic.lua
 Modules\EnemySpotter.lua
 Modules\ProfessionLogic.lua

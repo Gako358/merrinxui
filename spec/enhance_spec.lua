@@ -9,6 +9,7 @@ describe("Enhance", function()
 			BuffReminders = true,
 			CastBars = true,
 			CooldownVoice = true,
+			MouseCircle = true,
 			Professions = true,
 			RangeText = true,
 			SpellHistory = true,
@@ -54,6 +55,7 @@ describe("Enhance", function()
 			"BuffReminders",
 			"CastBars",
 			"CooldownVoice",
+			"MouseCircle",
 			"Professions",
 			"RangeText",
 			"SpellHistory",
@@ -62,28 +64,29 @@ describe("Enhance", function()
 		}, requested)
 	end)
 
-	it("orders the 8 present modules by TABS order with LayerHop absent", function()
+	it("orders the 9 present modules by TABS order with LayerHop absent", function()
 		local options = Enhance:GetOptions()
 		local args = options.args
 		local names = {}
 		for name in pairs(args) do
 			names[#names + 1] = name
 		end
-		assert.are.equal(8, #names)
+		assert.are.equal(9, #names)
 		assert.is_nil(args.LayerHop)
 		assert.are.equal(1, args.Performance.order)
 		assert.are.equal(2, args.BuffReminders.order)
 		assert.are.equal(3, args.CastBars.order)
 		assert.are.equal(4, args.CooldownVoice.order)
-		assert.are.equal(5, args.Professions.order)
-		assert.are.equal(6, args.RangeText.order)
-		assert.are.equal(7, args.SpellHistory.order)
-		assert.are.equal(8, args.XPBar.order)
+		assert.are.equal(5, args.MouseCircle.order)
+		assert.are.equal(6, args.Professions.order)
+		assert.are.equal(7, args.RangeText.order)
+		assert.are.equal(8, args.SpellHistory.order)
+		assert.are.equal(9, args.XPBar.order)
 	end)
 
-	it("orders LayerHop 9th when present", function()
+	it("orders LayerHop 10th when present", function()
 		modules.LayerHop = true
 		local options = Enhance:GetOptions()
-		assert.are.equal(9, options.args.LayerHop.order)
+		assert.are.equal(10, options.args.LayerHop.order)
 	end)
 end)

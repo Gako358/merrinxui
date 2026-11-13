@@ -605,6 +605,38 @@ local function createExecuteRow()
 	return row
 end
 
+local function createColorRow()
+	local row = newRowBase()
+
+	local button = CreateFrame("Button", nil, row)
+	button:SetSize(40, Theme.geometry.field)
+	button:SetPoint("RIGHT", row, "RIGHT", -Theme.geometry.inset, 0)
+
+	local border = button:CreateTexture(nil, "BACKGROUND")
+	border:SetAllPoints()
+	setColor(border, Theme.color.fieldBorder)
+
+	local swatch = button:CreateTexture(nil, "ARTWORK")
+	swatch:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+	swatch:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+
+	button:SetScript("OnClick", function()
+		if row.onPick then
+			row.onPick()
+		end
+	end)
+	button:SetScript("OnEnter", function()
+		showTooltip(row)
+	end)
+	button:SetScript("OnLeave", hideTooltip)
+
+	row.label:SetPoint("RIGHT", button, "LEFT", -8, 0)
+
+	row.button = button
+	row.swatch = swatch
+	return row
+end
+
 local function createDescriptionRow()
 	local row = CreateFrame("Frame", nil, contentChild)
 	row:SetHeight(Theme.geometry.row)
@@ -935,6 +967,88 @@ local function configureExecute(row, path, controlWidth)
 	end
 end
 
+local function pathsEqual(a, b)
+	if #a ~= #b then
+		return false
+	end
+	for i = 1, #a do
+		if a[i] ~= b[i] then
+			return false
+		end
+	end
+	return true
+end
+
+local function configureColor(row, path)
+	local name, desc = commonInfo(path)
+	local disabled = isRowDisabled(path)
+	applyBase(row, name, desc, disabled)
+	row.path = path
+
+	if disabled then
+		row.button:Disable()
+	else
+		row.button:Enable()
+	end
+
+	local okGet, r1, g1, b1, a1 = pcall(L.Value, root, path, "get", appName)
+	local r, g, b
+	if okGet then
+		r, g, b = L.NormalizeColor(r1, g1, b1, a1)
+	else
+		r, g, b = L.NormalizeColor()
+	end
+	row.swatch:SetColorTexture(r, g, b, 1)
+
+	row.onPick = function()
+		if type(ColorPickerFrame) ~= "table" or type(ColorPickerFrame.SetupColorPickerAndShow) ~= "function" then
+			setFooterError("Colour picker unavailable")
+			return
+		end
+
+		local okGet0, r0a, g0a, b0a, a0a = pcall(L.Value, root, path, "get", appName)
+		local r0, g0, b0, a0
+		if okGet0 then
+			r0, g0, b0, a0 = L.NormalizeColor(r0a, g0a, b0a, a0a)
+		else
+			r0, g0, b0, a0 = L.NormalizeColor()
+		end
+
+		ColorPickerFrame:Hide()
+		ColorPickerFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+		ColorPickerFrame:SetFrameLevel(frame:GetFrameLevel() + 40)
+		ColorPickerFrame:SetClampedToScreen(true)
+
+		ColorPickerFrame:SetupColorPickerAndShow({
+			r = r0,
+			g = g0,
+			b = b0,
+			hasOpacity = false,
+			swatchFunc = function()
+				local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+				local okSet, err = pcall(L.Value, root, path, "set", appName, nr, ng, nb, a0)
+				if okSet then
+					clearFooterError()
+					if pathsEqual(row.path, path) then
+						row.swatch:SetColorTexture(nr, ng, nb, 1)
+					end
+				else
+					setFooterError(err)
+				end
+			end,
+			cancelFunc = function()
+				local okSet, err = pcall(L.Value, root, path, "set", appName, r0, g0, b0, a0)
+				if okSet then
+					clearFooterError()
+				else
+					setFooterError(err)
+				end
+				requestRender()
+			end,
+		})
+	end
+end
+
 local function configureDescription(row, path)
 	local name = commonInfo(path)
 	row.text:SetText(name)
@@ -1091,6 +1205,9 @@ function configureCell(rowSpec, controlWidth)
 	elseif kind == "execute" then
 		row = pools.execute.acquire()
 		configureExecute(row, path, controlWidth)
+	elseif kind == "color" then
+		row = pools.color.acquire()
+		configureColor(row, path)
 	elseif kind == "description" then
 		row = pools.description.acquire()
 		configureDescription(row, path)
@@ -1207,6 +1324,7 @@ local function releaseContentRows()
 	pools.select.releaseAll()
 	pools.input.releaseAll()
 	pools.execute.releaseAll()
+	pools.color.releaseAll()
 	pools.description.releaseAll()
 	pools.section.releaseAll()
 	pools.unsupported.releaseAll()
@@ -1489,6 +1607,7 @@ local function buildContent(win)
 	pools.select = newPool(createSelectRow)
 	pools.input = newPool(createInputRow)
 	pools.execute = newPool(createExecuteRow)
+	pools.color = newPool(createColorRow)
 	pools.description = newPool(createDescriptionRow)
 	pools.section = newPool(createSectionRow)
 	pools.unsupported = newPool(createUnsupportedRow)
@@ -1777,6 +1896,19 @@ ns.Debug:RegisterChecks("OptionsWindow", function()
 					return "SKIP", "not built"
 				end
 				return "INFO", Theme.geometry.columns, gridLines, gridCells
+			end,
+		},
+		{
+			name = "color picker",
+			run = function()
+				if
+					type(ColorPickerFrame) == "table"
+					and type(ColorPickerFrame.SetupColorPickerAndShow) == "function"
+					and type(ColorPickerFrame.GetColorRGB) == "function"
+				then
+					return "PASS"
+				end
+				return "FAIL"
 			end,
 		},
 	}

@@ -109,6 +109,9 @@ Media.icons = {
 	dispel = "Textures\\DMDispel.tga",
 	deaths = "Textures\\DMDeaths.tga",
 	glow = "Textures\\NPGlow.tga",
+	ringThin = "Textures\\MCRingThin.tga",
+	ringNormal = "Textures\\MCRingNormal.tga",
+	ringThick = "Textures\\MCRingThick.tga",
 }
 
 function Media:Icon(name)

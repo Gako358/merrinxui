@@ -7,6 +7,7 @@ local TABS = {
 	"BuffReminders",
 	"CastBars",
 	"CooldownVoice",
+	"MouseCircle",
 	"Professions",
 	"RangeText",
 	"SpellHistory",

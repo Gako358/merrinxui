@@ -14,6 +14,7 @@ L.SUPPORTED = {
 	execute = true,
 	description = true,
 	header = true,
+	color = true,
 }
 
 local function sub(node, key)
@@ -291,6 +292,23 @@ function L.SnapRange(v, min, max, step)
 		v = max
 	end
 	return v
+end
+
+local function clampComponent(v, default)
+	if type(v) ~= "number" or v ~= v then
+		return default
+	end
+	if v < 0 then
+		return 0
+	end
+	if v > 1 then
+		return 1
+	end
+	return v
+end
+
+function L.NormalizeColor(r, g, b, a)
+	return clampComponent(r, 0), clampComponent(g, 0), clampComponent(b, 0), clampComponent(a, 1)
 end
 
 function L.FormatNumber(v)
