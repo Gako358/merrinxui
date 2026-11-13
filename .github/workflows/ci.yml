@@ -51,6 +51,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           iface=$(tr -d '\r' < MerrinxUI/MerrinxUI.toc | sed -n 's/^## Interface:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -n1)
+          project=$(tr -d '\r' < MerrinxUI/MerrinxUI.toc | sed -n 's/^## X-Curse-Project-ID:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -n1)
+          case "$project" in ''|*[!0-9]*) echo "no numeric ## X-Curse-Project-ID: line found in MerrinxUI/MerrinxUI.toc" >&2; exit 1 ;; esac
           gv="$((iface / 10000)).$((iface / 100 % 100)).$((iface % 100))"
           ids=$(curl -sS --fail-with-body -H "X-Api-Token: $CF_API_KEY" https://wow.curseforge.com/api/game/versions | jq -c --arg gv "$gv" '[.[] | select(.name == $gv) | .id]')
           if [ "$(jq length <<<"$ids")" != 1 ]; then echo "expected one CurseForge game version named $gv, got $ids" >&2; exit 1; fi
@@ -59,4 +61,4 @@ jobs:
           jq -n --arg name "MerrinxUI $TAG" --arg type "$type" --argjson ids "$ids" --rawfile changelog changelog.md \
             '{displayName: $name, releaseType: $type, gameVersions: $ids, changelog: $changelog, changelogType: "markdown"}' > metadata.json
           curl -sS --fail-with-body -H "X-Api-Token: $CF_API_KEY" -F "metadata=<metadata.json" -F "file=@MerrinxUI-$TAG.zip" \
-            https://wow.curseforge.com/api/projects/1798762/upload-file
+            "https://wow.curseforge.com/api/projects/$project/upload-file"
