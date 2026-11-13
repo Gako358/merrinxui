@@ -183,6 +183,8 @@ function ActionBars:CreateBar(b)
 			button.UpdateHotkeys = hotkeyUpdater(L.BindingPrefix(b) .. i)
 			button:UpdateHotkeys()
 		end
+		-- Quick Keybind mode reads commandName; Blizzard sets it from the bar's commandNamePrefix.
+		button.commandName = L.BindingPrefix(b) .. i
 		buttons[i] = button
 		self.natives[b] = self.natives[b] or button:GetWidth()
 	end
