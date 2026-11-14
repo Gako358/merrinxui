@@ -21,7 +21,7 @@ enabled on its own, and they all share one look and one options window.
 | RangeText      | Range to your target, coloured by spell range                        |
 | SpellHistory   | Recently cast spells as icons or bars                                |
 | UnitFrames     | Player, target, focus, pet and target-of-target frames               |
-| XPBar          | Experience bar with rested and completed-quest XP                    |
+| XPBar          | Experience bar with rested and completed-quest XP, and time to level on hover |
 
 Shared parts: global font and bar texture (via LibSharedMedia-3.0), frame mover
 with grid snapping, per-character or shared profiles, and built-in diagnostics.

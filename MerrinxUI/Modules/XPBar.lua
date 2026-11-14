@@ -10,6 +10,9 @@ local RESTED_STATE_COLOR = { 0.0, 0.39, 0.88 }
 local RESTED_COLOR = { 0.25, 0.5, 1, 0.45 }
 local QUEST_COLOR = { 1, 0.78, 0.2, 0.7 }
 
+local RATE_WINDOW = 600
+local RATE_MIN_SPAN = 60
+
 local defaults = {
 	profile = {
 		enabled = false,
@@ -46,10 +49,13 @@ function XPBar:OnInitialize()
 end
 
 function XPBar:OnEnable()
+	self.rate = L.NewRate(GetTime())
+	self:Track()
 	self:Build()
-	for _, event in ipairs({ "PLAYER_XP_UPDATE", "PLAYER_LEVEL_UP", "UPDATE_EXHAUSTION", "PLAYER_ENTERING_WORLD" }) do
+	for _, event in ipairs({ "PLAYER_LEVEL_UP", "UPDATE_EXHAUSTION", "PLAYER_ENTERING_WORLD" }) do
 		self:RegisterEvent(event, "Update")
 	end
+	self:RegisterEvent("PLAYER_XP_UPDATE", "XPUpdate")
 	self:RegisterEvent("ENABLE_XP_GAIN", "Update")
 	self:RegisterEvent("DISABLE_XP_GAIN", "Update")
 	self:RegisterEvent("QUEST_LOG_UPDATE", "RequestScan")
@@ -188,6 +194,18 @@ function XPBar:Values()
 	return cur, math.max(1, max), rested
 end
 
+function XPBar:Track()
+	local cur, max = self:Values()
+	if cur then
+		L.Track(self.rate, cur, max, GetTime(), RATE_WINDOW)
+	end
+end
+
+function XPBar:XPUpdate()
+	self:Track()
+	self:Update()
+end
+
 function XPBar:Update()
 	local frame = self.frame
 	if not frame or not self:IsEnabled() then
@@ -242,6 +260,10 @@ function XPBar:ShowTooltip(owner)
 		1
 	)
 	GameTooltip:AddDoubleLine("Remaining", BreakUpLargeNumbers(max - cur), 1, 1, 1, 1, 1, 1)
+	local eta = L.TimeToLevel(max - cur, L.PerSecond(self.rate, GetTime(), RATE_WINDOW, RATE_MIN_SPAN))
+	if eta then
+		GameTooltip:AddDoubleLine("Time to level", L.FormatDuration(eta), 1, 1, 1, 1, 1, 1)
+	end
 	if rested > 0 then
 		GameTooltip:AddDoubleLine("Rested", "+" .. BreakUpLargeNumbers(rested), 1, 1, 1, 0.4, 0.6, 1)
 	end
@@ -403,6 +425,19 @@ function XPBar:GetDebugChecks()
 					return "SKIP", "module disabled"
 				end
 				return "INFO", self.questCount, self.questXP, self.scans
+			end,
+		},
+		{
+			name = "xp rate",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+				return "INFO",
+					#self.rate.samples,
+					math.floor(L.PerSecond(self.rate, GetTime(), RATE_WINDOW, RATE_MIN_SPAN) * 3600),
+					self.rate.lastCur,
+					self.rate.lastMax
 			end,
 		},
 		{
