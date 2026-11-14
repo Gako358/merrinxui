@@ -186,4 +186,65 @@ describe("ActionBarLogic", function()
 		assert.are.equal(7, L.ExpectedPage(1, 1, nil))
 		assert.are.equal(11, L.ExpectedPage(1, 5, nil))
 	end)
+
+	it("BindingButton returns Keybind for bars 1-8 and LeftButton for the pet bar", function()
+		assert.are.equal("Keybind", L.BindingButton(1))
+		assert.are.equal("Keybind", L.BindingButton(8))
+		assert.are.equal("LeftButton", L.BindingButton(9))
+	end)
+
+	local function run(params, body, held, ...)
+		local fn = assert(loadstring("local " .. params .. " = ...\n" .. body))
+		setfenv(fn, {
+			IsModifiedClick = function(name)
+				assert.are.equal("PICKUPACTION", name)
+				return held
+			end,
+		})
+		return fn(...)
+	end
+
+	local function newSelf()
+		return {
+			writes = {},
+			SetAttribute = function(s, k, v)
+				table.insert(s.writes, { k, v })
+			end,
+		}
+	end
+
+	it("CLICK_GUARD_PRE remaps the Keybind virtual button without writing the attribute", function()
+		for _, held in ipairs({ true, false }) do
+			local self = newSelf()
+			local result = run("self, button, down", L.CLICK_GUARD_PRE, held, self, "Keybind", true)
+			assert.are.equal("LeftButton", result)
+			assert.are.equal(0, #self.writes)
+		end
+	end)
+
+	it("CLICK_GUARD_PRE guards a modified LeftButton click on both press and release", function()
+		for _, down in ipairs({ true, false }) do
+			local self = newSelf()
+			local r1, r2 = run("self, button, down", L.CLICK_GUARD_PRE, true, self, "LeftButton", down)
+			assert.are.equal(1, #self.writes)
+			assert.are.equal("useOnKeyDown", self.writes[1][1])
+			assert.are.equal(false, self.writes[1][2])
+			assert.is_nil(r1)
+			assert.are.equal("guard", r2)
+		end
+	end)
+
+	it("CLICK_GUARD_PRE does nothing when the click is not modified", function()
+		local self = newSelf()
+		assert.are.equal(0, select("#", run("self, button, down", L.CLICK_GUARD_PRE, false, self, "LeftButton", true)))
+		assert.are.equal(0, #self.writes)
+	end)
+
+	it("CLICK_GUARD_POST resets useOnKeyDown to nil", function()
+		local self = newSelf()
+		run("self, message, button, down", L.CLICK_GUARD_POST, nil, self, "guard", "LeftButton", true)
+		assert.are.equal(1, #self.writes)
+		assert.are.equal("useOnKeyDown", self.writes[1][1])
+		assert.is_nil(self.writes[1][2])
+	end)
 end)

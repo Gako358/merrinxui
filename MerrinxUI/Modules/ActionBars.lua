@@ -178,6 +178,7 @@ function ActionBars:CreateBar(b)
 				)
 			end
 			button:RegisterForClicks("AnyUp", "AnyDown")
+			h:WrapScript(button, "OnClick", L.CLICK_GUARD_PRE, L.CLICK_GUARD_POST)
 			-- Blizzard's UpdateHotkeys derives the command from GetID(), which must stay 0 so
 			-- SecureActionButton uses our "action" attribute instead of paging by ID.
 			button.UpdateHotkeys = hotkeyUpdater(L.BindingPrefix(b) .. i)
@@ -440,7 +441,7 @@ function ActionBars:ApplyBindings()
 				for i = 1, L.ButtonCount(b) do
 					local buttonName = "MerrinxUIBar" .. b .. "Button" .. i
 					for _, key in ipairs({ GetBindingKey(prefix .. i) }) do
-						SetOverrideBindingClick(self.bindingOwner, false, key, buttonName, "LeftButton")
+						SetOverrideBindingClick(self.bindingOwner, false, key, buttonName, L.BindingButton(b))
 						count = count + 1
 					end
 				end
@@ -717,6 +718,8 @@ function ActionBars:GetDebugChecks()
 				check("GetShapeshiftFormInfo", GetShapeshiftFormInfo)
 				check("GetNumShapeshiftForms", GetNumShapeshiftForms)
 				check("IsStealthed", IsStealthed)
+				local shouldUseOnKeyDown = "SecureActionButton_ShouldUseOnKeyDown"
+				check(shouldUseOnKeyDown, _G[shouldUseOnKeyDown])
 
 				if #missing > 0 then
 					return "FAIL", unpack(missing, 1, #missing)
@@ -942,7 +945,7 @@ function ActionBars:GetDebugChecks()
 						local prefix = L.BindingPrefix(b)
 						for i = 1, L.ButtonCount(b) do
 							local expected = (b == 1 and inBattle) and ("ACTIONBUTTON" .. i)
-								or ("CLICK MerrinxUIBar" .. b .. "Button" .. i .. ":LeftButton")
+								or ("CLICK MerrinxUIBar" .. b .. "Button" .. i .. ":" .. L.BindingButton(b))
 							for _, key in ipairs({ GetBindingKey(prefix .. i) }) do
 								if issecretvalue(key) then
 									secret = true
@@ -978,6 +981,33 @@ function ActionBars:GetDebugChecks()
 					return "FAIL", ok, total, firstBadKey, firstBadAction, self.bindingApplies, "pet battle"
 				end
 				return "FAIL", ok, total, firstBadKey, firstBadAction, self.bindingApplies
+			end,
+		},
+		{
+			name = "click guard",
+			run = function(ctx)
+				if ctx.enabled == false then
+					return "SKIP", "module disabled"
+				end
+
+				local count = 0
+				for b = 1, L.BAR_COUNT do
+					if b ~= PET and self.headers[b] then
+						local buttons = self.buttons[b]
+						for i = 1, L.ButtonCount(b) do
+							local value = buttons[i]:GetAttribute("useOnKeyDown")
+							if issecretvalue(value) then
+								return "INFO", "secret"
+							end
+							if value == false then
+								return "FAIL", b, i
+							end
+							count = count + 1
+						end
+					end
+				end
+
+				return "PASS", count
 			end,
 		},
 		{

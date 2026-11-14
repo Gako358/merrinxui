@@ -125,6 +125,27 @@ function L.BindingPrefix(bar)
 	return nil
 end
 
+L.CLICK_GUARD_PRE = [[
+	if button == "Keybind" then
+		return "LeftButton"
+	end
+	if IsModifiedClick("PICKUPACTION") then
+		self:SetAttribute("useOnKeyDown", false)
+		return nil, "guard"
+	end
+]]
+
+L.CLICK_GUARD_POST = [[
+	self:SetAttribute("useOnKeyDown", nil)
+]]
+
+function L.BindingButton(bar)
+	if bar == L.PET_BAR then
+		return "LeftButton"
+	end
+	return "Keybind"
+end
+
 function L.VisibilityDriver(b, hideInCombat)
 	if b == L.PET_BAR then
 		if hideInCombat then

@@ -737,7 +737,8 @@ function Nameplates:CreateStyledFrame(plate)
 	local nameText = frame:CreateFontString(nil, "OVERLAY")
 	nameText:SetPoint("BOTTOM", frame, "TOP", 0, 2)
 
-	local threatText = frame:CreateFontString(nil, "OVERLAY")
+	local threatText = healthBar:CreateFontString(nil, "OVERLAY")
+	threatText:SetPoint("RIGHT", healthBar, "RIGHT", -THREAT_GAP, 0)
 	threatText:Hide()
 
 	local comboRow = CreateFrame("Frame", nil, frame)
@@ -1287,17 +1288,6 @@ function Nameplates:UpdateMarkers(unit, frame)
 	else
 		frame.classification:Hide()
 	end
-
-	local threatTo, threatPoint, threatX, threatY = self:ThreatAnchor(frame)
-	frame.threatText:ClearAllPoints()
-	frame.threatText:SetPoint("BOTTOMRIGHT", threatTo, threatPoint, threatX, threatY)
-end
-
-function Nameplates:ThreatAnchor(frame)
-	if frame.raidMarker:IsShown() and self.db.profile.raidMarkerPos == "TOPRIGHT" then
-		return frame.raidMarker, "BOTTOMLEFT", -THREAT_GAP, 0
-	end
-	return frame, "TOPRIGHT", 0, THREAT_GAP
 end
 
 -- scaledPercentage is nil while the player is not on the unit's threat list
@@ -2122,7 +2112,7 @@ function Nameplates:GetOptions()
 	option("threatText", {
 		type = "toggle",
 		name = "Threat percentage",
-		desc = "Your threat on the unit, top right of the plate, while you are on its threat list.",
+		desc = "Your threat on the unit, inside the right end of the health bar, while you are on its threat list.",
 		order = 63,
 	})
 
@@ -2471,17 +2461,16 @@ function Nameplates:GetDebugChecks()
 					ok = ok and text == NameplateLogic.FormatValue("percent", nil, percent)
 				end
 
-				local relativeTo, relPoint, expX, expY = self:ThreatAnchor(frame)
 				local ptOk, p, relTo, rp, x, y = readPoint(frame.threatText)
 				if ptOk then
 					ok = ok
-						and p == "BOTTOMRIGHT"
-						and relTo == relativeTo
-						and rp == relPoint
+						and p == "RIGHT"
+						and relTo == frame.healthBar
+						and rp == "RIGHT"
 						and not issecretvalue(x)
 						and not issecretvalue(y)
-						and math.abs(x - expX) <= 0.5
-						and math.abs(y - expY) <= 0.5
+						and math.abs(x + THREAT_GAP) <= 0.5
+						and math.abs(y) <= 0.5
 				end
 				return ok and "PASS" or "FAIL", shown, text, percent, Plain(status)
 			end,
