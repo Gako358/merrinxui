@@ -77,3 +77,10 @@ function L.SwingProgress(start, duration, now)
 	local elapsed = math.max(0, math.min(duration, now - start))
 	return elapsed / duration, duration - elapsed
 end
+
+function L.StandStillFraction(duration, window)
+	if type(duration) ~= "number" or duration <= 0 then
+		return 0
+	end
+	return math.min(1, window / duration)
+end

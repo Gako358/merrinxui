@@ -16,6 +16,9 @@ local SWING_COLORS = {
 	ranged = { 0.45, 0.85, 0.4 },
 }
 local SWING_BG_SHADE = 0.2
+-- Forever's Auto Shot and Shoot need the player still for this flat final window.
+local STAND_STILL_WINDOW = 0.5
+local STAND_STILL_COLOR = { 1, 0.1, 0.1, 0.6 }
 local INTERRUPTED_HOLD = 1
 local INTERRUPTED_TEXT = "Interrupted"
 local TEXT_INTERVAL = 0.1
@@ -74,6 +77,7 @@ local defaults = {
 			offHand = true,
 			ranged = true,
 			timeText = true,
+			standStill = true,
 			position = { point = "CENTER", x = 0, y = -275 },
 		},
 	},
@@ -282,7 +286,15 @@ function CastBars:CreateSwing()
 		spark:Hide()
 		local time = status:CreateFontString(nil, "OVERLAY")
 		time:SetPoint("RIGHT", status, "RIGHT", -2, 0)
-		rows[key] = { key = key, status = status, bg = bg, spark = spark, time = time }
+		local zone
+		if key == "ranged" then
+			zone = status:CreateTexture(nil, "OVERLAY", nil, -1)
+			zone:SetColorTexture(STAND_STILL_COLOR[1], STAND_STILL_COLOR[2], STAND_STILL_COLOR[3], STAND_STILL_COLOR[4])
+			zone:SetPoint("TOPRIGHT")
+			zone:SetPoint("BOTTOMRIGHT")
+			zone:Hide()
+		end
+		rows[key] = { key = key, status = status, bg = bg, spark = spark, time = time, zone = zone }
 	end
 	frame:SetScript("OnUpdate", function()
 		self:UpdateSwing()
@@ -522,6 +534,14 @@ function CastBars:OnInterruptibleChanged(_, unit)
 	end
 end
 
+local function layoutZone(row, s)
+	local frac = s.standStill and L.StandStillFraction(row.duration, STAND_STILL_WINDOW) or 0
+	if frac > 0 then
+		row.zone:SetWidth(s.width * frac)
+	end
+	row.zone:SetShown(frac > 0)
+end
+
 function CastBars:LayoutSwing()
 	local swing = self.swing
 	local p = self.db.profile
@@ -546,6 +566,9 @@ function CastBars:LayoutSwing()
 		row.spark:ClearAllPoints()
 		row.spark:SetPoint("CENTER", row.status:GetStatusBarTexture(), "RIGHT", 0, 0)
 		row.spark:SetSize(10, s.height * 2)
+		if row.zone then
+			layoutZone(row, s)
+		end
 		ns.Media:SetFont(row.time, p.font, p.fontSize, "OUTLINE")
 		row.time:SetShown(s.timeText)
 		row.status:Show()
@@ -603,6 +626,9 @@ function CastBars:OnSwing(_, duration, swingType)
 	row.start = GetTime()
 	row.duration = duration
 	row.idle = nil
+	if row.zone then
+		layoutZone(row, self.db.profile.swing)
+	end
 	if not self.canSwing[key] then
 		self.canSwing[key] = true
 		self:LayoutSwing()
@@ -773,6 +799,14 @@ function CastBars:GetTabOptions()
 				get = sget("timeText"),
 				set = sset("timeText"),
 			},
+			standStill = {
+				type = "toggle",
+				name = "Stand-still zone",
+				desc = "Marks the last 0.5 s of the ranged swing, when moving delays Auto Shot and Shoot",
+				order = 7,
+				get = sget("standStill"),
+				set = sset("standStill"),
+			},
 		},
 	}
 
@@ -851,6 +885,28 @@ function CastBars:GetDebugChecks()
 			local expected = s.enabled and (ns.Mover:IsUnlocked() or self.inCombat or self.swingLive == true)
 			local shown = self.swing ~= nil and self.swing.frame:IsShown()
 			return (shown == (expected == true)) and "PASS" or "FAIL", shown, table.concat(self.swingKeys, " ")
+		end,
+	})
+
+	table.insert(checks, {
+		name = "stand still",
+		run = function(ctx)
+			if ctx.enabled == false then
+				return "SKIP", "module disabled"
+			end
+			if not SWING_API then
+				return "SKIP", "no swing api"
+			end
+			if not self.swing then
+				return "FAIL", "not built"
+			end
+			local row = self.swing.rows.ranged
+			local _, _, speed = UnitAttackSpeed("player")
+			return "INFO",
+				self.db.profile.swing.standStill,
+				row.duration or "none",
+				isSecret(speed) and "secret" or (speed or "none"),
+				row.zone:IsShown()
 		end,
 	})
 
