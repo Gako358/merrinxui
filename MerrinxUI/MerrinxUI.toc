@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 1.0.9
+## Version: 1.0.10
 ## X-Curse-Project-ID: 1796160
 ## SavedVariables: MerrinxUIDB
 
@@ -72,4 +72,6 @@ Modules\BuffReminderLogic.lua
 Modules\BuffReminders.lua
 Modules\PerformanceLogic.lua
 Modules\Performance.lua
+Modules\WarningLogic.lua
+Modules\Warnings.lua
 Modules\Enhance.lua

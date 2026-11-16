@@ -11,6 +11,7 @@ local TABS = {
 	"Professions",
 	"RangeText",
 	"SpellHistory",
+	"Warnings",
 	"XPBar",
 	"LayerHop",
 }

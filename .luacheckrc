@@ -169,6 +169,9 @@ read_globals = {
 	"IsStealthed",
 	"ColorPickerFrame",
 	"IsMouselooking",
+	"IsResting",
+	"GetInventoryItemID",
+	"GetInventoryItemCount",
 }
 
 globals = {
