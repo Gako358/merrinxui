@@ -39,11 +39,16 @@ function L.ShowDruidMana(enabled, class, powerType, manaType)
 end
 
 -- Units owning a unit event; "target" also drives the target-of-target.
+-- Lists are shared so the per-event hot path allocates nothing; callers must not mutate them.
+local EVENT_UNITS = { target = { "target", "targettarget" } }
+
 function L.EventUnits(unit)
-	if unit == "target" then
-		return { "target", "targettarget" }
+	local units = EVENT_UNITS[unit]
+	if not units then
+		units = { unit }
+		EVENT_UNITS[unit] = units
 	end
-	return { unit }
+	return units
 end
 
 function L.Watched(unit)

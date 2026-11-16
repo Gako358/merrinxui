@@ -103,7 +103,6 @@ CooldownVoiceLogic.CLASS_SPELLS = {
 		19574,
 		19503,
 		19306,
-		19386,
 		1495,
 		19801,
 		1543,
