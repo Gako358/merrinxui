@@ -446,7 +446,7 @@ function SpellHistory:BuildWindow()
 	end
 	win.settings = button("settings", -3)
 	win.settings:SetScript("OnClick", function()
-		ns.OptionsWindow:OpenPage("Enhance", "SpellHistory")
+		ns.OptionsWindow:OpenPage("Enhance QoL", "SpellHistory")
 	end)
 	win.lock = button("unlocked", -22)
 	win.lock:SetScript("OnClick", function()

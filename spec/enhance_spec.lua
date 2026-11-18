@@ -44,7 +44,7 @@ describe("Enhance", function()
 
 	it("returns the Enhance group shape", function()
 		local options = Enhance:GetOptions()
-		assert.are.equal("Enhance", options.name)
+		assert.are.equal("Enhance QoL", options.name)
 		assert.are.equal("tab", options.childGroups)
 		assert.are.equal("group", options.type)
 	end)

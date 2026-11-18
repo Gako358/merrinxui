@@ -28,7 +28,7 @@ function Enhance:GetOptions()
 	end
 	return {
 		type = "group",
-		name = "Enhance",
+		name = "Enhance QoL",
 		desc = "Quality of life enhancements",
 		childGroups = "tab",
 		args = args,

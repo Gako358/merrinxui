@@ -14,14 +14,14 @@ enabled on its own, and they all share one look and one options window.
 | DamageMeter    | Multi-window damage, healing, interrupt, dispel and death meter      |
 | EnemySpotter   | Lists nearby enemy players and alerts on a kill-on-sight list        |
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
-| MouseCircle    | Ring around the mouse pointer with size, style, opacity, colour or class colour (Enhance tab, off by default) |
+| MouseCircle    | Ring around the mouse pointer with size, style, opacity, colour or class colour (Enhance QoL tab, off by default) |
 | Nameplates     | Styled nameplates with cast bars, debuffs, crowd control, enemy cooldowns, threat and markers |
 | Professions    | Profession levelling guides                                          |
-| Enhance        | Tabs: Performance, BuffReminders, CastBars, CooldownVoice, MouseCircle, Professions, RangeText, SpellHistory, Warnings, XPBar, and Layer Hop when MerrinxUI_LayerHop is installed |
+| Enhance        | Enhance QoL page with tabs: Performance, BuffReminders, CastBars, CooldownVoice, MouseCircle, Professions, RangeText, SpellHistory, Warnings, XPBar, and Layer Hop when MerrinxUI_LayerHop is installed |
 | RangeText      | Range to your target, coloured by spell range                        |
 | SpellHistory   | Recently cast spells as icons or bars                                |
 | UnitFrames     | Player, target, focus, pet and target-of-target frames               |
-| Warnings       | Low arrow and bullet warnings for hunters in rested areas, with your own limits (Enhance tab) |
+| Warnings       | Low arrow and bullet warnings for hunters in rested areas, and low conjured food and water warnings for mages out of combat, with your own limits (Enhance QoL tab) |
 | XPBar          | Experience bar with rested and completed-quest XP, and time to level on hover |
 
 Shared parts: global font and bar texture (via LibSharedMedia-3.0), frame mover

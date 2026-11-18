@@ -15,6 +15,9 @@ L.BOW = 2
 L.GUN = 3
 L.CROSSBOW = 18
 
+L.CONJURED_FOOD = { 5349, 1113, 1114, 1487, 8075, 8076 }
+L.CONJURED_WATER = { 5350, 2288, 2136, 3772, 8077, 8078, 8079 }
+
 L.WARNINGS = {
 	HUNTER = {
 		{
@@ -23,6 +26,7 @@ L.WARNINGS = {
 			kind = "ammo",
 			rested = true,
 			threshold = 200,
+			max = 4000,
 			ammo = L.ARROW,
 			weapons = { [L.BOW] = true, [L.CROSSBOW] = true },
 		},
@@ -32,8 +36,29 @@ L.WARNINGS = {
 			kind = "ammo",
 			rested = true,
 			threshold = 200,
+			max = 4000,
 			ammo = L.BULLET,
 			weapons = { [L.GUN] = true },
+		},
+	},
+	MAGE = {
+		{
+			key = "conjuredFood",
+			name = "Conjured food",
+			kind = "items",
+			outOfCombat = true,
+			threshold = 20,
+			max = 200,
+			items = L.CONJURED_FOOD,
+		},
+		{
+			key = "conjuredWater",
+			name = "Conjured water",
+			kind = "items",
+			outOfCombat = true,
+			threshold = 20,
+			max = 200,
+			items = L.CONJURED_WATER,
 		},
 	},
 }
@@ -53,8 +78,36 @@ function L.EVALUATORS.ammo(warning, reading)
 	return needed, count
 end
 
+function L.EVALUATORS.items(warning, reading)
+	local itemCounts = type(reading.itemCounts) == "table" and reading.itemCounts or {}
+	local count = 0
+	for _, id in ipairs(warning.items) do
+		local v = itemCounts[id]
+		if type(v) == "number" then
+			count = count + math.max(0, v)
+		end
+	end
+	return true, count
+end
+
 function L.ForClass(class)
 	return L.WARNINGS[class] or {}
+end
+
+function L.ItemIds(warnings)
+	local out = {}
+	local seen = {}
+	for _, warning in ipairs(warnings) do
+		if warning.items then
+			for _, id in ipairs(warning.items) do
+				if not seen[id] then
+					seen[id] = true
+					out[#out + 1] = id
+				end
+			end
+		end
+	end
+	return out
 end
 
 function L.Settings(warning, profile)
@@ -74,6 +127,9 @@ function L.Evaluate(warning, reading, threshold)
 		return false, nil
 	end
 	if warning.rested and not reading.resting then
+		return false, nil
+	end
+	if warning.outOfCombat and reading.inCombat then
 		return false, nil
 	end
 	local needed, count = evaluator(warning, reading)

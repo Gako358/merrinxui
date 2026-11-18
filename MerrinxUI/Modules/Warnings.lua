@@ -35,6 +35,7 @@ function Warnings:OnInitialize()
 	local _, class = UnitClass("player")
 	self.class = class
 	self.warnings = L.ForClass(class)
+	self.itemIds = L.ItemIds(self.warnings)
 	self.active = {}
 	self.activeKeys = {}
 
@@ -57,10 +58,18 @@ function Warnings:OnEnable()
 	self:RegisterEvent("PLAYER_UPDATE_RESTING", "Update")
 	self:RegisterEvent("BAG_UPDATE_DELAYED", "Update")
 	self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "Update")
+	self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombat")
+	self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombat")
 	self:RegisterMessage("MERRINXUI_LOCK_CHANGED", "Render")
 	self:RegisterMessage("MERRINXUI_MEDIA_CHANGED", "OnMediaChanged")
+	self.inCombat = InCombatLockdown() == true
 	ns.Mover:Apply(self.frame)
 	self:Layout()
+	self:Update()
+end
+
+function Warnings:OnCombat(event)
+	self.inCombat = event == "PLAYER_REGEN_DISABLED"
 	self:Update()
 end
 
@@ -109,13 +118,20 @@ function Warnings:Read()
 	local ammoId = GetInventoryItemID("player", L.AMMO_SLOT)
 	local ammoCount = (ammoId ~= nil) and GetInventoryItemCount("player", L.AMMO_SLOT) or 0
 
+	local itemCounts = {}
+	for _, id in ipairs(self.itemIds) do
+		itemCounts[id] = C_Item.GetItemCount(id)
+	end
+
 	return {
 		resting = IsResting() == true,
+		inCombat = self.inCombat == true,
 		weaponClass = weaponClass,
 		weaponSubclass = weaponSubclass,
 		ammoClass = ammoClass,
 		ammoSubclass = ammoSubclass,
 		ammoCount = ammoCount,
+		itemCounts = itemCounts,
 	}
 end
 
@@ -191,7 +207,7 @@ function Warnings:GetTabOptions()
 			type = "toggle",
 			name = "Enabled",
 			order = 1,
-			desc = "Shows warnings such as low ammo in rested areas",
+			desc = "Shows low ammo warnings in rested areas and low conjured food and water out of combat",
 			get = get("enabled"),
 			set = set("enabled"),
 		},
@@ -245,7 +261,7 @@ function Warnings:GetTabOptions()
 			name = warning.name .. " below",
 			order = 10 + 2 * i,
 			min = 1,
-			max = 4000,
+			max = warning.max,
 			step = 1,
 			bigStep = 50,
 			get = function()
@@ -279,6 +295,7 @@ function Warnings:GetDebugChecks()
 					GetInventoryItemID = GetInventoryItemID,
 					GetInventoryItemCount = GetInventoryItemCount,
 					["C_Item.GetItemInfoInstant"] = C_Item and C_Item.GetItemInfoInstant,
+					["C_Item.GetItemCount"] = C_Item and C_Item.GetItemCount,
 				}) do
 					if type(fn) ~= "function" then
 						table.insert(missing, name)
@@ -301,6 +318,7 @@ function Warnings:GetDebugChecks()
 				return "INFO",
 					self.class,
 					reading.resting,
+					reading.inCombat,
 					reading.weaponClass,
 					reading.weaponSubclass,
 					reading.ammoClass,
