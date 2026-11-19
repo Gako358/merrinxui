@@ -172,6 +172,12 @@ read_globals = {
 	"IsResting",
 	"GetInventoryItemID",
 	"GetInventoryItemCount",
+	"TooltipDataProcessor",
+	"TooltipUtil",
+	"GetInventoryItemLink",
+	"ItemRefTooltip",
+	"ContainerFrameUtil_EnumerateContainerFrames",
+	"ContainerFrameCombinedBags",
 }
 
 globals = {
