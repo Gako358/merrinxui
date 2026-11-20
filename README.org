@@ -26,7 +26,8 @@ enabled on its own, and they all share one look and one options window.
 | XPBar          | Experience bar with rested and completed-quest XP, and time to level on hover |
 
 Shared parts: global font and bar texture (via LibSharedMedia-3.0), frame mover
-with grid snapping, per-character or shared profiles, and built-in diagnostics.
+with grid snapping, per-character or shared profiles, built-in diagnostics, and
+item and spell tooltips that show the item or spell ID.
 
 * Usage
 | Command                    | Effect                                     |

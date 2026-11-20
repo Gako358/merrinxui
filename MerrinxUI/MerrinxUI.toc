@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 1.0.13
+## Version: 1.0.14
 ## X-Curse-Project-ID: 1796160
 ## SavedVariables: MerrinxUIDB
 
@@ -16,6 +16,8 @@ Util\Combat.lua
 Util\Hider.lua
 Util\FontLogic.lua
 Util\Media.lua
+Util\TooltipIdLogic.lua
+Util\TooltipIds.lua
 Options\Theme.lua
 Options\OptionsLogic.lua
 Options\OptionsWindow.lua
