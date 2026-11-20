@@ -49,6 +49,7 @@ local function ensureModel()
 
 	token = select(2, UnitClass("player"))
 	local classData = ns.SpellTrainingData and ns.SpellTrainingData[token]
+	ns.SpellTrainingData = nil
 	if classData == nil then
 		modelError = "no data " .. tostring(token)
 		return nil
@@ -162,7 +163,7 @@ local function createRow()
 end
 
 local function renderRows()
-	ns.Media:SetFont(title, FONT_KEY, TITLE_SIZE, "")
+	local _, fontPath = ns.Media:SetFont(title, FONT_KEY, TITLE_SIZE, "")
 	ns.Media:SetFont(emptyFS, FONT_KEY, ROW_SIZE, "")
 
 	local rowsVisible = visibleRows()
@@ -181,9 +182,12 @@ local function renderRows()
 		row:SetPoint("TOPLEFT", panel, "TOPLEFT", PADDING, y)
 		row:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PADDING, y)
 
-		ns.Media:SetFont(row.levelFS, FONT_KEY, ROW_SIZE, "")
-		ns.Media:SetFont(row.nameFS, FONT_KEY, ROW_SIZE, "")
-		ns.Media:SetFont(row.costFS, FONT_KEY, ROW_SIZE, "")
+		if row.fontPath ~= fontPath then
+			ns.Media:SetFont(row.levelFS, FONT_KEY, ROW_SIZE, "")
+			ns.Media:SetFont(row.nameFS, FONT_KEY, ROW_SIZE, "")
+			ns.Media:SetFont(row.costFS, FONT_KEY, ROW_SIZE, "")
+			row.fontPath = fontPath
+		end
 
 		if line.kind == "header" then
 			applyHeaderLine(row, line)
@@ -218,17 +222,24 @@ local function refresh()
 	renderRows()
 end
 
+local function runScheduledRefresh()
+	refreshScheduled = false
+	if panel ~= nil and panel:IsVisible() then
+		refresh()
+	end
+end
+
 local function scheduleRefresh()
 	if refreshScheduled then
 		return
 	end
 	refreshScheduled = true
-	C_Timer.After(0, function()
-		refreshScheduled = false
-		if panel ~= nil and panel:IsVisible() then
-			refresh()
-		end
-	end)
+	C_Timer.After(0, runScheduledRefresh)
+end
+
+local function relayout()
+	offset = L.ClampOffset(offset, #lines, visibleRows())
+	renderRows()
 end
 
 local function onMouseWheel(_, delta)
@@ -259,6 +270,7 @@ local function attach()
 	title:SetPoint("TOPLEFT", panel, "TOPLEFT", PADDING, -PADDING)
 	title:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PADDING, -PADDING)
 	title:SetJustifyH("LEFT")
+	ns.Media:SetFont(title, FONT_KEY, TITLE_SIZE, "")
 	title:SetText("What's Training")
 	setTextColor(title, Theme.color.accent)
 
@@ -266,13 +278,14 @@ local function attach()
 	emptyFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PADDING, -(HEADER_HEIGHT + PADDING))
 	emptyFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PADDING, -(HEADER_HEIGHT + PADDING))
 	emptyFS:SetJustifyH("LEFT")
+	ns.Media:SetFont(emptyFS, FONT_KEY, ROW_SIZE, "")
 	setTextColor(emptyFS, Theme.color.textDim)
 	emptyFS:SetText("Nothing left to train")
 	emptyFS:Hide()
 
 	panel:SetScript("OnMouseWheel", onMouseWheel)
 	panel:SetScript("OnShow", refresh)
-	panel:SetScript("OnSizeChanged", refresh)
+	panel:SetScript("OnSizeChanged", relayout)
 
 	book:HookScript("OnShow", function()
 		panel:SetShown(true)
@@ -286,21 +299,25 @@ local function attach()
 end
 
 local events = CreateFrame("Frame")
+events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_LEVEL_UP")
 events:RegisterEvent("SPELLS_CHANGED")
 events:RegisterEvent("SPELL_DATA_LOAD_RESULT")
 events:SetScript("OnEvent", function(_, event, ...)
-	if event == "PLAYER_LEVEL_UP" then
+	if event == "PLAYER_LOGIN" then
+		events:UnregisterEvent("PLAYER_LOGIN")
+		ensureModel()
+	elseif event == "PLAYER_LEVEL_UP" then
 		local newLevel = ...
 		if type(newLevel) == "number" then
 			level = newLevel
 		end
 		if panel ~= nil and panel:IsVisible() then
-			refresh()
+			scheduleRefresh()
 		end
 	elseif event == "SPELLS_CHANGED" then
 		if panel ~= nil and panel:IsVisible() then
-			refresh()
+			scheduleRefresh()
 		end
 	elseif event == "SPELL_DATA_LOAD_RESULT" then
 		local id, success = ...
