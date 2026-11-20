@@ -130,9 +130,16 @@ local function attach()
 	attached = true
 end
 
-if type(EventUtil) == "table" and type(EventUtil.ContinueOnAddOnLoaded) == "function" then
-	EventUtil.ContinueOnAddOnLoaded("Blizzard_WorldMap", attach)
-end
+-- Blizzard_WorldMap is already loaded when this chunk runs, so attaching
+-- immediately would precede Media:OnInitialize and its db.
+local events = CreateFrame("Frame")
+events:RegisterEvent("PLAYER_LOGIN")
+events:SetScript("OnEvent", function()
+	events:UnregisterEvent("PLAYER_LOGIN")
+	if type(EventUtil) == "table" and type(EventUtil.ContinueOnAddOnLoaded) == "function" then
+		EventUtil.ContinueOnAddOnLoaded("Blizzard_WorldMap", attach)
+	end
+end)
 
 ns.Debug:RegisterChecks("ZoneInfo", function()
 	return {
