@@ -27,9 +27,10 @@ enabled on its own, and they all share one look and one options window.
 
 Shared parts: global font and bar texture (via LibSharedMedia-3.0), frame mover
 with grid snapping, per-character or shared profiles, built-in diagnostics,
-item and spell tooltips that show the item or spell ID, and a What's Training
+item and spell tooltips that show the item or spell ID, a What's Training
 panel beside the spellbook that lists the spells you can train (data from
-What's Training by fusionpit, MIT).
+What's Training by fusionpit, MIT), and zone level ranges and fishing skill
+on the world map.
 
 * Usage
 | Command                    | Effect                                     |

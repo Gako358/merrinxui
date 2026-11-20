@@ -182,6 +182,7 @@ read_globals = {
 	"PlayerSpellsFrame",
 	"C_CurrencyInfo",
 	"UnitRace",
+	"WorldMapFrame",
 }
 
 globals = {
