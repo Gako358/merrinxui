@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: MerrinxUI
 ## Author: merrinx
-## Version: 1.0.14
+## Version: 1.0.15
 ## X-Curse-Project-ID: 1796160
 ## SavedVariables: MerrinxUIDB
 
@@ -68,6 +68,17 @@ Modules\ProfessionData\Herbalism.lua
 Modules\ProfessionData\Mining.lua
 Modules\ProfessionData\Skinning.lua
 Modules\Professions.lua
+Modules\SpellTrainingLogic.lua
+Modules\SpellTrainingData\Druid.lua
+Modules\SpellTrainingData\Hunter.lua
+Modules\SpellTrainingData\Mage.lua
+Modules\SpellTrainingData\Paladin.lua
+Modules\SpellTrainingData\Priest.lua
+Modules\SpellTrainingData\Rogue.lua
+Modules\SpellTrainingData\Shaman.lua
+Modules\SpellTrainingData\Warlock.lua
+Modules\SpellTrainingData\Warrior.lua
+Modules\SpellTraining.lua
 Modules\ChatLogic.lua
 Modules\Chat.lua
 Modules\BuffReminderLogic.lua

@@ -178,6 +178,10 @@ read_globals = {
 	"ItemRefTooltip",
 	"ContainerFrameUtil_EnumerateContainerFrames",
 	"ContainerFrameCombinedBags",
+	"EventUtil",
+	"PlayerSpellsFrame",
+	"C_CurrencyInfo",
+	"UnitRace",
 }
 
 globals = {
