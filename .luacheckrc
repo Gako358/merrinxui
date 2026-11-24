@@ -183,6 +183,8 @@ read_globals = {
 	"C_CurrencyInfo",
 	"UnitRace",
 	"WorldMapFrame",
+	"C_LootHistory",
+	"GetInstanceInfo",
 }
 
 globals = {

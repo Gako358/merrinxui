@@ -15,6 +15,7 @@ enabled on its own, and they all share one look and one options window.
 | EnemySpotter   | Lists nearby enemy players and alerts on a kill-on-sight list        |
 | GearAdvisor    | Scores items against your equipped gear for each spec of your class using MerrinxUI's own leveling stat weights, in item tooltips and as a marker on bag upgrades (Enhance QoL tab "Gear", off by default) |
 | HideBlizzard   | Hides the Blizzard frames that MerrinxUI replaces                    |
+| LootRolls      | Shows who chose Need (main or off spec), Greed or Pass on every group loot roll, their rolls, the winner and loot won this instance (always on in party and raid) |
 | MouseCircle    | Ring around the mouse pointer with size, style, opacity, colour or class colour (Enhance QoL tab, off by default) |
 | Nameplates     | Styled nameplates with cast bars, debuffs, crowd control, enemy cooldowns, threat and markers |
 | Professions    | Profession levelling guides                                          |
@@ -41,6 +42,7 @@ on the world map.
 | =/mui test=                | Run the self-checks and show the log       |
 | =/mui log=                 | Show the debug log                         |
 | =/mui copy=                | Copy chat                                  |
+| =/mui rolls=, =/mui rolls test [n]= | Pin the loot roll window, or preview it with n players |
 | =/mui hop=                 | Hop to another layer (needs MerrinxUI_LayerHop) |
 | =/mui kos [name]=          | Add your target or a name to the kill list |
 
