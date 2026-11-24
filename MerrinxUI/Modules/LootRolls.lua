@@ -72,7 +72,6 @@ local function createButton(parent, text, onClick)
 	fs:SetAllPoints()
 	fs:SetJustifyH("CENTER")
 	setTextColor(fs, C.text)
-	fs:SetText(text)
 	button.text = fs
 	button.label = text
 
