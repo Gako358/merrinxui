@@ -125,6 +125,16 @@ function L.SortRolls(rolls)
 	return rolls
 end
 
+function L.DropKey(info, isSecret)
+	if type(info) ~= "table" then
+		return nil
+	end
+	if info.lootListKey ~= nil then
+		return secretNumber(isSecret, info.lootListKey)
+	end
+	return secretNumber(isSecret, info.lootListID)
+end
+
 function L.ReadDrop(encounterID, info, isSecret)
 	if type(info) ~= "table" then
 		return nil
@@ -132,8 +142,8 @@ function L.ReadDrop(encounterID, info, isSecret)
 	if isSecretValue(isSecret, encounterID) or type(encounterID) ~= "number" then
 		return nil
 	end
-	local lootListID = info.lootListID
-	if isSecretValue(isSecret, lootListID) or type(lootListID) ~= "number" then
+	local lootListID = L.DropKey(info, isSecret)
+	if lootListID == nil then
 		return nil
 	end
 
@@ -303,7 +313,142 @@ function L.Status(drop)
 	if drop.allPassed then
 		return "All passed"
 	end
+	if drop.pending then
+		return "Rolling"
+	end
 	return "Rolling " .. drop.chosen .. "/" .. drop.total
+end
+
+function L.ItemID(link)
+	return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+end
+
+function L.MatchRoll(drops, roll, claimed)
+	if roll.link == nil then
+		return nil
+	end
+
+	local bestKey, bestScore
+	for _, drop in ipairs(drops) do
+		local isClaimed = claimed and claimed[drop.key]
+		local resolved = L.IsResolved(drop)
+		if not isClaimed and (not resolved or not roll.known[drop.key]) then
+			local linkScore
+			if drop.link == roll.link then
+				linkScore = 2
+			else
+				local itemA, itemB = L.ItemID(drop.link), L.ItemID(roll.link)
+				if itemA ~= nil and itemA == itemB then
+					linkScore = 1
+				end
+			end
+			if linkScore ~= nil then
+				local score = linkScore + (resolved and 0 or 2)
+				if bestScore == nil or score >= bestScore then
+					bestScore = score
+					bestKey = drop.key
+				end
+			end
+		end
+	end
+
+	return bestKey
+end
+
+function L.PairRolls(state, rolls, pairsIn)
+	local dropKeys = {}
+	for _, drop in ipairs(state.drops) do
+		dropKeys[drop.key] = true
+	end
+
+	local ids = {}
+	for id in pairs(rolls) do
+		ids[#ids + 1] = id
+	end
+	table.sort(ids)
+
+	local result = {}
+	local claimed = {}
+	local pending = {}
+	for _, id in ipairs(ids) do
+		local key = pairsIn and pairsIn[id]
+		if key ~= nil and dropKeys[key] then
+			result[id] = key
+			claimed[key] = true
+		else
+			pending[#pending + 1] = id
+		end
+	end
+
+	for _, id in ipairs(pending) do
+		local key = L.MatchRoll(state.drops, rolls[id], claimed)
+		if key then
+			result[id] = key
+			claimed[key] = true
+		end
+	end
+
+	return result
+end
+
+function L.WithPending(state, rolls, pairsIn)
+	local ids = {}
+	for id in pairs(rolls) do
+		if not (pairsIn and pairsIn[id]) then
+			ids[#ids + 1] = id
+		end
+	end
+	table.sort(ids, function(a, b)
+		return a > b
+	end)
+
+	local pending = {}
+	for _, id in ipairs(ids) do
+		local entry = rolls[id]
+		pending[#pending + 1] = {
+			key = "roll:" .. id,
+			rollID = id,
+			pending = true,
+			encounterID = nil,
+			lootListID = nil,
+			link = entry.link,
+			startTime = nil,
+			duration = nil,
+			allPassed = false,
+			winner = nil,
+			rolls = {},
+			chosen = 0,
+			total = 0,
+		}
+	end
+
+	local drops = {}
+	for _, drop in ipairs(pending) do
+		drops[#drops + 1] = drop
+	end
+	for _, drop in ipairs(state.drops) do
+		drops[#drops + 1] = drop
+	end
+
+	local active = {}
+	for _, drop in ipairs(pending) do
+		active[#active + 1] = drop
+	end
+	for _, drop in ipairs(state.active) do
+		active[#active + 1] = drop
+	end
+
+	return { drops = drops, active = active, wins = state.wins, total = #drops }
+end
+
+function L.PruneRolls(rolls, now)
+	local result = {}
+	for id, entry in pairs(rolls) do
+		if not (entry.expiresAt ~= nil and now >= entry.expiresAt) then
+			result[id] = entry
+		end
+	end
+	return result
 end
 
 function L.ShouldReset(prevID, instanceID, instanceType)

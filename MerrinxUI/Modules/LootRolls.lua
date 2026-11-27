@@ -112,9 +112,9 @@ local function readRaw()
 					local list = {}
 					for _, drop in ipairs(drops) do
 						if not issecretvalue(drop) and type(drop) == "table" then
-							local lootListID = drop.lootListID
-							if type(lootListID) == "number" and not issecretvalue(lootListID) then
-								local info = C_LootHistory.GetSortedInfoForDrop(id, lootListID)
+							local key = L.DropKey(drop, issecretvalue)
+							if key ~= nil then
+								local info = C_LootHistory.GetSortedInfoForDrop(id, key)
 								if not issecretvalue(info) and type(info) == "table" then
 									list[#list + 1] = info
 								end
@@ -212,6 +212,32 @@ local function selfTestLogic()
 		return false, "preview"
 	end
 
+	local rawKeyOnly = {
+		{
+			encounterID = 1,
+			drops = {
+				{
+					lootListKey = 1,
+					itemHyperlink = "item:2",
+					startTime = 100,
+					duration = 60,
+					allPassed = false,
+					winner = nil,
+					rollInfos = {},
+				},
+			},
+		},
+	}
+	local keyState = L.Build(rawKeyOnly, {}, 110, noSecret)
+	if #keyState.drops ~= 1 or keyState.drops[1].key ~= "1:1" then
+		return false, "lootlistkey"
+	end
+
+	local pendingState = L.WithPending(L.Build({}, {}, nil, noSecret), { [3] = { link = "item:5", known = {} } }, {})
+	if #pendingState.active ~= 1 or not pendingState.active[1].pending then
+		return false, "pending"
+	end
+
 	return true
 end
 
@@ -233,6 +259,8 @@ function LootRolls:OnInitialize()
 	self.lastShown = 0
 	self.lastVisible = false
 	self.trackedKeys = {}
+	self.openRolls = {}
+	self.rollPairs = {}
 
 	self:CreateFrame()
 
@@ -372,7 +400,9 @@ end
 function LootRolls:OnEnable()
 	self.hasApi = L.HasApi(C_LootHistory)
 
-	self:RegisterEvent("START_LOOT_ROLL", "OnTrigger")
+	self:RegisterEvent("START_LOOT_ROLL", "OnRollStart")
+	self:RegisterEvent("CANCEL_LOOT_ROLL", "OnRollCancel")
+	self:RegisterEvent("CANCEL_ALL_LOOT_ROLLS", "OnRollCancelAll")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE", "OnTrigger")
 	self:RegisterEvent("GROUP_ROSTER_UPDATE", "OnTrigger")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnTrigger")
@@ -420,6 +450,43 @@ function LootRolls:OnTrigger(event)
 		self.pendingReset = true
 	end
 	self:RequestRebuild()
+end
+
+function LootRolls:OnRollStart(event, rollID, rollTime)
+	if not issecretvalue(rollID) and type(rollID) == "number" then
+		local link
+		if type(GetLootRollItemLink) == "function" then
+			link = GetLootRollItemLink(rollID)
+		end
+		if issecretvalue(link) or type(link) ~= "string" then
+			link = nil
+		end
+		local known = {}
+		for _, drop in ipairs((self.state and self.state.drops) or {}) do
+			known[drop.key] = true
+		end
+		local expiresAt = nil
+		if not issecretvalue(rollTime) and type(rollTime) == "number" then
+			expiresAt = GetTime() + rollTime / 1000
+		end
+		self.openRolls[rollID] = { link = link, known = known, expiresAt = expiresAt }
+		ns.Debug:Log("LootRolls", "roll", rollID, link and "link" or "nolink")
+	end
+	self:OnTrigger(event)
+end
+
+function LootRolls:OnRollCancel(event, rollID)
+	if not issecretvalue(rollID) and type(rollID) == "number" then
+		self.openRolls[rollID] = nil
+		self.rollPairs[rollID] = nil
+	end
+	self:OnTrigger(event)
+end
+
+function LootRolls:OnRollCancelAll(event)
+	self.openRolls = {}
+	self.rollPairs = {}
+	self:OnTrigger(event)
 end
 
 function LootRolls:RequestRebuild()
@@ -516,7 +583,27 @@ function LootRolls:Rebuild()
 		now = nil
 	end
 
-	self.state = L.Build(raw, self.excluded, now, issecretvalue)
+	local built = L.Build(raw, self.excluded, now, issecretvalue)
+
+	for id, entry in pairs(self.openRolls) do
+		if entry.link == nil then
+			local link
+			if type(GetLootRollItemLink) == "function" then
+				link = GetLootRollItemLink(id)
+			end
+			if issecretvalue(link) or type(link) ~= "string" then
+				link = nil
+			end
+			entry.link = link
+		end
+	end
+	self.openRolls = L.PruneRolls(self.openRolls, GetTime())
+	self.rollPairs = L.PairRolls(built, self.openRolls, self.rollPairs)
+	for _, key in pairs(self.rollPairs) do
+		self.trackedKeys[key] = true
+	end
+	self.state = L.WithPending(built, self.openRolls, self.rollPairs)
+
 	self:ManageLinger(self.state)
 	self:Render()
 end
@@ -867,6 +954,9 @@ function LootRolls:GetDebugChecks()
 				if type(RAID_CLASS_COLORS) ~= "table" then
 					table.insert(missing, "RAID_CLASS_COLORS")
 				end
+				if type(GetLootRollItemLink) ~= "function" then
+					table.insert(missing, "GetLootRollItemLink")
+				end
 				local legacy = type(C_LootHistory) == "table" and type(C_LootHistory.GetItem) == "function"
 				if #missing > 0 then
 					return "FAIL", "legacy=" .. tostring(legacy), unpack(missing, 1, #missing)
@@ -894,6 +984,63 @@ function LootRolls:GetDebugChecks()
 			end,
 		},
 		{
+			name = "fields",
+			run = function()
+				if not self.hasApi then
+					return "SKIP", "C_LootHistory missing"
+				end
+				local function kind(v)
+					if issecretvalue(v) then
+						return "secret"
+					end
+					return type(v)
+				end
+				local encounters = C_LootHistory.GetAllEncounterInfos()
+				if not issecretvalue(encounters) and type(encounters) == "table" then
+					for _, encounter in ipairs(encounters) do
+						if not issecretvalue(encounter) and type(encounter) == "table" then
+							local encounterID = encounter.encounterID
+							if type(encounterID) == "number" and not issecretvalue(encounterID) then
+								local drops = C_LootHistory.GetSortedDropsForEncounter(encounterID)
+								if not issecretvalue(drops) and type(drops) == "table" then
+									for _, drop in ipairs(drops) do
+										if not issecretvalue(drop) and type(drop) == "table" then
+											return "INFO",
+												"lootListKey=" .. kind(drop.lootListKey),
+												"lootListID=" .. kind(drop.lootListID)
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+				return "INFO", "no drops"
+			end,
+		},
+		{
+			name = "rolls",
+			run = function()
+				local ids = {}
+				for id in pairs(self.openRolls) do
+					table.insert(ids, id)
+				end
+				table.sort(ids)
+				if #ids == 0 then
+					return "INFO", "none"
+				end
+				local parts = {}
+				for _, id in ipairs(ids) do
+					local entry = self.openRolls[id]
+					table.insert(
+						parts,
+						id .. "=" .. (self.rollPairs[id] or "pending") .. "/" .. (entry.link and "link" or "nolink")
+					)
+				end
+				return "INFO", unpack(parts, 1, #parts)
+			end,
+		},
+		{
 			name = "group",
 			run = function()
 				local _, instanceType, _, _, _, _, _, instanceID = GetInstanceInfo()
@@ -917,7 +1064,13 @@ function LootRolls:GetDebugChecks()
 				for _ in pairs(self.excluded or {}) do
 					excludedCount = excludedCount + 1
 				end
-				local latest = state.drops[1]
+				local latest = nil
+				for _, drop in ipairs(state.drops) do
+					if not drop.pending then
+						latest = drop
+						break
+					end
+				end
 				local now = C_LootHistory.GetLootHistoryTime()
 				if issecretvalue(now) then
 					now = "secret"

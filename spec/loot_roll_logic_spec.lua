@@ -409,4 +409,188 @@ describe("LootRollLogic", function()
 		local passed = { winner = nil, allPassed = true, chosen = 0, total = 3 }
 		assert.are.equal("All passed", L.Status(passed))
 	end)
+
+	it("LR23: DropKey prefers lootListKey, with no fallthrough when it is present but invalid", function()
+		local SECRET, isSecret = makeSecret()
+		assert.are.equal(4, L.DropKey({ lootListKey = 4 }))
+		assert.are.equal(7, L.DropKey({ lootListID = 7 }))
+		assert.are.equal(4, L.DropKey({ lootListKey = 4, lootListID = 7 }))
+		assert.is_nil(L.DropKey({ lootListKey = SECRET, lootListID = 7 }, isSecret))
+		assert.is_nil(L.DropKey({ lootListKey = "4", lootListID = 7 }))
+		assert.is_nil(L.DropKey({}))
+		assert.is_nil(L.DropKey("x"))
+	end)
+
+	it("LR24: ReadDrop/Build/Snapshot use lootListKey as the drop identifier", function()
+		local drop = L.ReadDrop(3, { lootListKey = 7 })
+		assert.are.equal("3:7", drop.key)
+		assert.are.equal(7, drop.lootListID)
+
+		local raw = {
+			{
+				encounterID = 1,
+				drops = {
+					{ lootListKey = 1, startTime = 100, duration = 10 },
+					{ lootListKey = 2, winner = { playerName = "W", state = 0, roll = 5, isWinner = true } },
+				},
+			},
+		}
+		local state = L.Build(raw, nil, 105)
+		assert.are.equal(2, #state.drops)
+		assert.are.equal(1, #state.active)
+		assert.are.equal("1:1", state.active[1].key)
+
+		local keys = L.Snapshot(raw)
+		assert.are.same({ ["1:2"] = true }, keys)
+	end)
+
+	it("LR25: ItemID extracts the numeric item ID from a hyperlink", function()
+		assert.are.equal(19019, L.ItemID("\124cffa335ee\124Hitem:19019:0:0\124h[x]\124h\124r"))
+		assert.are.equal(5, L.ItemID("item:5"))
+		assert.is_nil(L.ItemID(nil))
+		assert.is_nil(L.ItemID("nope"))
+		assert.is_nil(L.ItemID(42))
+	end)
+
+	it("LR26: MatchRoll prefers an exact link match over a same-item-ID match", function()
+		local drops = {
+			{ key = "1:2", link = "item:5:2" },
+			{ key = "1:1", link = "item:5:1" },
+		}
+		local roll = { link = "item:5:1", known = {} }
+		assert.are.equal("1:1", L.MatchRoll(drops, roll))
+	end)
+
+	it("LR27: MatchRoll respects known and resolved status", function()
+		local resolved = { key = "1:1", link = "item:5", winner = { name = "A" } }
+		local roll = { link = "item:5", known = { ["1:1"] = true } }
+		assert.is_nil(L.MatchRoll({ resolved }, roll))
+
+		roll.known = {}
+		assert.are.equal("1:1", L.MatchRoll({ resolved }, roll))
+
+		local unresolved = { key = "1:2", link = "item:5:9" }
+		assert.are.equal("1:2", L.MatchRoll({ unresolved, resolved }, roll))
+	end)
+
+	it("LR28: MatchRoll handles a nil roll link, claimed drops, and ties on the oldest drop", function()
+		local drop = { key = "1:1", link = "item:5" }
+		assert.is_nil(L.MatchRoll({ drop }, { link = nil, known = {} }))
+		assert.is_nil(L.MatchRoll({ drop }, { link = "item:5", known = {} }, { ["1:1"] = true }))
+
+		local a = { key = "1:2", link = "item:5" }
+		local b = { key = "1:1", link = "item:5" }
+		assert.are.equal("1:1", L.MatchRoll({ a, b }, { link = "item:5", known = {} }))
+	end)
+
+	it("LR29: PairRolls keeps valid pairs, fills the rest deterministically, and does not mutate inputs", function()
+		local drops = {
+			{ key = "1:2", link = "item:5" },
+			{ key = "1:1", link = "item:5" },
+		}
+		local state = { drops = drops }
+		local rolls = {
+			[10] = { link = "item:5", known = {} },
+			[11] = { link = "item:5", known = {} },
+		}
+
+		assert.are.same({ [10] = "1:1", [11] = "1:2" }, L.PairRolls(state, rolls, {}))
+
+		local pairs1 = { [11] = "1:1" }
+		assert.are.same({ [10] = "1:2", [11] = "1:1" }, L.PairRolls(state, rolls, pairs1))
+
+		local pairs2 = { [11] = "9:9", [12] = "1:1" }
+		assert.are.same({ [10] = "1:1", [11] = "1:2" }, L.PairRolls(state, rolls, pairs2))
+
+		assert.are.same({ [11] = "9:9", [12] = "1:1" }, pairs2)
+		assert.are.same({
+			[10] = { link = "item:5", known = {} },
+			[11] = { link = "item:5", known = {} },
+		}, rolls)
+	end)
+
+	it("LR30: PairRolls matches against resolved drops that are not yet known", function()
+		local emptyState = { drops = {} }
+		assert.are.same({}, L.PairRolls(emptyState, { [1] = { link = "item:5", known = {} } }, {}))
+
+		local unresolved = { drops = { { key = "1:1", link = "item:5" } } }
+		assert.are.same({ [1] = "1:1" }, L.PairRolls(unresolved, { [1] = { link = "item:5", known = {} } }, {}))
+
+		local resolved = { drops = { { key = "1:1", link = "item:5", winner = { name = "A" } } } }
+		assert.are.same({ [1] = "1:1" }, L.PairRolls(resolved, { [1] = { link = "item:5", known = {} } }, {}))
+	end)
+
+	it("LR31: WithPending prepends pending rolls in descending rollID order and does not mutate state", function()
+		local raw = { { encounterID = 1, drops = { { lootListID = 1 } } } }
+		local state = L.Build(raw, nil, nil)
+		local rolls = {
+			[3] = { link = "item:3", known = {} },
+			[5] = { link = nil, known = {} },
+			[7] = { link = "item:7", known = {} },
+		}
+		local pairs = { [7] = "1:1" }
+
+		local result = L.WithPending(state, rolls, pairs)
+
+		assert.are.same(
+			{ "roll:5", "roll:3", "1:1" },
+			{ result.drops[1].key, result.drops[2].key, result.drops[3].key }
+		)
+		assert.are.same(
+			{ "roll:5", "roll:3", "1:1" },
+			{ result.active[1].key, result.active[2].key, result.active[3].key }
+		)
+		assert.are.same({
+			key = "roll:5",
+			rollID = 5,
+			pending = true,
+			encounterID = nil,
+			lootListID = nil,
+			link = nil,
+			startTime = nil,
+			duration = nil,
+			allPassed = false,
+			winner = nil,
+			rolls = {},
+			chosen = 0,
+			total = 0,
+		}, result.drops[1])
+		assert.is_true(rawequal(result.wins, state.wins))
+		assert.are.equal(3, result.total)
+		assert.are.equal(1, #state.drops)
+	end)
+
+	it("LR32: a pending drop reports Rolling and counts as active", function()
+		local pending = {
+			key = "roll:5",
+			rollID = 5,
+			pending = true,
+			winner = nil,
+			allPassed = false,
+			chosen = 0,
+			total = 0,
+		}
+		assert.are.equal("Rolling", L.Status(pending))
+		assert.is_true(L.IsActive(pending, 1e9))
+		assert.is_true(L.Visible({ inGroup = true, active = 1 }))
+	end)
+
+	it("LR33: PruneRolls drops only entries whose expiresAt has passed", function()
+		local rolls = { [1] = { expiresAt = 100 }, [2] = {}, [3] = { expiresAt = 200 } }
+		local result = L.PruneRolls(rolls, 100)
+		local keys = {}
+		for id in pairs(result) do
+			keys[#keys + 1] = id
+		end
+		table.sort(keys)
+		assert.are.same({ 2, 3 }, keys)
+		assert.is_true(rawequal(result[2], rolls[2]))
+		assert.is_true(rawequal(result[3], rolls[3]))
+
+		local count = 0
+		for _ in pairs(rolls) do
+			count = count + 1
+		end
+		assert.are.equal(3, count)
+	end)
 end)

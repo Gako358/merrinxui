@@ -184,6 +184,7 @@ read_globals = {
 	"UnitRace",
 	"WorldMapFrame",
 	"C_LootHistory",
+	"GetLootRollItemLink",
 	"GetInstanceInfo",
 }
 
